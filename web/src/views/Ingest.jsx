@@ -4,6 +4,28 @@ import { ingest, confirm } from "../api.js";
 const money = (v) =>
   v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
+// Confidence badge — thresholds/colors ported from the design's conf() helper
+// (Runway.dc.html): >=95% good, >=88% accent, else warn. Theme-aware via CSS vars.
+function confStyle(pct) {
+  const color = pct >= 95 ? "var(--good)" : pct >= 88 ? "var(--accent)" : "var(--warn)";
+  const bg =
+    pct >= 95
+      ? "var(--goodBg)"
+      : pct >= 88
+        ? "color-mix(in srgb, var(--accent) 14%, transparent)"
+        : "var(--warnBg)";
+  return {
+    fontSize: 11, fontWeight: 700, fontFamily: "'IBM Plex Mono',monospace",
+    padding: "2px 8px", borderRadius: 6, color, background: bg, whiteSpace: "nowrap",
+  };
+}
+
+function ConfBadge({ v }) {
+  if (v == null) return <span style={{ color: "var(--faint)", fontSize: 12 }}>—</span>;
+  const pct = Math.round(v * 100);
+  return <span style={confStyle(pct)}>{pct}%</span>;
+}
+
 const panelStyle = {
   background: "var(--panel)",
   border: "1px solid var(--border)",
@@ -191,16 +213,21 @@ export default function Ingest() {
 
 function Review({ result, onReset, onConfirm }) {
   const c = result.contract;
+  const fc = c.field_confidence || {};
   const meta = [
-    ["Contract No.", c.piid],
-    ["Contractor", c.contractor],
-    ["Agency", c.agency],
-    ["Contract type", c.contract_type],
-    ["Total ceiling", money(c.total_ceiling)],
-    ["Obligated to date", money(c.total_obligated)],
-    ["Effective date", c.effective_date],
-    ["Contracting Officer", c.contracting_officer],
+    ["Contract No.", c.piid, "piid"],
+    ["Contractor", c.contractor, "contractor"],
+    ["Agency", c.agency, "agency"],
+    ["Contract type", c.contract_type, "contract_type"],
+    ["Total ceiling", money(c.total_ceiling), "total_ceiling"],
+    ["Obligated to date", money(c.total_obligated), "total_obligated"],
+    ["Effective date", c.effective_date, "effective_date"],
+    ["Contracting Officer", c.contracting_officer, "contracting_officer"],
   ];
+  // Lowest-confidence CLIN below the "watch" threshold — drives the amber notice.
+  const lowCl = result.clins
+    .filter((cl) => cl.confidence != null && cl.confidence < 0.88)
+    .sort((a, b) => a.confidence - b.confidence)[0];
 
   return (
     <div style={{ animation: "rwrise .4s ease" }}>
@@ -214,23 +241,26 @@ function Review({ result, onReset, onConfirm }) {
       <div style={{ ...panelStyle, marginBottom: 14 }}>
         <div style={label}>Contract header</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px" }}>
-          {meta.map(([k, v]) => (
+          {meta.map(([k, v, key]) => (
             <div
               key={k}
               style={{
-                display: "flex", justifyContent: "space-between", gap: 12,
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
                 paddingBottom: 10, borderBottom: "1px solid var(--border)",
               }}
             >
-              <div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div>
-              <div
-                style={{
-                  fontSize: 13, fontWeight: 600, textAlign: "right",
-                  fontFamily: "'IBM Plex Mono',monospace",
-                }}
-              >
-                {v || "—"}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: "var(--faint)" }}>{k}</div>
+                <div
+                  style={{
+                    fontSize: 13, fontWeight: 600,
+                    fontFamily: "'IBM Plex Mono',monospace",
+                  }}
+                >
+                  {v || "—"}
+                </div>
               </div>
+              <ConfBadge v={fc[key]} />
             </div>
           ))}
         </div>
@@ -247,7 +277,8 @@ function Review({ result, onReset, onConfirm }) {
                 <th style={{ textAlign: "left", padding: "8px 18px", fontWeight: 700 }}>CLIN</th>
                 <th style={{ textAlign: "left", padding: "8px 8px", fontWeight: 700 }}>Description</th>
                 <th style={{ textAlign: "left", padding: "8px 8px", fontWeight: 700 }}>Type</th>
-                <th style={{ textAlign: "right", padding: "8px 18px", fontWeight: 700 }}>Ceiling</th>
+                <th style={{ textAlign: "right", padding: "8px 8px", fontWeight: 700 }}>Ceiling</th>
+                <th style={{ textAlign: "right", padding: "8px 18px", fontWeight: 700 }}>Confidence</th>
               </tr>
             </thead>
             <tbody>
@@ -276,17 +307,33 @@ function Review({ result, onReset, onConfirm }) {
                   <td style={{ padding: "11px 8px", color: "var(--dim)" }}>{cl.type || "—"}</td>
                   <td
                     style={{
-                      padding: "11px 18px", textAlign: "right",
+                      padding: "11px 8px", textAlign: "right",
                       fontFamily: "'IBM Plex Mono',monospace",
                     }}
                   >
                     {money(cl.ceiling)}
+                  </td>
+                  <td style={{ padding: "11px 18px", textAlign: "right" }}>
+                    <ConfBadge v={cl.confidence} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {lowCl && (
+          <div
+            style={{
+              padding: "11px 18px", background: "var(--warnBg)",
+              borderTop: "1px solid var(--border)", display: "flex", gap: 9,
+              alignItems: "center", fontSize: 12, color: "var(--text)",
+            }}
+          >
+            <span style={{ color: "var(--warn)" }}>⚠</span>
+            CLIN {lowCl.clin} ({lowCl.title}) extracted at{" "}
+            {Math.round(lowCl.confidence * 100)}% — verify this line before building the plan.
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
