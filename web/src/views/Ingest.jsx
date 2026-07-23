@@ -67,13 +67,25 @@ const SOURCE_BADGE = {
   disconnected: ["Not connected", "var(--faint)", "color-mix(in srgb, var(--faint) 12%, transparent)"],
 };
 
-function SourceBox({ s }) {
+function SourceBox({ s, selected, onClick }) {
   const [txt, color, bg] = SOURCE_BADGE[s.status] || SOURCE_BADGE.disconnected;
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={selected}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         display: "flex", alignItems: "center", gap: 9, padding: "9px 11px",
-        border: "1px solid var(--border)", borderRadius: 11, background: "var(--panel)",
+        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+        borderRadius: 11, background: "var(--panel)", cursor: "pointer",
+        boxShadow: selected ? "0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent)" : "none",
       }}
     >
       <div
@@ -109,6 +121,85 @@ function SourceBox({ s }) {
   );
 }
 
+// Click-to-expand detail. Same panel for every source; the CONTENT is honest
+// per state: a live source shows the real rows it's syncing, a placeholder
+// shows what it *would* sync + a disabled connect action (no fake data).
+function SourceDetail({ s }) {
+  const rows = s.preview || [];
+  const live = s.status === "live" && rows.length > 0;
+  const th = {
+    textAlign: "left", padding: "6px 10px", fontSize: 10,
+    textTransform: "uppercase", letterSpacing: ".05em", color: "var(--faint)", fontWeight: 700,
+  };
+  const td = { padding: "7px 10px", fontSize: 12, color: "var(--text)" };
+  return (
+    <div
+      style={{
+        marginTop: 10, border: "1px solid var(--border)", borderRadius: 12,
+        background: "var(--panel2)", padding: 14, animation: "rwrise .3s ease",
+      }}
+    >
+      {live ? (
+        <>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+            Live sample pulled from <strong style={{ color: "var(--text)" }}>{s.name}</strong> —{" "}
+            {s.kind.replace("Timesheets · ", "")}. Showing {rows.length} of the synced rows.
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={th}>Employee</th>
+                  <th style={th}>Week ending</th>
+                  <th style={th}>Charge</th>
+                  <th style={th}>Labor category</th>
+                  <th style={{ ...th, textAlign: "right" }}>Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={td}>{r.employee}</td>
+                    <td style={{ ...td, fontFamily: "'IBM Plex Mono',monospace" }}>{r.week_ending}</td>
+                    <td style={{ ...td, fontFamily: "'IBM Plex Mono',monospace" }}>{r.charge_code}</td>
+                    <td style={{ ...td, color: "var(--dim)" }}>{r.labor_category}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: "'IBM Plex Mono',monospace" }}>
+                      {r.total_hours}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+              {s.name} isn’t connected
+            </div>
+            <div style={{ fontSize: 12, color: "var(--dim)" }}>
+              Connecting would sync {s.kind.toLowerCase()} over API. This integration isn’t
+              available in the current build.
+            </div>
+          </div>
+          <button
+            disabled
+            title="Integration not available in this build"
+            style={{
+              height: 34, padding: "0 16px", borderRadius: 9, border: "1px solid var(--border)",
+              background: "var(--panel)", color: "var(--faint)", fontWeight: 600, fontSize: 12.5,
+              cursor: "not-allowed",
+            }}
+          >
+            Connect
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Fallback if the Runway backend can't be reached at all — still shows the
 // design's six boxes, all "Not connected", rather than an empty panel.
 const FALLBACK_SOURCES = {
@@ -125,6 +216,7 @@ const FALLBACK_SOURCES = {
 
 function ConnectSources() {
   const [data, setData] = useState(null);
+  const [openCode, setOpenCode] = useState(null);
   useEffect(() => {
     let live = true;
     getSources()
@@ -136,6 +228,7 @@ function ConnectSources() {
   }, []);
   const d = data || FALLBACK_SOURCES;
   const loading = data === null;
+  const open = d.sources.find((s) => s.code === openCode) || null;
 
   return (
     <div style={{ ...panelStyle, marginBottom: 16 }}>
@@ -166,9 +259,15 @@ function ConnectSources() {
         }}
       >
         {d.sources.map((s) => (
-          <SourceBox key={s.code} s={s} />
+          <SourceBox
+            key={s.code}
+            s={s}
+            selected={s.code === openCode}
+            onClick={() => setOpenCode(s.code === openCode ? null : s.code)}
+          />
         ))}
       </div>
+      {open && <SourceDetail s={open} />}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import urllib.request
 
 FIXTURA_URL = os.getenv("FIXTURA_URL", "http://localhost:8000")
 _PROBE_ROWS = 8  # small live pull — enough to prove the feed is real
+_PREVIEW_ROWS = 5  # rows surfaced in the click-to-expand preview
 _TIMEOUT = 3.0  # seconds; Fixtura being down must not hang ingest Step 1
 
 # The five commercial systems we show as placeholders. Real GovCon timesheet /
@@ -56,6 +57,18 @@ def _probe_fixtura() -> dict:
         box.update(
             status="live",
             kind=f"Timesheets · {len(rows)} rows, {people} people",
+            # A few real rows so the UI can show what's actually syncing — not a
+            # mock. Curated to the columns worth glancing at in a preview.
+            preview=[
+                {
+                    "employee": r.get("employee"),
+                    "week_ending": r.get("week_ending"),
+                    "charge_code": r.get("charge_code"),
+                    "labor_category": r.get("labor_category"),
+                    "total_hours": r.get("total_hours"),
+                }
+                for r in rows[:_PREVIEW_ROWS]
+            ],
         )
     except Exception:
         box.update(status="offline", kind="Timesheets · start Fixtura to sync")
