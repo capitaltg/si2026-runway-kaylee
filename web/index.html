@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Runway</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { box-sizing: border-box; }
+      html, body, #root { margin: 0; padding: 0; height: 100%; }
+      body {
+        font-family: "Manrope", system-ui, sans-serif;
+        background: var(--bg, #eef1f8);
+        color: var(--text, #1a2233);
+      }
+      input, button, select { font-family: inherit; }
+      @keyframes rwspin { to { transform: rotate(360deg); } }
+      @keyframes rwbar { 0% { width: 4%; } 80% { width: 92%; } 100% { width: 98%; } }
+      @keyframes rwrise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

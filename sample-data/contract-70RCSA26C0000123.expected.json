@@ -1,0 +1,49 @@
+{
+  "_comment": "Ground-truth structured extraction for contract-70RCSA26C0000123.md. Use to score the PDF ingestor / seed the demo DB. SAMPLE/FICTIONAL.",
+  "contract": {
+    "piid": "70RCSA26C0000123",
+    "effective_date": "2026-09-01",
+    "agency": "DHS / CISA — Office of Acquisition Management",
+    "contractor": "Meridian Federal Solutions, LLC",
+    "uei": "MFS7K2QW9NP4",
+    "cage": "8XQ21",
+    "contract_type": "T&M (labor) / Cost-Reimbursement no-fee (ODC & materials)",
+    "total_ceiling": 5321280.00,
+    "total_obligated": 1500000.00,
+    "incrementally_funded": true,
+    "cor": "Marcus T. Lin",
+    "contracting_officer": "Danielle R. Foster"
+  },
+  "periods": [
+    { "name": "Base", "pop_start": "2026-09-01", "pop_end": "2027-08-31", "exercised": true,  "ceiling": 2621320.00 },
+    { "name": "Option 1", "pop_start": "2027-09-01", "pop_end": "2028-08-31", "exercised": false, "ceiling": 2699960.00 }
+  ],
+  "clins": [
+    { "clin": "0001", "period": "Base",     "title": "Platform & Application Engineering Labor", "type": "T&M", "is_labor": true,  "ceiling": 2426320.00, "est_hours": 14560 },
+    { "clin": "0002", "period": "Base",     "title": "Travel",                                    "type": "CR",  "is_labor": false, "ceiling": 75000.00 },
+    { "clin": "0003", "period": "Base",     "title": "Cloud Hosting & Software Licenses",         "type": "CR",  "is_labor": false, "ceiling": 120000.00 },
+    { "clin": "1001", "period": "Option 1", "title": "Platform & Application Engineering Labor", "type": "T&M", "is_labor": true,  "ceiling": 2499110.00, "est_hours": 14560 },
+    { "clin": "1002", "period": "Option 1", "title": "Travel",                                    "type": "CR",  "is_labor": false, "ceiling": 77250.00 },
+    { "clin": "1003", "period": "Option 1", "title": "Cloud Hosting & Software Licenses",         "type": "CR",  "is_labor": false, "ceiling": 123600.00 }
+  ],
+  "labor_rates_base": [
+    { "lcat": "Program Manager",         "rate": 178.00, "est_hours": 1040, "min_education": "Bachelor's", "min_experience_yrs": 10, "clearance": "Secret" },
+    { "lcat": "Senior Software Engineer","rate": 205.00, "est_hours": 4160, "min_education": "Bachelor's", "min_experience_yrs": 8,  "clearance": "Secret" },
+    { "lcat": "Software Engineer (Mid)", "rate": 148.00, "est_hours": 4160, "min_education": "Bachelor's", "min_experience_yrs": 4,  "clearance": "Secret" },
+    { "lcat": "Systems Engineer",        "rate": 126.00, "est_hours": 2080, "min_education": "Bachelor's", "min_experience_yrs": 5,  "clearance": "Secret" },
+    { "lcat": "Business Analyst",        "rate": 118.00, "est_hours": 2080, "min_education": "Bachelor's", "min_experience_yrs": 3,  "clearance": "Public Trust" },
+    { "lcat": "Cybersecurity SME",       "rate": 255.00, "est_hours": 1040, "min_education": "Master's",   "min_experience_yrs": 12, "clearance": "TS/SCI" }
+  ],
+  "obligation_history": [
+    { "mod": "Award",  "amount": 1000000.00, "cumulative": 1000000.00 },
+    { "mod": "P00001", "amount": 500000.00,  "cumulative": 1500000.00 }
+  ],
+  "cdrls": [
+    { "id": "A001", "title": "Monthly Status Report", "frequency": "monthly" },
+    { "id": "A002", "title": "Monthly Financial / Burn Report", "frequency": "monthly" },
+    { "id": "A003", "title": "Quarterly Progress Report", "frequency": "quarterly" }
+  ],
+  "expected_tripwire": {
+    "note": "Base labor run-rate ~$2.43M/yr but only $1.5M obligated. Funded dollars exhaust ~month 7-8 of the 12-month base PoP. A correct burn engine should flag CLIN 0001 funding depletion before 2027-08-31."
+  }
+}
