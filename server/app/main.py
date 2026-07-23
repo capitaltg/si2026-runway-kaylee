@@ -1,10 +1,10 @@
 import os
 from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, extract
+from . import db, extract, sources
 from .schemas import Extraction
 
 SAMPLE = os.path.join(
@@ -30,18 +30,30 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/sources")
+def sources_list():
+    """Step-1 connect-sources boxes. Fixtura is live-probed; the rest are
+    honest 'Not connected' placeholders."""
+    return sources.list_sources()
+
+
 @app.post("/api/contracts/ingest")
 async def ingest(file: Optional[UploadFile] = File(default=None)):
     """Extract structured award data from an uploaded PDF, or the bundled sample."""
-    if file is not None:
-        data = await file.read()
-        if (file.filename or "").lower().endswith(".pdf"):
-            result = extract.extract_from_pdf(data)
+    try:
+        if file is not None:
+            data = await file.read()
+            if (file.filename or "").lower().endswith(".pdf"):
+                result = extract.extract_from_pdf(data)
+            else:
+                result = extract.extract_from_text(data.decode("utf-8", "ignore"))
         else:
-            result = extract.extract_from_text(data.decode("utf-8", "ignore"))
-    else:
-        with open(SAMPLE, "r", encoding="utf-8") as f:
-            result = extract.extract_from_text(f.read())
+            with open(SAMPLE, "r", encoding="utf-8") as f:
+                result = extract.extract_from_text(f.read())
+    except Exception as e:
+        # Return a real error (with CORS headers) instead of an unhandled 500,
+        # which Starlette leaves CORS-less so the browser reports "Load failed".
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
     return result.model_dump()
 
 
