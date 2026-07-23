@@ -8,6 +8,12 @@ export async function ingest(file) {
   return r.json();
 }
 
+export async function getSources() {
+  const r = await fetch(`${BASE}/api/sources`);
+  if (!r.ok) throw new Error(`Sources failed (${r.status})`);
+  return r.json();
+}
+
 export async function confirm(extraction) {
   const r = await fetch(`${BASE}/api/contracts/confirm`, {
     method: "POST",
