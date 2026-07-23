@@ -246,14 +246,13 @@ function Review({ result, onReset, onConfirm }) {
               <tr style={{ color: "var(--faint)", fontSize: 11, textTransform: "uppercase" }}>
                 <th style={{ textAlign: "left", padding: "8px 18px", fontWeight: 700 }}>CLIN</th>
                 <th style={{ textAlign: "left", padding: "8px 8px", fontWeight: 700 }}>Description</th>
-                <th style={{ textAlign: "left", padding: "8px 8px", fontWeight: 700 }}>Period</th>
                 <th style={{ textAlign: "left", padding: "8px 8px", fontWeight: 700 }}>Type</th>
                 <th style={{ textAlign: "right", padding: "8px 18px", fontWeight: 700 }}>Ceiling</th>
               </tr>
             </thead>
             <tbody>
               {result.clins.map((cl) => (
-                <tr key={cl.clin + (cl.period || "")} style={{ borderTop: "1px solid var(--border)" }}>
+                <tr key={cl.clin} style={{ borderTop: "1px solid var(--border)" }}>
                   <td
                     style={{
                       padding: "11px 18px", fontFamily: "'IBM Plex Mono',monospace",
@@ -274,7 +273,6 @@ function Review({ result, onReset, onConfirm }) {
                     )}
                   </td>
                   <td style={{ padding: "11px 8px" }}>{cl.title}</td>
-                  <td style={{ padding: "11px 8px", color: "var(--dim)" }}>{cl.period || "—"}</td>
                   <td style={{ padding: "11px 8px", color: "var(--dim)" }}>{cl.type || "—"}</td>
                   <td
                     style={{

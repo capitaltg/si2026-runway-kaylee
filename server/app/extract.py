@@ -3,16 +3,28 @@ import os
 
 from .schemas import Extraction
 
-# Provider switch: "anthropic" (direct API key) or "bedrock" (AWS creds).
-# Set RUNWAY_PROVIDER=bedrock to route through Amazon Bedrock — nothing else
-# in the app changes.
-PROVIDER = os.getenv("RUNWAY_PROVIDER", "anthropic").lower()
+# Provider switch: "bedrock" (default — classic AWS credentials) or "anthropic"
+# (direct API key). Set RUNWAY_PROVIDER=anthropic to route through the Anthropic
+# API instead — nothing else in the app changes.
+PROVIDER = os.getenv("RUNWAY_PROVIDER", "bedrock").lower()
 
 if PROVIDER == "bedrock":
-    from anthropic import AnthropicBedrockMantle
+    from anthropic import AnthropicBedrock
 
-    client = AnthropicBedrockMantle(aws_region=os.getenv("AWS_REGION", "us-east-1"))
-    MODEL = "anthropic.claude-opus-4-8"  # Bedrock model IDs take the anthropic. prefix
+    # Classic AWS credentials: standard access key / secret / session token, or a
+    # named profile (AWS_PROFILE). Falls back to the default boto3 credential
+    # chain (env, shared config, instance/role) when these aren't set.
+    client = AnthropicBedrock(
+        aws_region=os.getenv("AWS_REGION", "us-east-1"),
+        aws_access_key=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
+        aws_profile=os.getenv("AWS_PROFILE"),
+    )
+    # Standard Bedrock inference-profile ID. The Opus models are not subscribed
+    # on this account's Bedrock (Marketplace access denied); Sonnet 4.5 is the
+    # strongest model that actually works here. Override via env if needed.
+    MODEL = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 else:
     from anthropic import Anthropic
 
