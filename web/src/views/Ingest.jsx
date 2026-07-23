@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import { ingest, confirm } from "../api.js";
+import React, { useEffect, useRef, useState } from "react";
+import { ingest, confirm, getSources } from "../api.js";
 
 const money = (v) =>
   v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -37,12 +37,12 @@ const label = {
   color: "var(--faint)", fontWeight: 700, marginBottom: 12,
 };
 
-function StepHeader({ n, text }) {
+function StepHeader({ n, text, color = "var(--accent)", right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
       <span
         style={{
-          width: 22, height: 22, borderRadius: "50%", background: "var(--accent)",
+          width: 22, height: 22, borderRadius: "50%", background: color,
           color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 12, fontWeight: 700,
         }}
@@ -52,6 +52,123 @@ function StepHeader({ n, text }) {
       <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 15 }}>
         {text}
       </span>
+      {right}
+    </div>
+  );
+}
+
+// Source pill styling — ported from the design's badgeMap (Runway.dc.html).
+// live/synced -> green, syncing/offline -> amber, disconnected -> faint/muted.
+const SOURCE_BADGE = {
+  live: ["Live", "var(--good)", "var(--goodBg)"],
+  synced: ["Synced", "var(--good)", "var(--goodBg)"],
+  syncing: ["Syncing", "var(--warn)", "var(--warnBg)"],
+  offline: ["Offline", "var(--warn)", "var(--warnBg)"],
+  disconnected: ["Not connected", "var(--faint)", "color-mix(in srgb, var(--faint) 12%, transparent)"],
+};
+
+function SourceBox({ s }) {
+  const [txt, color, bg] = SOURCE_BADGE[s.status] || SOURCE_BADGE.disconnected;
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 9, padding: "9px 11px",
+        border: "1px solid var(--border)", borderRadius: 11, background: "var(--panel)",
+      }}
+    >
+      <div
+        style={{
+          width: 30, height: 30, borderRadius: 8, background: s.hue, color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "'IBM Plex Mono',monospace", fontWeight: 600, fontSize: 11,
+          flexShrink: 0,
+        }}
+      >
+        {s.code}
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis",
+          }}
+        >
+          {s.name}
+        </div>
+        <div style={{ fontSize: 10.5, color: "var(--dim)" }}>{s.kind}</div>
+      </div>
+      <span
+        style={{
+          fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
+          color, background: bg, whiteSpace: "nowrap",
+        }}
+      >
+        {txt}
+      </span>
+    </div>
+  );
+}
+
+// Fallback if the Runway backend can't be reached at all — still shows the
+// design's six boxes, all "Not connected", rather than an empty panel.
+const FALLBACK_SOURCES = {
+  connected: 0,
+  sources: [
+    { code: "FX", name: "Fixtura", kind: "Timesheets · offline", hue: "#4361ee", status: "offline" },
+    { code: "DK", name: "Deltek Costpoint", kind: "Billing · LCAT rates", hue: "#4b2e83", status: "disconnected" },
+    { code: "UN", name: "Unanet", kind: "Timesheets · hours", hue: "#0a66c2", status: "disconnected" },
+    { code: "QB", name: "QuickBooks Time", kind: "Timesheets", hue: "#2ca01c", status: "disconnected" },
+    { code: "AD", name: "ADP", kind: "Payroll · roster", hue: "#d0202f", status: "disconnected" },
+    { code: "HV", name: "Harvest", kind: "Timesheets", hue: "#f6552b", status: "disconnected" },
+  ],
+};
+
+function ConnectSources() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let live = true;
+    getSources()
+      .then((d) => live && setData(d))
+      .catch(() => live && setData(FALLBACK_SOURCES));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const d = data || FALLBACK_SOURCES;
+  const loading = data === null;
+
+  return (
+    <div style={{ ...panelStyle, marginBottom: 16 }}>
+      <StepHeader
+        n={1}
+        color="var(--good)"
+        text="Connect your timesheet & payroll tools"
+        right={
+          <span
+            style={{
+              marginLeft: "auto", fontSize: 11.5, fontWeight: 600,
+              color: d.connected ? "var(--good)" : "var(--faint)",
+            }}
+          >
+            {loading ? "checking…" : `${d.connected} connected · live`}
+          </span>
+        }
+      />
+      <div style={{ fontSize: 12.5, color: "var(--dim)", marginBottom: 14 }}>
+        Runway pulls live hours, LCAT rates, and rosters over API — no manual entry. It also
+        mines your historical data to seed pacing insights.
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))",
+          gap: 10,
+        }}
+      >
+        {d.sources.map((s) => (
+          <SourceBox key={s.code} s={s} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -103,11 +220,10 @@ export default function Ingest() {
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "28px 32px" }}>
       <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, margin: "0 0 4px" }}>
-        Ingest a contract
+        Add a contract
       </h1>
       <p style={{ color: "var(--dim)", fontSize: 13.5, margin: "0 0 24px" }}>
-        Drop a signed federal award PDF — the AI reads the CLINs, funding, and period of
-        performance into a structured plan.
+        Two steps: connect the tools that already hold your labor data, then drop the award PDF.
       </p>
 
       {error && (
@@ -121,7 +237,9 @@ export default function Ingest() {
         </div>
       )}
 
-      <StepHeader n={1} text="Drop the signed award PDF" />
+      <ConnectSources />
+
+      <StepHeader n={2} text="Drop the signed award PDF" />
 
       {stage === "upload" && (
         <div

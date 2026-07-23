@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, extract
+from . import db, extract, sources
 from .schemas import Extraction
 
 SAMPLE = os.path.join(
@@ -28,6 +28,13 @@ def _startup():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/sources")
+def sources_list():
+    """Step-1 connect-sources boxes. Fixtura is live-probed; the rest are
+    honest 'Not connected' placeholders."""
+    return sources.list_sources()
 
 
 @app.post("/api/contracts/ingest")
