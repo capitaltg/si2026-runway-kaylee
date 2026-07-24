@@ -349,6 +349,17 @@ export default function FlightDeck({ contractId, setActiveId }) {
                 <span style={{ width: 16, height: 3, borderRadius: 2, background: "var(--accent)" }} />
                 Actual
               </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span
+                  style={{
+                    width: 16,
+                    height: 3,
+                    borderRadius: 2,
+                    background: statusColor(selectedClin.status),
+                  }}
+                />
+                Projected
+              </span>
             </div>
           </div>
           <BurnChart clin={selectedClin} contract={contract} />

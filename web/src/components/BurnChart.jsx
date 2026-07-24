@@ -57,7 +57,7 @@ export default function BurnChart({ clin, contract }) {
     label: moneyM(ceiling * k),
   }));
 
-  const grid = "rgba(26,34,51,.06)";
+  const grid = "var(--grid)";
 
   return (
     <svg
@@ -167,6 +167,7 @@ export default function BurnChart({ clin, contract }) {
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeDasharray="2 7"
+          style={{ animation: "rwdash 1s linear infinite" }}
         />
       )}
       <circle cx={xc} cy={yc} r="5.5" fill="var(--accent)" stroke="var(--panel)" strokeWidth="2.5" />
