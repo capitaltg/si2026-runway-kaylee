@@ -63,6 +63,62 @@ def confirm(extraction: Extraction):
     return {"id": cid, "piid": extraction.contract.piid}
 
 
+@app.post("/api/contracts/{contract_id}/rates")
+async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
+    """Supplemental import: attach a labor-rate schedule to an already-ingested
+    contract. Some award forms print the CLIN summary on the face but carry the
+    fully-burdened rates on a separate schedule (e.g. a 'Continuation of SF-1449,
+    Schedule of Line Items and Pricing' sheet). When only the face was ingested,
+    upload that schedule here and its rate tables are merged into the matching
+    CLINs by CLIN number — so burn can compute exact per-LCAT spend."""
+    existing = db.get_contract(contract_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+
+    try:
+        data = await file.read()
+        if (file.filename or "").lower().endswith(".pdf"):
+            result = extract.extract_from_pdf(data)
+        else:
+            result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
+
+    parsed = result.model_dump()
+    incoming = {
+        (c.get("clin") or "").strip(): c["labor_rates"]
+        for c in parsed.get("clins", [])
+        if c.get("labor_rates")
+    }
+    if not incoming:
+        raise HTTPException(
+            status_code=422,
+            detail="No labor rate table found in the uploaded schedule.",
+        )
+
+    # A schedule usually repeats the contract number; flag (don't block) a
+    # mismatch, since some continuation sheets omit or abbreviate it.
+    doc_piid = ((parsed.get("contract") or {}).get("piid") or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+
+    merged = 0
+    for clin in existing.get("clins", []):
+        num = (clin.get("clin") or "").strip()
+        if num in incoming:
+            clin["labor_rates"] = incoming[num]
+            merged += 1
+
+    # Store back just the extraction blob (id / piid / created_at are columns).
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+    db.update_contract(contract_id, blob)
+    return {
+        "id": contract_id,
+        "clins_updated": merged,
+        "rate_tables_found": len(incoming),
+        "piid_mismatch": piid_mismatch,
+    }
+
+
 @app.get("/api/contracts")
 def contracts():
     return db.list_contracts()
