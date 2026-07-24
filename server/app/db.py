@@ -22,6 +22,22 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # Cache of synced timesheet rows, keyed to a contract. One row per
+    # employee-week-CLIN; the burn engine buckets these by charge_code (== CLIN).
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS timesheets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            employee TEXT,
+            employee_id TEXT,
+            week_ending TEXT,
+            charge_code TEXT,
+            labor_category TEXT,
+            total_hours REAL,
+            contract_no TEXT,
+            synced_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
     conn.commit()
     conn.close()
 
@@ -77,3 +93,44 @@ def get_contract(cid: int) -> Optional[dict]:
         "created_at": r["created_at"],
         **json.loads(r["data"]),
     }
+
+
+def replace_timesheets(contract_id: int, rows: list) -> int:
+    """Swap in a fresh synced batch for a contract (delete-then-insert), so a
+    re-sync never double-counts. Returns the number of rows stored."""
+    conn = get_conn()
+    conn.execute("DELETE FROM timesheets WHERE contract_id = ?", (contract_id,))
+    conn.executemany(
+        """INSERT INTO timesheets
+           (contract_id, employee, employee_id, week_ending, charge_code,
+            labor_category, total_hours, contract_no)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        [
+            (
+                contract_id,
+                r.get("employee"),
+                r.get("employee_id"),
+                r.get("week_ending"),
+                str(r.get("charge_code")) if r.get("charge_code") is not None else None,
+                r.get("labor_category"),
+                float(r.get("total_hours") or 0),
+                r.get("contract_no"),
+            )
+            for r in rows
+        ],
+    )
+    conn.commit()
+    conn.close()
+    return len(rows)
+
+
+def get_timesheets(contract_id: int) -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT employee, employee_id, week_ending, charge_code, labor_category,
+                  total_hours, contract_no, synced_at
+           FROM timesheets WHERE contract_id = ? ORDER BY week_ending""",
+        (contract_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

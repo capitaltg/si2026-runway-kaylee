@@ -75,6 +75,26 @@ def _probe_fixtura() -> dict:
     return box
 
 
+def fetch_timesheets(rows: int = 300, seed: int = 42) -> list:
+    """Live-pull a full timesheet batch from Fixtura for the sync endpoint.
+
+    Unlike `_probe_fixtura` (which swallows errors to keep the Step-1 sources
+    page fast), this raises on failure so the caller can surface a real HTTP
+    error — a sync that silently stored nothing would be worse than a 502.
+    """
+    payload = json.dumps(
+        {"preset": "govcon_timesheet", "rows": rows, "seed": seed}
+    ).encode()
+    req = urllib.request.Request(
+        f"{FIXTURA_URL}/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30.0) as resp:
+        return json.loads(resp.read()).get("rows", [])
+
+
 def list_sources() -> dict:
     """The six Step-1 source boxes: Fixtura (live-probed) + five placeholders.
     `connected` is honest — the count of boxes actually syncing right now."""
