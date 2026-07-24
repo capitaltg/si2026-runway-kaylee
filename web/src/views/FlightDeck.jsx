@@ -78,6 +78,11 @@ export default function FlightDeck({ contractId, setActiveId }) {
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
+  const heroColor2 =
+    hero?.status === "over" ? "#c23636" : hero?.status === "watch" ? "#c26e12" : "#0b8f65";
+  // Live-data strip shows only sources actually feeding this project.
+  const liveSources = sources.filter((s) => s.status === "live" || s.status === "synced");
+  const stripSources = liveSources.length ? liveSources : sources;
   const heroSub =
     hero?.status === "over"
       ? "blows the ceiling before the PoP ends"
@@ -192,7 +197,7 @@ export default function FlightDeck({ contractId, setActiveId }) {
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>Live data</span>
         <div style={{ width: 1, height: 26, background: "var(--border)" }} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
-          {sources.map((ig) => {
+          {stripSources.map((ig) => {
             const on = ig.status === "live" || ig.status === "synced";
             return (
               <div
@@ -274,11 +279,19 @@ export default function FlightDeck({ contractId, setActiveId }) {
           style={{
             borderRadius: 16,
             padding: 18,
-            background: `linear-gradient(155deg, ${heroColor}, ${heroColor})`,
+            background: `linear-gradient(155deg, ${heroColor}, ${heroColor2})`,
             color: "#fff",
             boxShadow: "0 12px 28px rgba(0,0,0,.14)",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
+          <div style={{ position: "absolute", right: -18, top: -18, opacity: 0.16 }}>
+            <svg width="130" height="130" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 2v20M2 12h20M12 12l6-4" />
+            </svg>
+          </div>
           <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, opacity: 0.9 }}>
             Days of runway
           </div>
@@ -390,14 +403,19 @@ export default function FlightDeck({ contractId, setActiveId }) {
                 ? "no burn"
                 : `${c.runway_days}d runway`;
           const runwayColor = c.status === "tracked" ? "var(--dim)" : statusColor(c.status);
+          const clickable = c.is_labor;
+          const sel = clickable && selectedClin && c.id === selectedClin.id;
           return (
             <div
               key={c.id + c.code}
+              onClick={clickable ? () => setSelected(c.id) : undefined}
               style={{
-                border: "1px solid var(--border)",
+                border: `1px solid ${sel ? hue : "var(--border)"}`,
                 borderRadius: 14,
                 padding: "13px 14px",
                 background: "var(--panel)",
+                cursor: clickable ? "pointer" : "default",
+                boxShadow: sel ? `0 0 0 3px ${hue}22` : "none",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
