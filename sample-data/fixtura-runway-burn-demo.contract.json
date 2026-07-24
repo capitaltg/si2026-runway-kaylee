@@ -1,0 +1,186 @@
+{
+  "piid": "7026HEXDVC0001043",
+  "solicitation_no": "701928R",
+  "effective_date": "2026-03-06",
+  "solicitation_issue_date": "2025-12-14",
+  "offer_due_date": "2026-02-16",
+  "naics_code": "541330",
+  "naics_title": "Engineering Services",
+  "size_standard": "$25.5M",
+  "set_aside": "Unrestricted",
+  "discount_terms": "1% 10, Net 30",
+  "agency": "Department of Homeland Security",
+  "issuing_office": "DHS OPO",
+  "issuing_office_code": "K1VRJN",
+  "admin_office_code": "VGFYGW",
+  "payment": {
+    "paying_office": "Defense Finance and Accounting Service (DFAS)",
+    "voucher_no": "PV-55940781",
+    "check_no": "6184959310",
+    "sr_account_no": "SR-3413-16475",
+    "disbursing_officer": "Henry Santiago"
+  },
+  "contractor": {
+    "name": "Mcclain, Miller and Henderson",
+    "uei": "TRQJGF3CBFPQ",
+    "cage": "6B9M8",
+    "address": "89083 Robinson Radial, Lisatown, WV 21427",
+    "phone": "(654) 235-1161"
+  },
+  "contracting_officer": "Carla Gray",
+  "co_phone": "(835) 030-5641",
+  "gov_representative": "Tommy Walter",
+  "gov_rep_address": "7242 Julie Plain Suite 969, Coxberg, NY 65187",
+  "gov_rep_phone": "(101) 226-9166",
+  "signer_title": "Contracts Manager",
+  "acceptance_date": "2026-04-12",
+  "contract_type": "T&M",
+  "total_ceiling": 8701569.6,
+  "total_obligated": 5608002.71,
+  "unfunded_balance": 3093566.89,
+  "obligation_history": [
+    {
+      "mod": "Award",
+      "date": "2026-03-06",
+      "action": "Initial award / base-period funding",
+      "amount": 2439000.0,
+      "cumulative_obligated": 2439000.0
+    },
+    {
+      "mod": "P00001",
+      "date": "2026-07-24",
+      "action": "Incremental funding (FAR 52.232-22)",
+      "amount": 1477000.0,
+      "cumulative_obligated": 3916000.0
+    },
+    {
+      "mod": "P00002",
+      "date": "2026-07-24",
+      "action": "Incremental funding (FAR 52.232-22)",
+      "amount": 1692002.71,
+      "cumulative_obligated": 5608002.71
+    }
+  ],
+  "periods": [
+    {
+      "name": "Base Year",
+      "pop_start": "2026-03-06",
+      "pop_end": "2027-03-05",
+      "exercised": true,
+      "ceiling": 8701569.6,
+      "clins": [
+        {
+          "clin": "0001",
+          "period_index": 0,
+          "title": "Professional Services - Operations & Maintenance",
+          "type": "T&M",
+          "is_labor": true,
+          "ceiling": 3491404.8,
+          "est_hours": 16640,
+          "labor_rates": [
+            {
+              "lcat": "Senior Software Engineer",
+              "clearance": "TS/SCI",
+              "min_education": "Bachelor's",
+              "min_experience_yrs": 8,
+              "base_salary": 202661,
+              "wrap_rate": 2.24,
+              "loaded_rate": 242.04,
+              "est_hours": 10400,
+              "amount": 2517216.0
+            },
+            {
+              "lcat": "Software Engineer (Mid)",
+              "clearance": "Secret",
+              "min_education": "Bachelor's",
+              "min_experience_yrs": 5,
+              "base_salary": 141186,
+              "wrap_rate": 2.13,
+              "loaded_rate": 156.12,
+              "est_hours": 6240,
+              "amount": 974188.8
+            }
+          ]
+        },
+        {
+          "clin": "0002",
+          "period_index": 0,
+          "title": "Professional Services - Cybersecurity Support",
+          "type": "T&M",
+          "is_labor": true,
+          "ceiling": 4642164.8,
+          "est_hours": 33280,
+          "labor_rates": [
+            {
+              "lcat": "Business Analyst",
+              "clearance": "Secret",
+              "min_education": "Bachelor's",
+              "min_experience_yrs": 3,
+              "base_salary": 125388,
+              "wrap_rate": 2.3,
+              "loaded_rate": 150.59,
+              "est_hours": 4160,
+              "amount": 626454.4
+            },
+            {
+              "lcat": "Senior Software Engineer",
+              "clearance": "TS/SCI",
+              "min_education": "Bachelor's",
+              "min_experience_yrs": 8,
+              "base_salary": 156400,
+              "wrap_rate": 2.39,
+              "loaded_rate": 204.24,
+              "est_hours": 6240,
+              "amount": 1274457.6
+            },
+            {
+              "lcat": "Administrative Support",
+              "clearance": "None",
+              "min_education": "HS Diploma",
+              "min_experience_yrs": 1,
+              "base_salary": 55929,
+              "wrap_rate": 2.07,
+              "loaded_rate": 55.66,
+              "est_hours": 12480,
+              "amount": 694636.8
+            },
+            {
+              "lcat": "Program Manager (PMP)",
+              "clearance": "Secret",
+              "min_education": "Bachelor's",
+              "min_experience_yrs": 8,
+              "base_salary": 182687,
+              "wrap_rate": 2.12,
+              "loaded_rate": 196.79,
+              "est_hours": 10400,
+              "amount": 2046616.0
+            }
+          ]
+        },
+        {
+          "clin": "0003",
+          "period_index": 0,
+          "title": "Travel (Cost-Reimbursable, No Fee)",
+          "type": "COST",
+          "is_labor": false,
+          "ceiling": 336000.0,
+          "labor_rates": []
+        },
+        {
+          "clin": "0004",
+          "period_index": 0,
+          "title": "Other Direct Costs / Materials (Cost, No Fee)",
+          "type": "COST",
+          "is_labor": false,
+          "ceiling": 232000.0,
+          "labor_rates": []
+        }
+      ]
+    }
+  ],
+  "cdrls": [
+    "A001 - Monthly Status Report",
+    "A002 - Monthly Financial / Burn Report",
+    "A003 - Quarterly Progress Review"
+  ]
+}
