@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import Ingest from "./views/Ingest.jsx";
+import Portfolio from "./views/Portfolio.jsx";
+import FlightDeck from "./views/FlightDeck.jsx";
 import { applyTheme } from "./theme.js";
 
 function Placeholder({ name }) {
@@ -15,12 +17,18 @@ function Placeholder({ name }) {
 }
 
 export default function App() {
-  const [view, setView] = useState("ingest");
+  const [view, setView] = useState("portfolio");
   const [theme, setTheme] = useState("light");
+  const [activeId, setActiveId] = useState(null);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  function openContract(id) {
+    setActiveId(id);
+    setView("flightdeck");
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -31,7 +39,15 @@ export default function App() {
         toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
       <main style={{ flex: 1, overflowY: "auto" }}>
-        {view === "ingest" ? <Ingest /> : <Placeholder name={labelFor(view)} />}
+        {view === "ingest" ? (
+          <Ingest />
+        ) : view === "portfolio" ? (
+          <Portfolio onOpen={openContract} />
+        ) : view === "flightdeck" ? (
+          <FlightDeck contractId={activeId} setActiveId={setActiveId} />
+        ) : (
+          <Placeholder name={labelFor(view)} />
+        )}
       </main>
     </div>
   );

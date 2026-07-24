@@ -6,6 +6,7 @@ export const themes = {
     accent: "#4361ee", accent2: "#06b6d4",
     good: "#10b981", goodBg: "#e6f7f1", warn: "#ef8f2a", warnBg: "#fdf1e2",
     bad: "#f05252", badBg: "#fdecec", inputBg: "#ffffff",
+    grid: "rgba(26,34,51,.06)",
   },
   dark: {
     bg: "#0b1120", panel: "#141d31", panel2: "#1c2840", border: "#2b3b59",
@@ -13,6 +14,7 @@ export const themes = {
     accent: "#6d8bff", accent2: "#34d3e0",
     good: "#34d399", goodBg: "#0f2a20", warn: "#fbbf24", warnBg: "#2c2110",
     bad: "#fb7185", badBg: "#2c1518", inputBg: "#0d1626",
+    grid: "rgba(234,240,251,.09)",
   },
 };
 

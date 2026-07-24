@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, extract, sources
+from . import burn, db, extract, sources
 from .schemas import Extraction
 
 SAMPLE = os.path.join(
@@ -122,3 +122,40 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
 @app.get("/api/contracts")
 def contracts():
     return db.list_contracts()
+
+
+@app.post("/api/contracts/{contract_id}/timesheets/sync")
+def sync_timesheets(contract_id: int, rows: int = 300, seed: int = 42):
+    """Pull a fresh timesheet batch from Fixtura and cache it against this
+    contract. Delete-then-insert (via db.replace_timesheets) so a re-sync
+    never double-counts hours."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    try:
+        ts = sources.fetch_timesheets(rows=rows, seed=seed)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Timesheet sync failed: {e}")
+    stored = db.replace_timesheets(contract_id, ts)
+    return {
+        "id": contract_id,
+        "rows": stored,
+        "people": len({r.get("employee_id") for r in ts if r.get("employee_id")}),
+        "weeks": len({r.get("week_ending") for r in ts if r.get("week_ending")}),
+    }
+
+
+@app.get("/api/contracts/{contract_id}/burn")
+def contract_burn(contract_id: int):
+    """Full Flight Deck payload: the active period's burn, runway and tripwires
+    for one contract against its synced timesheets."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return burn.compute(contract, db.get_timesheets(contract_id))
+
+
+@app.get("/api/portfolio")
+def portfolio():
+    """Cross-contract KPI aggregate + one summary card per contract."""
+    pairs = [(c, db.get_timesheets(c["id"])) for c in db.list_contracts()]
+    return burn.portfolio(pairs)

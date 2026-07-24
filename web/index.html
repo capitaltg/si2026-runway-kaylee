@@ -22,6 +22,9 @@
       @keyframes rwspin { to { transform: rotate(360deg); } }
       @keyframes rwbar { 0% { width: 4%; } 80% { width: 92%; } 100% { width: 98%; } }
       @keyframes rwrise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @keyframes rwdash { to { stroke-dashoffset: -14; } }
+      @keyframes rwping { 0% { transform: scale(.7); opacity: .7; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+      @keyframes rwblink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     </style>
   </head>
   <body>
