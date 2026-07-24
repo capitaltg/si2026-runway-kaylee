@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from typing import Optional
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
 
@@ -36,6 +37,15 @@ def save_contract(piid: str, data: dict) -> int:
     return cid
 
 
+def update_contract(cid: int, data: dict) -> None:
+    """Replace a contract's stored data blob (its piid column is left as-is).
+    Used by the supplemental rate-schedule import to merge in labor rates."""
+    conn = get_conn()
+    conn.execute("UPDATE contracts SET data = ? WHERE id = ?", (json.dumps(data), cid))
+    conn.commit()
+    conn.close()
+
+
 def list_contracts() -> list:
     conn = get_conn()
     rows = conn.execute(
@@ -43,6 +53,27 @@ def list_contracts() -> list:
     ).fetchall()
     conn.close()
     return [
-        {"id": r["id"], "piid": r["piid"], "created_at": r["created_at"], **json.loads(r["data"])}
+        {
+            "id": r["id"],
+            "piid": r["piid"],
+            "created_at": r["created_at"],
+            **json.loads(r["data"]),
+        }
         for r in rows
     ]
+
+
+def get_contract(cid: int) -> Optional[dict]:
+    conn = get_conn()
+    r = conn.execute(
+        "SELECT id, piid, data, created_at FROM contracts WHERE id = ?", (cid,)
+    ).fetchone()
+    conn.close()
+    if r is None:
+        return None
+    return {
+        "id": r["id"],
+        "piid": r["piid"],
+        "created_at": r["created_at"],
+        **json.loads(r["data"]),
+    }

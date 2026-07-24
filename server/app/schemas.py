@@ -3,6 +3,28 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class LaborRate(BaseModel):
+    lcat: str = Field(
+        description="Labor category name exactly as printed, e.g. 'Software Engineer (Mid)'"
+    )
+    loaded_rate: Optional[float] = Field(
+        default=None,
+        description="Fully-burdened / loaded billing rate in US dollars per hour",
+    )
+    est_hours: Optional[int] = Field(
+        default=None, description="Estimated hours for this LCAT on this CLIN"
+    )
+    min_education: Optional[str] = Field(
+        default=None, description='Minimum education, e.g. "Bachelor\'s"'
+    )
+    min_experience_yrs: Optional[int] = Field(
+        default=None, description="Minimum years of experience"
+    )
+    clearance: Optional[str] = Field(
+        default=None, description="Required clearance, e.g. 'Secret', 'TS/SCI'"
+    )
+
+
 class CLIN(BaseModel):
     clin: str = Field(description="CLIN number, e.g. '0001'")
     period: Optional[str] = Field(
@@ -21,6 +43,12 @@ class CLIN(BaseModel):
     )
     est_hours: Optional[int] = Field(
         default=None, description="Estimated labor hours, if a labor CLIN"
+    )
+    labor_rates: Optional[List[LaborRate]] = Field(
+        default=None,
+        description="For a labor CLIN, the fully-burdened Labor Rate Table if the "
+        "award prints one (LCAT + loaded rate/hr + est. hours + qualifications). "
+        "Null for non-labor CLINs or when no rate table is present.",
     )
     confidence: Optional[float] = Field(
         default=None,
