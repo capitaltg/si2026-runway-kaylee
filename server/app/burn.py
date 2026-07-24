@@ -213,11 +213,16 @@ def _clock(contract: dict, rows: List[dict]):
     weeks = sorted({r.get("week_ending") for r in rows if r.get("week_ending")})
     latest = _d(weeks[-1]) if weeks else None
 
-    if pop_start and latest and latest >= pop_start:
+    # Anchor "today" to the calendar only when the timesheets actually fall
+    # inside this period's PoP window. Fixtura's seed dates the work in the
+    # current option year while still charging the base CLIN numbers, so the
+    # base PoP (which can be years earlier) won't contain those dates. Pinning
+    # the clock to a long-past pop_end then reads as "week 52/52 — contract
+    # over," which is useless. When the dates don't sit in the window, treat the
+    # count of logged weeks as how far into execution we are instead.
+    if pop_start and pop_end and latest and pop_start <= latest <= pop_end:
         current_week = (_weeks_between(pop_start, latest) or 0) + 1
     else:
-        # Dates don't overlap the PoP yet — treat "weeks of timesheets logged" as
-        # how far into execution we are.
         current_week = len(weeks)
     current_week = max(1, min(current_week, total_weeks))
 
