@@ -40,7 +40,7 @@ export default function App() {
       />
       <main style={{ flex: 1, overflowY: "auto" }}>
         {view === "ingest" ? (
-          <Ingest />
+          <Ingest onSaved={openContract} />
         ) : view === "portfolio" ? (
           <Portfolio onOpen={openContract} />
         ) : view === "flightdeck" ? (

@@ -119,8 +119,21 @@ def _pill(status: str) -> str:
     }.get(status, "—")
 
 
-def _compute_clin(clin: dict, rows: List[dict], current_week: int, total_weeks: int):
-    """Per-CLIN spend, forward burn, runway and status — the heart of the engine."""
+def _compute_clin(
+    clin: dict,
+    rows: List[dict],
+    current_week: int,
+    total_weeks: int,
+    funded: Optional[float] = None,
+):
+    """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
+
+    `funded` is the obligated/funded dollars backing this CLIN right now. When it
+    is set and below the CLIN ceiling, the contract is incrementally funded, so
+    the binding constraint is the funded money, not the full ceiling (FAR
+    52.232-22, Limitation of Funds): runway, status and the exhaust week are
+    measured against `funded`. When it's None (or >= ceiling) the CLIN behaves
+    exactly as before and everything is measured against the ceiling."""
     rate_for, blended, source = _rate_resolver(clin)
     clin_rows = _rows_for_clin(clin, rows)
 
@@ -150,7 +163,12 @@ def _compute_clin(clin: dict, rows: List[dict], current_week: int, total_weeks: 
     )
 
     ceiling = float(clin.get("ceiling") or 0)
-    remaining = ceiling - spent
+    # The dollars this CLIN can actually spend before it stalls: the funded
+    # amount when incrementally funded, otherwise the full ceiling. Runway is
+    # measured against this; the ceiling is still reported for the % display.
+    incrementally_funded = funded is not None and 0 < funded < ceiling
+    budget = funded if incrementally_funded else ceiling
+    remaining = budget - spent
     pct = (spent / ceiling) if ceiling else 0.0
 
     if weekly <= 0:
@@ -185,6 +203,12 @@ def _compute_clin(clin: dict, rows: List[dict], current_week: int, total_weeks: 
         "name": clin.get("title"),
         "is_labor": bool(clin.get("is_labor")),
         "ceiling": ceiling,
+        # The binding budget the runway is measured against, and whether it's the
+        # funded slice (incremental funding) rather than the full ceiling. The
+        # Flight Deck chart draws the "funds run out" marker at `budget`.
+        "budget": round(budget, 2),
+        "funded": round(funded, 2) if funded is not None else None,
+        "incrementally_funded": incrementally_funded,
         "spent": round(spent, 2),
         "pct": round(pct, 4),
         "weekly": round(weekly, 2),
@@ -244,7 +268,25 @@ def compute(contract: dict, rows: List[dict]) -> dict:
     labor = [c for c in clins if c.get("is_labor")]
     nonlabor = [c for c in clins if not c.get("is_labor")]
 
-    computed = [_compute_clin(c, rows, cw, tw) for c in labor]
+    # Funded-dollar allocation. An award carries one total obligated figure, not a
+    # per-CLIN split, so spread it across the active period's CLINs pro-rata by
+    # ceiling — each CLIN's funded slice is its share of the obligated money. This
+    # is what lets the engine warn when *funded* dollars (not the full ceiling)
+    # run out early, the incremental-funding case (FAR 52.232-22). When nothing is
+    # obligated, or it already covers the whole active ceiling, funded is None and
+    # every CLIN falls back to ceiling-based runway.
+    active_ceiling = sum(float(c.get("ceiling") or 0) for c in clins)
+    obligated = header.get("total_obligated")
+    funded_frac = (
+        float(obligated) / active_ceiling
+        if obligated and active_ceiling and float(obligated) < active_ceiling
+        else None
+    )
+    funded_for = lambda c: (
+        funded_frac * float(c.get("ceiling") or 0) if funded_frac is not None else None
+    )
+
+    computed = [_compute_clin(c, rows, cw, tw, funded=funded_for(c)) for c in labor]
     # Non-labor CLINs: no expense feature yet (#7), so spent is 0 / tracked-only.
     nl_cards = []
     for c in nonlabor:
@@ -280,6 +322,12 @@ def compute(contract: dict, rows: List[dict]) -> dict:
             "exhaust_week": c["exhaust_week"],
             "runway_days": c["runway_days"],
             "weeks_early": round(tw - (c["exhaust_week"] or tw)),
+            # What the CLIN runs out of first: its funded dollars (incremental
+            # funding) or the full ceiling. Drives whether the UI says "funding
+            # runs out" vs "blows the ceiling".
+            "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+            "funded": c["funded"],
+            "budget": c["budget"],
         }
         for c in computed
         if c["status"] == "over"
@@ -310,6 +358,9 @@ def compute(contract: dict, rows: List[dict]) -> dict:
                 "days": worst["runway_days"],
                 "clin": worst["code"],
                 "status": worst["status"],
+                "limited_by": (
+                    "funding" if worst["incrementally_funded"] else "ceiling"
+                ),
             }
             if worst
             else None
