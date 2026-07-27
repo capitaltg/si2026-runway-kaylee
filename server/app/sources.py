@@ -20,6 +20,27 @@ _PROBE_ROWS = 8  # small live pull — enough to prove the feed is real
 _PREVIEW_ROWS = 5  # rows surfaced in the click-to-expand preview
 _TIMEOUT = 3.0  # seconds; Fixtura being down must not hang ingest Step 1
 
+# Fixtura builds the timesheet scenario (people, CLINs, week dates) from its
+# seed + these generation opts. They MUST match the opts the demo award was
+# generated with, or the synced hours charge to CLINs/weeks that don't line up
+# with the ingested contract and the burn never ties out. This is the single
+# source of truth for the burn-demo scenario: seed 42, an in-progress single
+# base year, T&M — the same set that produced sample-data/fixtura-runway-burn-
+# demo.* (award PIID 7026HEXDVC0001043).
+DEMO_SCENARIO_OPTS = {
+    "pop_in_progress": True,
+    "option_years": 0,
+    "contract_type": "T&M",
+    # Crew the roster to the contract's planned FTEs so the synced hours burn it
+    # on plan — otherwise a one-person-per-line roster logs a fraction of the
+    # hours and the contract reads far under budget.
+    "staffing": 1.0,
+}
+# Rows to pull on a full sync. At the demo's staffing this is ~one weekly
+# timesheet per person across the in-progress period — enough logged hours to
+# burn on plan (funded dollars then exhaust ~wk 34). Any caller can override it.
+DEMO_SYNC_ROWS = 460
+
 # The five commercial systems we show as placeholders. Real GovCon timesheet /
 # payroll / billing tools, matching the design's vendor set — marked "Not
 # connected" because we have no live integration with them here.
@@ -43,7 +64,12 @@ def _probe_fixtura() -> dict:
     box = {"code": "FX", "name": "Fixtura", "hue": "#4361ee"}
     try:
         payload = json.dumps(
-            {"preset": "govcon_timesheet", "rows": _PROBE_ROWS, "seed": 42}
+            {
+                "preset": "govcon_timesheet",
+                "rows": _PROBE_ROWS,
+                "seed": 42,
+                "preset_opts": DEMO_SCENARIO_OPTS,
+            }
         ).encode()
         req = urllib.request.Request(
             f"{FIXTURA_URL}/generate",
@@ -75,7 +101,7 @@ def _probe_fixtura() -> dict:
     return box
 
 
-def fetch_timesheets(rows: int = 300, seed: int = 42) -> list:
+def fetch_timesheets(rows: int = DEMO_SYNC_ROWS, seed: int = 42) -> list:
     """Live-pull a full timesheet batch from Fixtura for the sync endpoint.
 
     Unlike `_probe_fixtura` (which swallows errors to keep the Step-1 sources
@@ -83,7 +109,12 @@ def fetch_timesheets(rows: int = 300, seed: int = 42) -> list:
     error — a sync that silently stored nothing would be worse than a 502.
     """
     payload = json.dumps(
-        {"preset": "govcon_timesheet", "rows": rows, "seed": seed}
+        {
+            "preset": "govcon_timesheet",
+            "rows": rows,
+            "seed": seed,
+            "preset_opts": DEMO_SCENARIO_OPTS,
+        }
     ).encode()
     req = urllib.request.Request(
         f"{FIXTURA_URL}/generate",

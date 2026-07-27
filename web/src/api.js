@@ -42,9 +42,15 @@ export async function getPortfolio() {
   return r.json();
 }
 
-export async function syncTimesheets(contractId, { rows = 300, seed = 42 } = {}) {
+export async function syncTimesheets(contractId, { rows, seed } = {}) {
+  // Only send params the caller actually set, so the backend's demo defaults
+  // (row count + seed tuned to burn the bundled contract on plan) govern.
+  const qs = new URLSearchParams();
+  if (rows != null) qs.set("rows", rows);
+  if (seed != null) qs.set("seed", seed);
+  const q = qs.toString();
   const r = await fetch(
-    `${BASE}/api/contracts/${contractId}/timesheets/sync?rows=${rows}&seed=${seed}`,
+    `${BASE}/api/contracts/${contractId}/timesheets/sync${q ? `?${q}` : ""}`,
     { method: "POST" }
   );
   if (!r.ok) throw new Error(`Sync failed (${r.status})`);

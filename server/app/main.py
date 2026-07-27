@@ -7,8 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import burn, db, extract, sources
 from .schemas import Extraction
 
+# The bundled award the "Ingest sample with AI" button reads when no file is
+# uploaded. Points at the Fixtura burn-demo SF-26 so the one-click sample flows
+# straight into a contract whose funded dollars trip the wire once timesheets
+# sync — no file download required to demo the whole path.
 SAMPLE = os.path.join(
-    os.path.dirname(__file__), "..", "..", "sample-data", "contract-70RCSA26C0000123.md"
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "sample-data",
+    "fixtura-runway-burn-demo.award.sf26.pdf",
 )
 
 app = FastAPI(title="Runway API")
@@ -47,6 +55,9 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
                 result = extract.extract_from_pdf(data)
             else:
                 result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+        elif SAMPLE.lower().endswith(".pdf"):
+            with open(SAMPLE, "rb") as f:
+                result = extract.extract_from_pdf(f.read())
         else:
             with open(SAMPLE, "r", encoding="utf-8") as f:
                 result = extract.extract_from_text(f.read())
@@ -125,7 +136,9 @@ def contracts():
 
 
 @app.post("/api/contracts/{contract_id}/timesheets/sync")
-def sync_timesheets(contract_id: int, rows: int = 300, seed: int = 42):
+def sync_timesheets(
+    contract_id: int, rows: int = sources.DEMO_SYNC_ROWS, seed: int = 42
+):
     """Pull a fresh timesheet batch from Fixtura and cache it against this
     contract. Delete-then-insert (via db.replace_timesheets) so a re-sync
     never double-counts hours."""

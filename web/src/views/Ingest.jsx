@@ -334,7 +334,7 @@ const ghostBtn = {
   cursor: "pointer",
 };
 
-export default function Ingest() {
+export default function Ingest({ onSaved }) {
   const [stage, setStage] = useState("upload"); // upload | extracting | review
   const [result, setResult] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -386,9 +386,9 @@ export default function Ingest() {
       return;
     }
     try {
-      await confirm(result);
-      alert(`Contract ${result.contract.piid} saved. Burn plan next.`);
+      const saved = await confirm(result);
       reset();
+      onSaved?.(saved.id); // jump straight to the new contract's flight deck
     } catch (e) {
       setError(e.message);
     }

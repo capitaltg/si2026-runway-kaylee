@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getSources, syncTimesheets, listContracts } from "../api.js";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
@@ -19,6 +19,8 @@ export default function FlightDeck({ contractId, setActiveId }) {
   const [selected, setSelected] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
+  // Contracts we've already auto-synced once, so we don't re-sync on every load.
+  const autoSyncedRef = useRef(new Set());
 
   // Resolve a contract to show: the one App picked, else the newest ingested.
   useEffect(() => {
@@ -34,6 +36,12 @@ export default function FlightDeck({ contractId, setActiveId }) {
       setBurn(b);
       const labor = b.clins.filter((c) => c.is_labor);
       setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
+      // First visit with no hours synced yet: pull them once automatically so
+      // the Flight Deck shows real burn instead of an empty "sync timesheets".
+      if ((b?.sync?.rows ?? 0) === 0 && !autoSyncedRef.current.has(id)) {
+        autoSyncedRef.current.add(id);
+        onSync();
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -85,7 +93,9 @@ export default function FlightDeck({ contractId, setActiveId }) {
   const stripSources = liveSources.length ? liveSources : sources;
   const heroSub =
     hero?.status === "over"
-      ? "blows the ceiling before the PoP ends"
+      ? hero?.limited_by === "funding"
+        ? "runs out of funded dollars before the PoP ends"
+        : "blows the ceiling before the PoP ends"
       : hero?.status === "watch"
         ? "lands tight against the finish line"
         : "clears the finish line";
@@ -151,8 +161,17 @@ export default function FlightDeck({ contractId, setActiveId }) {
               </span>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-              At the current burn rate, {tw.code} exhausts in week {Math.round(tw.exhaust_week)} — {tw.weeks_early}{" "}
-              weeks before the PoP ends. Only {tw.runway_days} days of runway remain.
+              At the current burn rate, {tw.code}{" "}
+              {tw.limited_by === "funding" ? (
+                <>
+                  exhausts its <b>funded</b> {moneyM(tw.funded)} in week{" "}
+                  {Math.round(tw.exhaust_week)}
+                </>
+              ) : (
+                <>blows its {moneyM(tw.budget)} ceiling in week {Math.round(tw.exhaust_week)}</>
+              )}{" "}
+              — {tw.weeks_early} weeks before the PoP ends. Only {tw.runway_days} days of runway
+              remain{tw.limited_by === "funding" ? " unless more funding is obligated" : ""}.
             </div>
           </div>
         </div>
@@ -343,7 +362,7 @@ export default function FlightDeck({ contractId, setActiveId }) {
             <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: "var(--dim)" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 0, borderTop: "2px dashed var(--faint)" }} />
-                Target pace
+                {selectedClin.incrementally_funded ? "Pace to stay funded" : "Target pace"}
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 3, borderRadius: 2, background: "var(--accent)" }} />
