@@ -82,7 +82,7 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
     return <div style={{ padding: "40px", color: "var(--dim)" }}>Loading flight deck…</div>;
   }
 
-  const { contract, totals, hero, tripwires, all_clear, sync } = burn;
+  const { contract, totals, hero, tripwires, underburn = [], all_clear, sync } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
@@ -172,6 +172,65 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
               )}{" "}
               — {tw.weeks_early} weeks before the PoP ends. Only {tw.runway_days} days of runway
               remain{tw.limited_by === "funding" ? " unless more funding is obligated" : ""}.
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/* under-burn warnings — amber/info, distinct from the red over-ceiling tripwire */}
+      {underburn.map((ub) => (
+        <div
+          key={ub.code}
+          style={{
+            border: "1px solid var(--warn)",
+            background: "var(--warnBg)",
+            borderRadius: 16,
+            padding: "16px 18px",
+            marginBottom: 16,
+            display: "flex",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              flex: "0 0 38px",
+              borderRadius: 11,
+              background: "var(--warn)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            ↓
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--warn)" }}>
+                Under-burning — {ub.code} {ub.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "'IBM Plex Mono',monospace",
+                  background: "var(--warn)",
+                  color: "#fff",
+                  padding: "2px 8px",
+                  borderRadius: 20,
+                }}
+              >
+                {pct(ub.pct)} burned
+              </span>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+              At the current burn rate, {ub.code} is projected to under-spend its{" "}
+              {ub.limited_by === "funding" ? "funded" : "budgeted"} {moneyM(ub.budget)} by{" "}
+              <b>{moneyM(ub.projected_unspent)}</b> — not consuming it until ~{ub.weeks_slack} weeks
+              after the PoP ends. Under-staffing or slipping delivery can leave money unspent and
+              jeopardize option-year exercise.
             </div>
           </div>
         </div>
