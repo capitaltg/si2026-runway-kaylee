@@ -42,6 +42,32 @@ export async function getPortfolio() {
   return r.json();
 }
 
+export async function listExpenses(contractId, clin) {
+  const q = clin ? `?clin=${encodeURIComponent(clin)}` : "";
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/expenses${q}`);
+  if (!r.ok) throw new Error(`Expenses failed (${r.status})`);
+  return r.json();
+}
+
+export async function addExpense(contractId, expense) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/expenses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(expense),
+  });
+  if (!r.ok) throw new Error(`Add expense failed (${r.status})`);
+  return r.json();
+}
+
+export async function deleteExpense(contractId, expenseId) {
+  const r = await fetch(
+    `${BASE}/api/contracts/${contractId}/expenses/${expenseId}`,
+    { method: "DELETE" }
+  );
+  if (!r.ok) throw new Error(`Delete expense failed (${r.status})`);
+  return r.json();
+}
+
 export async function syncTimesheets(contractId, { rows, seed } = {}) {
   // Only send params the caller actually set, so the backend's demo defaults
   // (row count + seed tuned to burn the bundled contract on plan) govern.

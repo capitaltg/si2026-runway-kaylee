@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  a{color:var(--accent,#4361ee);text-decoration:none}
+  a:hover{color:var(--accent2,#06b6d4)}
+  input,button{font-family:inherit}
+  input[type=number]{-moz-appearance:textfield}
+  input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--border,#e6e9f2);border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  @keyframes rwspin{to{transform:rotate(360deg)}}
+  @keyframes rwbar{0%{width:4%}80%{width:92%}100%{width:98%}}
+  @keyframes rwblink{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes rwdash{to{stroke-dashoffset:-14}}
+  @keyframes rwrise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes rwslide{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  @keyframes rwping{0%{transform:scale(.7);opacity:.7}70%,100%{transform:scale(2.6);opacity:0}}
+  @keyframes rwgrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+</style>
+</helmet>
+<div style="{{ rootStyle }}">
+  <div style="display:flex;min-height:100vh">
+
+    <aside style="width:242px;flex:0 0 242px;background:var(--panel,#fff);border-right:1px solid var(--border,#e6e9f2);display:flex;flex-direction:column;position:sticky;top:0;height:100vh">
+      <div style="padding:22px 18px 18px;display:flex;align-items:center;gap:11px">
+        <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(150deg,var(--accent,#4361ee),var(--accent2,#06b6d4));display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(67,97,238,.32)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M2 15.5l20-6.2-3.1-2.2-6.4 1.6-5.4-4.3-2.1.6 3.2 4.9-4 1-2.1-1.4-1.6.5L2 15.5z" fill="#fff"/><path d="M4 19h16" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".85"/></svg>
+        </div>
+        <div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;letter-spacing:-.02em;line-height:1;color:var(--text,#1a2233)">Runway</div>
+          <div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint,#9aa6bd);margin-top:3px;font-weight:600">Burn early-warning</div>
+        </div>
+      </div>
+
+      <div style="padding:8px 12px;display:flex;flex-direction:column;gap:4px">
+        <div data-view="portfolio" onClick="{{ onNav }}" style="{{ nav0Style }}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <div><div style="font-weight:600;font-size:13.5px">Portfolio</div><div style="font-size:11px;opacity:.62">All contracts</div></div>
+        </div>
+        <div data-view="flightdeck" onClick="{{ onNav }}" style="{{ nav1Style }}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-2.5" stroke-linecap="round"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M12 3v2M21 12h-2M12 21v-2M3 12h2"/></svg>
+          <div><div style="font-weight:600;font-size:13.5px">Flight Deck</div><div style="font-size:11px;opacity:.62">Live burn &amp; runway</div></div>
+        </div>
+        <div data-view="allocate" onClick="{{ onNav }}" style="{{ nav2Style }}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+          <div><div style="font-weight:600;font-size:13.5px">Allocation Matrix</div><div style="font-size:11px;opacity:.62">Staff &#8594; CLINs</div></div>
+        </div>
+        <div data-view="expenses" onClick="{{ onNav }}" style="{{ navExpStyle }}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18" /><path d="M7 14h5M7 17h3" stroke-linecap="round"/><circle cx="16.5" cy="15.5" r="1.6"/></svg>
+          <div><div style="font-weight:600;font-size:13.5px">Expenses</div><div style="font-size:11px;opacity:.62">Non-labor CLINs</div></div>
+        </div>
+        <div data-view="ingest" onClick="{{ onNav }}" style="{{ nav3Style }}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5" stroke-linejoin="round"/><path d="M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div style="font-weight:600;font-size:13.5px">Contract Ingest</div><div style="font-size:11px;opacity:.62">PDF &#8594; data</div></div>
+        </div>
+      </div>
+
+      <div style="margin:14px 16px;height:1px;background:var(--border,#e6e9f2)"></div>
+
+      <div style="padding:0 18px;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:600;margin-bottom:9px">Active contract</div>
+      <div data-view="portfolio" onClick="{{ onNav }}" style="margin:0 12px;padding:12px 13px;border:1px solid var(--border,#e6e9f2);border-radius:14px;background:var(--panel2,#f3f5fb);cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:600;font-size:12.5px;color:var(--text,#1a2233);line-height:1.3">{{ contract.short }}</div>
+          <span style="font-size:10px;color:var(--accent,#4361ee);font-weight:600">Switch &#8595;</span>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--dim,#5f6b80);margin-top:5px">{{ contract.number }}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+          <span style="{{ healthDotStyle }}"></span>
+          <span style="font-size:11.5px;font-weight:600;color:{{ heroColor }}">{{ healthLabel }}</span>
+        </div>
+      </div>
+
+      <div style="margin:14px 12px 0;padding:11px 13px;border-radius:12px;background:var(--goodBg,#e6f7f1);display:flex;align-items:center;gap:9px">
+        <span style="position:relative;width:9px;height:9px;flex:0 0 9px"><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981)"></span><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981);animation:rwping 2s ease-out infinite"></span></span>
+        <div style="font-size:11px;color:var(--text,#1a2233);line-height:1.35"><b>Timesheets live</b><br><span style="color:var(--dim,#5f6b80)">synced {{ liveAgo }}</span></div>
+      </div>
+
+      <div style="margin-top:auto;padding:16px 18px;font-size:10.5px;color:var(--faint,#9aa6bd);line-height:1.5">
+        <div style="font-family:'IBM Plex Mono',monospace;letter-spacing:.05em">CTG · GovCon fintech</div>
+        <div style="margin-top:3px">Demo data · not a system of record</div>
+      </div>
+    </aside>
+
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <header style="display:flex;align-items:center;gap:20px;padding:16px 26px;border-bottom:1px solid var(--border,#e6e9f2);background:var(--panel,#fff);position:sticky;top:0;z-index:20">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:600;letter-spacing:-.01em;color:var(--text,#1a2233);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ headerMain }}</h1>
+            <sc-if value="{{ showContractMeta }}" hint-placeholder-val="{{ true }}"><span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--dim,#5f6b80);border:1px solid var(--border,#e6e9f2);padding:2px 7px;border-radius:6px;white-space:nowrap">{{ contract.vehicle }}</span></sc-if>
+          </div>
+          <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:3px">{{ headerSub }}</div>
+        </div>
+
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <sc-if value="{{ showContractMeta }}" hint-placeholder-val="{{ true }}">
+          <div style="text-align:right;margin-right:4px">
+            <div style="font-size:10.5px;color:var(--faint,#9aa6bd);text-transform:uppercase;letter-spacing:.1em;font-weight:600">Period of performance</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--dim,#5f6b80)">{{ contract.popStart }}</span>
+              <div style="width:118px;height:6px;border-radius:4px;background:var(--panel2,#f3f5fb);border:1px solid var(--border,#e6e9f2);overflow:hidden;position:relative">
+                <div style="height:100%;width:{{ popPct }};background:linear-gradient(90deg,var(--accent,#4361ee),var(--accent2,#06b6d4))"></div>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--dim,#5f6b80)">{{ contract.popEnd }}</span>
+            </div>
+          </div>
+          <div style="{{ complianceBadgeStyle }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6z" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {{ complianceLabel }}</div>
+          </sc-if>
+
+          <button onClick="{{ exportExcel }}" title="Download the underlying data as a spreadsheet" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;border-radius:10px;border:1px solid var(--good,#10b981);background:var(--goodBg,#e6f7f1);color:var(--good,#10b981);font-size:12.5px;font-weight:600;cursor:pointer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5" stroke-linejoin="round"/><path d="M9 13l2 2M11 15l-2 2M15 13l-2 2M13 15l2 2" stroke-linecap="round"/></svg>
+            Export to Excel</button>
+          <button onClick="{{ toggleChat }}" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);font-size:12.5px;font-weight:600;cursor:pointer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 01-11.9 7.6L3 21l1.9-6A8.4 8.4 0 1121 11.5z" stroke-linejoin="round"/></svg>
+            Ask Runway</button>
+          <button onClick="{{ toggleTheme }}" title="Toggle theme" style="width:36px;height:36px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);cursor:pointer;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:16px">{{ themeIcon }}</span>
+          </button>
+        </div>
+      </header>
+
+      <div style="flex:1;overflow:auto">
+
+        <!-- ============ PORTFOLIO ============ -->
+        <sc-if value="{{ isPortfolio }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 26px 60px;max-width:1280px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+            <div>
+              <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;color:var(--text,#1a2233)">Good morning, Priya &#128075;</h2>
+              <div style="font-size:13.5px;color:var(--dim,#5f6b80);margin-top:5px">Here's how your {{ portCount }} active contracts are pacing today.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:11px;background:var(--goodBg,#e6f7f1)">
+              <span style="position:relative;width:8px;height:8px;flex:0 0 8px"><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981)"></span><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981);animation:rwping 2s ease-out infinite"></span></span>
+              <span style="font-size:12px;font-weight:600;color:var(--good,#10b981)">Live · timesheets synced {{ liveAgo }}</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+            <div style="{{ tileStyle }}"><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Active contracts</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:6px">{{ portCount }}</div></div>
+            <div style="{{ tileStyle }}"><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Portfolio value</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:6px">{{ portValue }}</div></div>
+            <div style="{{ tileStyle }}"><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Weekly burn</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:6px">{{ portWeekly }}</div></div>
+            <div style="border-radius:16px;padding:16px 18px;background:{{ portAlertBg }};border:1px solid {{ portAlertEdge }}"><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:{{ portAlertColor }}">Need attention</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:{{ portAlertColor }};margin-top:6px">{{ portAtRisk }}</div></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:16px">
+            <sc-for list="{{ portCards }}" as="pc" hint-placeholder-count="3">
+              <div data-cid="{{ pc.id }}" onClick="{{ onOpenContract }}" style="{{ pc.cardStyle }}">
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                  <div style="width:42px;height:42px;flex:0 0 42px;border-radius:12px;background:{{ pc.hue }};display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px">{{ pc.mark }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:var(--text,#1a2233);line-height:1.25">{{ pc.name }}</div>
+                    <div style="font-size:11.5px;color:var(--dim,#5f6b80);margin-top:2px">{{ pc.agency }}</div>
+                  </div>
+                  <span style="{{ pc.pillStyle }}">{{ pc.statusLabel }}</span>
+                </div>
+
+                <div style="display:flex;align-items:flex-end;gap:16px;margin-top:16px">
+                  <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Runway</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;color:{{ pc.runwayColor }};line-height:1.1">{{ pc.runwayDays }}<span style="font-size:13px;font-weight:600;color:var(--dim,#5f6b80)"> days</span></div></div>
+                  <div style="margin-left:auto;text-align:right"><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Burned</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;color:var(--text,#1a2233);line-height:1.1">{{ pc.pct }}</div></div>
+                </div>
+
+                <div style="height:8px;border-radius:5px;background:var(--border,#e6e9f2);margin-top:12px;overflow:hidden;display:flex">
+                  <sc-for list="{{ pc.segments }}" as="sg" hint-placeholder-count="3"><div style="{{ sg.style }}"></div></sc-for>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px;color:var(--dim,#5f6b80)">
+                  <span>{{ pc.onPaceLabel }}</span>
+                  <span>{{ pc.weeklyF }}/wk</span>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e6e9f2)">
+                  <span style="{{ pc.syncDotStyle }}"></span>
+                  <span style="font-size:11.5px;color:var(--dim,#5f6b80)">{{ pc.syncLabel }}</span>
+                  <span style="margin-left:auto;font-size:12px;font-weight:600;color:var(--accent,#4361ee)">Open flight deck &#8594;</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ FLIGHT DECK ============ -->
+        <sc-if value="{{ isFlight }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px 26px 60px;max-width:1280px">
+          <sc-for list="{{ tripwires }}" as="tw" hint-placeholder-count="0">
+            <div style="border:1px solid var(--bad,#f05252);background:var(--badBg,#fdecec);border-radius:16px;padding:16px 18px;margin-bottom:16px;display:flex;gap:14px;animation:rwrise .4s ease">
+              <div style="width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:var(--bad,#f05252);display:flex;align-items:center;justify-content:center;animation:rwblink 1.6s infinite">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--bad,#f05252)">Tripwire — {{ tw.code }} {{ tw.name }}</span>
+                  <span style="font-size:11px;font-family:'IBM Plex Mono',monospace;background:var(--bad,#f05252);color:#fff;padding:2px 8px;border-radius:20px">{{ tw.pct }} burned</span>
+                </div>
+                <div style="font-size:13.5px;color:var(--text,#1a2233);margin-top:6px;line-height:1.5">{{ tw.headline }}</div>
+                <div style="margin-top:12px;background:var(--panel,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;padding:12px 14px">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#4361ee)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0012 2z" stroke-linejoin="round"/></svg>
+                    Runway suggests</div>
+                  <ul style="margin:8px 0 0;padding-left:18px;color:var(--text,#1a2233);font-size:13px;line-height:1.7">
+                    <sc-for list="{{ tw.fixSteps }}" as="step" hint-placeholder-count="3"><li>{{ step }}</li></sc-for>
+                  </ul>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+                    <span style="font-size:12.5px;color:var(--good,#10b981);font-weight:600">{{ tw.fixResult }}</span>
+                    <div style="display:flex;gap:8px;margin-left:auto">
+                      <button onClick="{{ goSimulate }}" style="height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);font-weight:600;font-size:12.5px;cursor:pointer">Open simulator</button>
+                      <button onClick="{{ applyFix }}" style="height:34px;padding:0 16px;border-radius:9px;border:none;background:var(--accent,#4361ee);color:#fff;font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(67,97,238,.32)">Apply fix</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ allClear }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid var(--good,#10b981);background:var(--goodBg,#e6f7f1);border-radius:16px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation:rwrise .4s ease">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--good,#10b981)" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div><div style="font-weight:700;font-size:14px;color:var(--good,#10b981);font-family:'Space Grotesk',sans-serif">All CLINs clear the ceiling</div><div style="font-size:12.5px;color:var(--text,#1a2233);margin-top:2px">Every funding line is projected to land under budget through the period of performance.</div></div>
+            </div>
+          </sc-if>
+
+          <!-- data-source / live strip -->
+          <div style="background:var(--panel,#fff);border:1px solid var(--border,#e6e9f2);border-radius:16px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="position:relative;width:9px;height:9px;flex:0 0 9px"><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981)"></span><span style="position:absolute;inset:0;border-radius:50%;background:var(--good,#10b981);animation:rwping 2s ease-out infinite"></span></span>
+              <span style="font-size:12px;font-weight:700;color:var(--text,#1a2233)">Live data</span>
+            </div>
+            <div style="width:1px;height:26px;background:var(--border,#e6e9f2)"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;flex:1">
+              <sc-for list="{{ integrations }}" as="ig" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--panel2,#f3f5fb)">
+                  <div style="width:24px;height:24px;border-radius:7px;background:{{ ig.hue }};color:#fff;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:10px">{{ ig.code }}</div>
+                  <div style="line-height:1.2"><div style="font-size:11.5px;font-weight:600;color:var(--text,#1a2233)">{{ ig.name }}</div><div style="font-size:10px;color:var(--dim,#5f6b80)">{{ ig.detail }}</div></div>
+                  <span style="{{ ig.dotStyle }}"></span>
+                </div>
+              </sc-for>
+            </div>
+            <button onClick="{{ syncNow }}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--panel,#fff);color:var(--dim,#5f6b80);font-size:11.5px;font-weight:600;cursor:pointer">
+              <span style="{{ syncIconStyle }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9 9 9 0 01-6.7-3M3 12a9 9 0 019-9 9 9 0 016.7 3" stroke-linecap="round"/><path d="M21 3v5h-5M3 21v-5h5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              {{ syncLabel }}</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px">
+            <div style="border-radius:16px;padding:18px;background:linear-gradient(155deg,{{ heroColor }},{{ heroColor2 }});color:#fff;box-shadow:0 12px 28px rgba(0,0,0,.14);position:relative;overflow:hidden">
+              <div style="position:absolute;right:-18px;top:-18px;opacity:.16"><svg width="130" height="130" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20M12 12l6-4"/></svg></div>
+              <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;opacity:.9">Days of runway</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:52px;line-height:1;margin-top:8px">{{ heroDays }}</div>
+              <div style="font-size:12.5px;opacity:.92;margin-top:8px;line-height:1.4">Limited by {{ heroClin }} · {{ heroSub }}</div>
+            </div>
+            <div style="{{ tileStyle }}">
+              <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Contract burned</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:8px">{{ contractPct }}</div>
+              <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:6px">{{ contractSpentF }} of {{ contractCeilF }}</div>
+            </div>
+            <div style="{{ tileStyle }}">
+              <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Time elapsed</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:8px">wk {{ currentWeek }}<span style="font-size:16px;color:var(--dim,#5f6b80)">/{{ totalWeeks }}</span></div>
+              <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:6px">{{ weeksRemaining }} weeks remaining</div>
+            </div>
+            <div style="{{ tileStyle }}">
+              <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint,#9aa6bd)">Weekly burn</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;color:var(--text,#1a2233);margin-top:8px">{{ totalWeeklyF }}</div>
+              <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:6px">across {{ laborCount }} labor lines</div>
+            </div>
+          </div>
+
+          <!-- BIG CHART -->
+          <div style="{{ panelStyle }};margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:17px;color:var(--text,#1a2233)">Burn vs. pace — {{ chart.code }}</div>
+                <div style="font-size:12.5px;color:var(--dim,#5f6b80);margin-top:2px">{{ chart.name }} · updates live as timesheets sync</div>
+              </div>
+              <div style="display:flex;gap:16px;font-size:11.5px;color:var(--dim,#5f6b80)">
+                <span style="display:flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:2px dashed var(--faint,#9aa6bd)"></span>Target pace</span>
+                <span style="display:flex;align-items:center;gap:5px"><span style="width:16px;height:3px;border-radius:2px;background:var(--accent,#4361ee)"></span>Actual</span>
+                <span style="display:flex;align-items:center;gap:5px"><span style="width:16px;height:3px;border-radius:2px;background:{{ chart.projColor }}"></span>Projected</span>
+              </div>
+            </div>
+            <svg viewBox="0 0 1180 420" style="width:100%;height:auto;margin-top:10px;display:block" font-family="IBM Plex Mono, monospace">
+              <defs>
+                <linearGradient id="rwActualFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{{ chart.actualStop }}" stop-opacity="0.28"/><stop offset="1" stop-color="{{ chart.actualStop }}" stop-opacity="0"/></linearGradient>
+                <linearGradient id="rwProjFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{{ chart.projColor }}" stop-opacity="0.22"/><stop offset="1" stop-color="{{ chart.projColor }}" stop-opacity="0"/></linearGradient>
+              </defs>
+              <sc-for list="{{ chart.yTicks }}" as="tk" hint-placeholder-count="3">
+                <line x1="70" y1="{{ tk.y }}" x2="1150" y2="{{ tk.y }}" stroke="var(--grid,rgba(26,34,51,.06))" stroke-width="1"/>
+                <text x="60" y="{{ tk.ty }}" text-anchor="end" font-size="12" fill="var(--faint,#9aa6bd)">{{ tk.label }}</text>
+              </sc-for>
+              <sc-for list="{{ chart.xTicks }}" as="xt" hint-placeholder-count="5">
+                <text x="{{ xt.x }}" y="405" text-anchor="middle" font-size="12" fill="var(--faint,#9aa6bd)">{{ xt.label }}</text>
+              </sc-for>
+              <rect x="70" y="28" width="1080" height="{{ chart.ceilBandH }}" fill="var(--bad,#f05252)" opacity="0.06"/>
+              <line x1="70" y1="{{ chart.ceilingY }}" x2="1150" y2="{{ chart.ceilingY }}" stroke="var(--bad,#f05252)" stroke-width="1.5" stroke-dasharray="7 6"/>
+              <text x="1146" y="{{ chart.ceilingLabelY }}" text-anchor="end" font-size="12" fill="var(--bad,#f05252)" font-weight="600">Ceiling {{ chart.ceilingF }}</text>
+              <path d="{{ chart.actualArea }}" fill="url(#rwActualFill)"/>
+              <path d="{{ chart.projArea }}" fill="url(#rwProjFill)"/>
+              <line x1="{{ chart.todayX }}" y1="28" x2="{{ chart.todayX }}" y2="368" stroke="var(--dim,#5f6b80)" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>
+              <text x="{{ chart.todayX }}" y="44" text-anchor="middle" font-size="11.5" fill="var(--dim,#5f6b80)">today · wk {{ currentWeek }}</text>
+              <path d="{{ chart.paceD }}" fill="none" stroke="var(--faint,#9aa6bd)" stroke-width="2" stroke-dasharray="7 6"/>
+              <path d="{{ chart.actualD }}" fill="none" stroke="var(--accent,#4361ee)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="{{ chart.projD }}" fill="none" stroke="{{ chart.projColor }}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="2 7" style="animation:rwdash 1s linear infinite"/>
+              <circle cx="{{ chart.todayX }}" cy="{{ chart.todayY }}" r="5.5" fill="var(--accent,#4361ee)" stroke="var(--panel,#fff)" stroke-width="2.5"/>
+              <sc-if value="{{ chart.exhaustShow }}" hint-placeholder-val="{{ true }}">
+                <circle cx="{{ chart.exhaustX }}" cy="{{ chart.ceilingY }}" r="6.5" fill="var(--bad,#f05252)" stroke="var(--panel,#fff)" stroke-width="2.5"/>
+                <text x="{{ chart.exhaustLabelX }}" y="{{ chart.exhaustLabelY }}" text-anchor="{{ chart.exhaustAnchor }}" font-size="12.5" fill="var(--bad,#f05252)" font-weight="700">Funds exhaust · wk {{ chart.exhaustWeek }}</text>
+              </sc-if>
+            </svg>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;border-top:1px solid var(--border,#e6e9f2);padding-top:14px">
+              <sc-for list="{{ clinChips }}" as="cc" hint-placeholder-count="3">
+                <button data-clin="{{ cc.id }}" onClick="{{ onSelectClin }}" style="{{ cc.chipStyle }}">{{ cc.code }} · {{ cc.short }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- CLIN health row -->
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:var(--text,#1a2233);margin:4px 0 12px">CLIN health</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+            <sc-for list="{{ clinCards }}" as="cl" hint-placeholder-count="4">
+              <div data-clin="{{ cl.id }}" onClick="{{ onSelectClin }}" style="{{ cl.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="width:9px;height:9px;border-radius:3px;background:{{ cl.hue }}"></span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;color:var(--dim,#5f6b80)">{{ cl.code }}</span>
+                  <span style="font-size:12.5px;font-weight:600;color:var(--text,#1a2233);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ cl.name }}</span>
+                  <span style="{{ cl.pillStyle }}">{{ cl.statusLabel }}</span>
+                </div>
+                <div style="height:8px;border-radius:5px;background:var(--border,#e6e9f2);margin-top:11px;overflow:hidden;position:relative">
+                  <div style="height:100%;width:{{ cl.barPct }};background:{{ cl.barColor }};border-radius:5px"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px;color:var(--dim,#5f6b80)">
+                  <span>{{ cl.spentF }} / {{ cl.ceilingF }} · <b style="color:var(--text,#1a2233)">{{ cl.pct }}</b></span>
+                  <span style="color:{{ cl.runwayColor }};font-weight:600">{{ cl.runwayLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ ALLOCATION MATRIX ============ -->
+        <sc-if value="{{ isAllocate }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 26px 60px;max-width:1280px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+            <div>
+              <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:600;color:var(--text,#1a2233)">Team allocation matrix</h2>
+              <div style="font-size:13px;color:var(--dim,#5f6b80);margin-top:4px">Edit any cell — runway and tripwires recompute live. This is the what-if simulator for <b>{{ contract.short }}</b>.</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ resetPlan }}" style="height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);font-weight:600;font-size:12.5px;cursor:pointer">Reset plan</button>
+              <sc-if value="{{ hasFixPlan }}" hint-placeholder-val="{{ true }}"><button onClick="{{ applyFix }}" style="height:36px;padding:0 16px;border-radius:10px;border:none;background:var(--accent,#4361ee);color:#fff;font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(67,97,238,.3)">Apply suggested fix</button></sc-if>
+            </div>
+          </div>
+
+          <div style="{{ panelStyle }};padding:0;overflow:hidden">
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+                <thead>
+                  <tr style="background:var(--panel2,#f3f5fb)">
+                    <th style="text-align:left;padding:12px 16px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700;position:sticky;left:0;background:var(--panel2,#f3f5fb)">Employee</th>
+                    <th style="text-align:left;padding:12px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">LCAT</th>
+                    <th style="text-align:right;padding:12px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Rate</th>
+                    <sc-for list="{{ laborClins }}" as="lc" hint-placeholder-count="3">
+                      <th style="text-align:center;padding:12px 8px;font-size:11px;letter-spacing:.04em;color:var(--faint,#9aa6bd);font-weight:700;min-width:96px"><span style="color:{{ lc.hue }};font-family:'IBM Plex Mono',monospace">{{ lc.code }}</span><br><span style="font-weight:500;text-transform:none;font-size:10.5px">hrs/wk</span></th>
+                    </sc-for>
+                    <th style="text-align:right;padding:12px 16px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Weekly</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ matrixRows }}" as="row" hint-placeholder-count="7">
+                    <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                      <td style="padding:10px 16px;position:sticky;left:0;background:var(--panel,#fff)">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <span style="{{ row.avatarStyle }}">{{ row.initials }}</span>
+                          <div><div style="font-weight:600;color:var(--text,#1a2233)">{{ row.name }}</div><div style="font-size:11.5px;color:var(--dim,#5f6b80)">{{ row.role }}</div></div>
+                        </div>
+                      </td>
+                      <td style="padding:10px 12px"><span style="{{ row.tierStyle }}">{{ row.tierLabel }}</span></td>
+                      <td style="padding:10px 12px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--dim,#5f6b80)">{{ row.rateF }}</td>
+                      <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="3">
+                        <td style="padding:8px;text-align:center;position:relative;background:{{ cell.cellBg }}">
+                          <input type="number" min="0" max="40" step="4" value="{{ cell.hours }}" data-emp="{{ row.id }}" data-clin="{{ cell.clinId }}" onInput="{{ onHours }}" style="{{ cell.inputStyle }}">
+                          <sc-if value="{{ cell.flag }}" hint-placeholder-val="{{ false }}">
+                            <span title="LCAT below required labor category" style="position:absolute;top:4px;right:10px;color:var(--bad,#f05252);font-size:11px;cursor:help">&#9888;</span>
+                          </sc-if>
+                        </td>
+                      </sc-for>
+                      <td style="padding:10px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text,#1a2233)">{{ row.weeklyF }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+                <tfoot>
+                  <tr style="border-top:2px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb)">
+                    <td colspan="3" style="padding:12px 16px;font-weight:700;color:var(--text,#1a2233)">Forward weekly burn &#8594;</td>
+                    <sc-for list="{{ laborClins }}" as="lc" hint-placeholder-count="3">
+                      <td style="padding:12px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;color:{{ lc.burnColor }}">{{ lc.weeklyF }}</td>
+                    </sc-for>
+                    <td style="padding:12px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--text,#1a2233)">{{ totalWeeklyF }}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:16px">
+            <sc-for list="{{ laborClins }}" as="lc" hint-placeholder-count="3">
+              <div style="border:1px solid {{ lc.edgeColor }};border-radius:14px;padding:14px 15px;background:var(--panel,#fff)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="width:9px;height:9px;border-radius:3px;background:{{ lc.hue }}"></span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--dim,#5f6b80)">{{ lc.code }}</span>
+                  <span style="{{ lc.pillStyle }}">{{ lc.statusLabel }}</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--text,#1a2233);font-weight:600;margin-top:8px">{{ lc.name }}</div>
+                <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px;color:var(--dim,#5f6b80)"><span>Projected exhaustion</span><span style="font-weight:600;color:{{ lc.runwayColor }}">{{ lc.exhaustLabel }}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:12px;color:var(--dim,#5f6b80)"><span>Runway from today</span><span style="font-weight:600;color:{{ lc.runwayColor }}">{{ lc.runwayLabel }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ hasFlags }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:16px;border:1px solid var(--warn,#ef8f2a);background:var(--warnBg,#fdf1e2);border-radius:14px;padding:13px 16px;display:flex;gap:11px;align-items:center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warn,#ef8f2a)" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke-linejoin="round"/></svg>
+              <div style="font-size:12.5px;color:var(--text,#1a2233)"><b>{{ flagText }}</b> — {{ flagDetail }}</div>
+            </div>
+          </sc-if>
+        </div>
+        </sc-if>
+
+        <!-- ============ EXPENSES (non-labor CLIN log) ============ -->
+        <sc-if value="{{ isExpenses }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 26px 60px;max-width:1080px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+            <div>
+              <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:600;color:var(--text,#1a2233)">Non-labor expense log</h2>
+              <div style="font-size:13px;color:var(--dim,#5f6b80);margin-top:4px">Track travel, ODCs &amp; materials against the {{ nlCode }} ceiling for <b>{{ contract.short }}</b>. Everything logged here rolls into burn &amp; runway.</div>
+            </div>
+            <button onClick="{{ exportExcel }}" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--good,#10b981);background:var(--goodBg,#e6f7f1);color:var(--good,#10b981);font-weight:600;font-size:12.5px;cursor:pointer">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5" stroke-linejoin="round"/></svg>
+              Export to Excel</button>
+          </div>
+
+          <!-- ceiling tracker -->
+          <div style="{{ panelStyle }};margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:10px;height:10px;border-radius:3px;background:{{ nlHue }}"></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;color:var(--dim,#5f6b80)">{{ nlCode }}</span>
+              <span style="font-size:13px;font-weight:600;color:var(--text,#1a2233)">{{ nlName }}</span>
+              <span style="{{ expPillStyle }}">{{ expPillLabel }}</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:28px;margin-top:16px;flex-wrap:wrap">
+              <div><div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Logged to date</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;color:var(--text,#1a2233);margin-top:4px">{{ expTotalF }}</div></div>
+              <div><div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Ceiling</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;color:var(--text,#1a2233);margin-top:4px">{{ expCeilingF }}</div></div>
+              <div><div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Remaining</div><div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;color:{{ expColor }};margin-top:4px">{{ expRemainingF }}</div></div>
+            </div>
+            <div style="height:10px;border-radius:6px;background:var(--border,#e6e9f2);margin-top:16px;overflow:hidden"><div style="height:100%;width:{{ expBarPct }};background:{{ expColor }};border-radius:6px"></div></div>
+            <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:8px">{{ expPct }} of ceiling used · {{ expCount }} entries</div>
+          </div>
+
+          <!-- add form -->
+          <div style="{{ panelStyle }};margin-bottom:16px">
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700;margin-bottom:12px">Log an expense</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div><div style="font-size:11px;color:var(--dim,#5f6b80);margin-bottom:5px">Date</div><input type="date" value="{{ draftDate }}" data-field="date" onInput="{{ onDraftExp }}" style="{{ expInputStyle }}"></div>
+              <div style="flex:1;min-width:220px"><div style="font-size:11px;color:var(--dim,#5f6b80);margin-bottom:5px">Description</div><input type="text" placeholder="e.g. On-site travel — Arlington, VA" value="{{ draftDesc }}" data-field="desc" onInput="{{ onDraftExp }}" style="{{ expInputStyle }};width:100%"></div>
+              <div><div style="font-size:11px;color:var(--dim,#5f6b80);margin-bottom:5px">Category</div><select value="{{ draftCat }}" data-field="cat" onChange="{{ onDraftExp }}" style="{{ expInputStyle }};cursor:pointer"><option>Travel</option><option>ODC</option><option>Materials</option><option>Subcontractor</option><option>Other</option></select></div>
+              <div><div style="font-size:11px;color:var(--dim,#5f6b80);margin-bottom:5px">Amount ($)</div><input type="number" placeholder="0" value="{{ draftAmount }}" data-field="amount" onInput="{{ onDraftExp }}" style="{{ expInputStyle }};width:120px;text-align:right;font-family:'IBM Plex Mono',monospace"></div>
+              <button onClick="{{ addExpense }}" style="height:38px;padding:0 18px;border-radius:10px;border:none;background:var(--accent,#4361ee);color:#fff;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(67,97,238,.28)">Add entry</button>
+            </div>
+          </div>
+
+          <!-- table -->
+          <div style="{{ panelStyle }};padding:0;overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead><tr style="background:var(--panel2,#f3f5fb);color:var(--faint,#9aa6bd);font-size:11px;text-transform:uppercase;letter-spacing:.05em">
+                <th style="text-align:left;padding:11px 18px;font-weight:700">Date</th>
+                <th style="text-align:left;padding:11px 8px;font-weight:700">Description</th>
+                <th style="text-align:left;padding:11px 8px;font-weight:700">Category</th>
+                <th style="text-align:right;padding:11px 8px;font-weight:700">Amount</th>
+                <th style="width:44px"></th></tr></thead>
+              <tbody>
+                <sc-for list="{{ expRows }}" as="ex" hint-placeholder-count="4">
+                  <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                    <td style="padding:11px 18px;font-family:'IBM Plex Mono',monospace;color:var(--dim,#5f6b80)">{{ ex.date }}</td>
+                    <td style="padding:11px 8px;color:var(--text,#1a2233)">{{ ex.desc }}</td>
+                    <td style="padding:11px 8px"><span style="{{ ex.catStyle }}">{{ ex.cat }}</span></td>
+                    <td style="padding:11px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text,#1a2233)">{{ ex.amountF }}</td>
+                    <td style="text-align:center"><button data-i="{{ ex.i }}" onClick="{{ deleteExpense }}" title="Remove" style="width:26px;height:26px;border-radius:7px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--dim,#5f6b80);cursor:pointer;font-size:14px;line-height:1">&times;</button></td>
+                  </tr>
+                </sc-for>
+                <sc-if value="{{ expEmpty }}" hint-placeholder-val="{{ false }}">
+                  <tr><td colspan="5" style="padding:28px;text-align:center;color:var(--faint,#9aa6bd);font-size:13px">No expenses logged yet — add your first entry above.</td></tr>
+                </sc-if>
+              </tbody>
+              <tfoot>
+                <tr style="border-top:2px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb)">
+                  <td colspan="3" style="padding:12px 18px;font-weight:700;color:var(--text,#1a2233)">Total logged</td>
+                  <td style="padding:12px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--text,#1a2233)">{{ expTotalF }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ CONTRACT INGEST ============ -->
+        <sc-if value="{{ isIngest }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:26px 26px 60px;max-width:980px">
+          <h2 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:600;color:var(--text,#1a2233)">Add a contract</h2>
+          <div style="font-size:13px;color:var(--dim,#5f6b80);margin-top:4px;margin-bottom:20px">Two steps: connect the tools that already hold your labor data, then drop the award PDF.</div>
+
+          <!-- step 1: connect sources -->
+          <div style="{{ panelStyle }};margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+              <span style="width:22px;height:22px;border-radius:50%;background:var(--good,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">1</span>
+              <span style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:var(--text,#1a2233)">Connect your timesheet &amp; payroll tools</span>
+              <span style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--good,#10b981)">3 connected · live</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--dim,#5f6b80);margin-bottom:14px">Runway pulls live hours, LCAT rates, and rosters over API — no manual entry. It also mines your historical data to seed pacing insights.</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+              <sc-for list="{{ ingestSources }}" as="src" hint-placeholder-count="6">
+                <div style="{{ src.rowStyle }}">
+                  <div style="width:30px;height:30px;border-radius:8px;background:{{ src.hue }};color:#fff;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:11px">{{ src.code }}</div>
+                  <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600;color:var(--text,#1a2233);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ src.name }}</div><div style="font-size:10.5px;color:var(--dim,#5f6b80)">{{ src.kind }}</div></div>
+                  <span style="{{ src.badgeStyle }}">{{ src.badge }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- step 2 -->
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+            <span style="width:22px;height:22px;border-radius:50%;background:var(--accent,#4361ee);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">2</span>
+            <span style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:var(--text,#1a2233)">Drop the signed award PDF</span>
+          </div>
+
+          <sc-if value="{{ ingestUpload }}" hint-placeholder-val="{{ true }}">
+            <div style="border:2px dashed var(--border,#e6e9f2);border-radius:18px;padding:44px 24px;text-align:center;background:var(--panel2,#f3f5fb)">
+              <div style="width:60px;height:60px;margin:0 auto;border-radius:16px;background:var(--panel,#fff);border:1px solid var(--border,#e6e9f2);display:flex;align-items:center;justify-content:center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent,#4361ee)" stroke-width="1.8"><path d="M12 16V4M8 8l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round"/></svg>
+              </div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:16px;color:var(--text,#1a2233);margin-top:16px">Drop an SF-26 / SF-1449 award PDF</div>
+              <div style="font-size:12.5px;color:var(--dim,#5f6b80);margin-top:6px">or use the sample below to see the extraction</div>
+              <div style="margin-top:20px;display:inline-flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border,#e6e9f2);border-radius:12px;background:var(--panel,#fff)">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="var(--badBg,#fdecec)" stroke="var(--bad,#f05252)" stroke-width="1.4"/><text x="12" y="15" text-anchor="middle" font-size="6" font-weight="700" fill="#f05252" font-family="Arial">PDF</text></svg>
+                <div style="text-align:left"><div style="font-size:12.5px;font-weight:600;color:var(--text,#1a2233)">HSHQDC-24-C-00187_SF-26.pdf</div><div style="font-size:11px;color:var(--dim,#5f6b80)">1.4 MB · 18 pages</div></div>
+                <button onClick="{{ runIngest }}" style="height:34px;padding:0 16px;border-radius:9px;border:none;background:var(--accent,#4361ee);color:#fff;font-weight:600;font-size:12.5px;cursor:pointer">Ingest with AI</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ ingestExtracting }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid var(--border,#e6e9f2);border-radius:18px;padding:40px 30px;background:var(--panel,#fff);text-align:center">
+              <div style="width:44px;height:44px;margin:0 auto;border:3px solid var(--border,#e6e9f2);border-top-color:var(--accent,#4361ee);border-radius:50%;animation:rwspin .8s linear infinite"></div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;color:var(--text,#1a2233);margin-top:18px">Reading the award document…</div>
+              <div style="max-width:420px;margin:16px auto 0"><div style="height:7px;border-radius:5px;background:var(--panel2,#f3f5fb);overflow:hidden"><div style="height:100%;background:linear-gradient(90deg,var(--accent,#4361ee),var(--accent2,#06b6d4));animation:rwbar 2.1s ease forwards"></div></div></div>
+              <div style="font-size:12px;color:var(--dim,#5f6b80);margin-top:14px;font-family:'IBM Plex Mono',monospace">Locating CLIN schedule · parsing obligated funding · extracting period of performance</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ ingestReview }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:rwrise .4s ease">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--good,#10b981)" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span style="font-weight:600;color:var(--text,#1a2233);font-size:14.5px">Extraction complete — review before building the plan</span>
+              </div>
+              <div style="{{ panelStyle }};margin-bottom:14px">
+                <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700;margin-bottom:12px">Contract header</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px">
+                  <sc-for list="{{ extractMeta }}" as="m" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border,#e6e9f2)">
+                      <div><div style="font-size:11px;color:var(--faint,#9aa6bd)">{{ m.label }}</div><div style="font-size:13px;font-weight:600;color:var(--text,#1a2233);font-family:'IBM Plex Mono',monospace">{{ m.value }}</div></div>
+                      <span style="{{ m.confStyle }}">{{ m.conf }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="{{ panelStyle }};padding:0;overflow:hidden;margin-bottom:16px">
+                <div style="padding:14px 18px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint,#9aa6bd);font-weight:700">Extracted CLIN schedule</div>
+                <table style="width:100%;border-collapse:collapse;font-size:13px">
+                  <thead><tr style="color:var(--faint,#9aa6bd);font-size:11px;text-transform:uppercase;letter-spacing:.05em">
+                    <th style="text-align:left;padding:8px 18px;font-weight:700">CLIN</th>
+                    <th style="text-align:left;padding:8px 8px;font-weight:700">Description</th>
+                    <th style="text-align:left;padding:8px 8px;font-weight:700">Type</th>
+                    <th style="text-align:right;padding:8px 8px;font-weight:700">Ceiling</th>
+                    <th style="text-align:right;padding:8px 18px;font-weight:700">Confidence</th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ extractClins }}" as="ec" hint-placeholder-count="4">
+                      <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                        <td style="padding:11px 18px;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text,#1a2233)">{{ ec.code }}</td>
+                        <td style="padding:11px 8px;color:var(--text,#1a2233)">{{ ec.name }}</td>
+                        <td style="padding:11px 8px;color:var(--dim,#5f6b80)">{{ ec.type }}</td>
+                        <td style="padding:11px 8px;text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--text,#1a2233)">{{ ec.ceilingF }}</td>
+                        <td style="padding:11px 18px;text-align:right"><span style="{{ ec.confStyle }}">{{ ec.conf }}</span></td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+                <div style="padding:11px 18px;background:var(--warnBg,#fdf1e2);border-top:1px solid var(--border,#e6e9f2);display:flex;gap:9px;align-items:center;font-size:12px;color:var(--text,#1a2233)">
+                  <span style="color:var(--warn,#ef8f2a)">&#9888;</span> CLIN 0004 (Travel &amp; ODCs) extracted at 83% — the funding figure spans a page break. Confirm the ceiling before building the plan.
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button onClick="{{ resetIngest }}" style="height:38px;padding:0 16px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);font-weight:600;font-size:13px;cursor:pointer">Start over</button>
+                <button onClick="{{ confirmIngest }}" style="height:38px;padding:0 20px;border-radius:10px;border:none;background:var(--accent,#4361ee);color:#fff;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(67,97,238,.3)">Confirm &amp; build plan &#8594;</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        </sc-if>
+
+      </div>
+    </main>
+
+    <!-- ============ CHAT ============ -->
+    <sc-if value="{{ chatOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ toggleChat }}" style="position:fixed;inset:0;background:rgba(10,17,32,.34);z-index:60"></div>
+      <div style="position:fixed;top:0;right:0;width:392px;max-width:92vw;height:100vh;background:var(--panel,#fff);border-left:1px solid var(--border,#e6e9f2);z-index:61;display:flex;flex-direction:column;box-shadow:-16px 0 40px rgba(10,17,32,.2);animation:rwslide .28s ease">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border,#e6e9f2);display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(150deg,var(--accent,#4361ee),var(--accent2,#06b6d4));display:flex;align-items:center;justify-content:center">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><path d="M21 11.5a8.4 8.4 0 01-11.9 7.6L3 21l1.9-6A8.4 8.4 0 1121 11.5z" stroke-linejoin="round"/></svg>
+          </div>
+          <div><div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;color:var(--text,#1a2233)">Ask Runway</div><div style="font-size:11px;color:var(--dim,#5f6b80)">Live answers · {{ contract.short }}</div></div>
+          <button onClick="{{ toggleChat }}" style="margin-left:auto;width:30px;height:30px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--dim,#5f6b80);cursor:pointer;font-size:16px;line-height:1">&times;</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ chatMessages }}" as="msg" hint-placeholder-count="2">
+            <div style="{{ msg.wrapStyle }}"><div style="{{ msg.bubbleStyle }}">{{ msg.text }}</div></div>
+          </sc-for>
+        </div>
+        <div style="padding:12px 16px 16px;border-top:1px solid var(--border,#e6e9f2)">
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint,#9aa6bd);font-weight:700;margin-bottom:8px">Suggested questions</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ chatSuggestions }}" as="q" hint-placeholder-count="4">
+              <button data-key="{{ q.key }}" onClick="{{ askChat }}" style="text-align:left;padding:9px 12px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--panel2,#f3f5fb);color:var(--text,#1a2233);font-size:12.5px;cursor:pointer;font-weight:500">{{ q.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:760},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;portfolio&quot;,&quot;flightdeck&quot;,&quot;allocate&quot;,&quot;ingest&quot;],&quot;default&quot;:&quot;portfolio&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    const asg={};
+    this.contracts.forEach(c=>{ asg[c.id]=JSON.parse(JSON.stringify(c.base)); });
+    const exp={
+      cmss:[
+        {date:'2026-01-14',desc:'Kickoff travel — Arlington, VA',cat:'Travel',amount:14200},
+        {date:'2026-02-20',desc:'Cloud test environment (AWS)',cat:'ODC',amount:28600},
+        {date:'2026-03-11',desc:'Security tooling licenses',cat:'ODC',amount:31500},
+        {date:'2026-04-02',desc:'On-site assessment travel',cat:'Travel',amount:21700}
+      ],
+      nla:[
+        {date:'2026-04-05',desc:'Norfolk site visit',cat:'Travel',amount:7000},
+        {date:'2026-05-10',desc:'Maritime data subscription',cat:'ODC',amount:5000}
+      ],
+      dpm:[
+        {date:'2025-10-12',desc:'Migration tooling licenses',cat:'ODC',amount:42000},
+        {date:'2025-11-20',desc:'On-site migration travel',cat:'Travel',amount:18000},
+        {date:'2026-01-15',desc:'Shipping & media',cat:'Materials',amount:10000}
+      ]
+    };
+    this.state = {
+      expensesByContract: exp,
+      draftExp: {date:'',desc:'',cat:'Travel',amount:''},
+      view: props.startView || 'portfolio',
+      theme: props.theme || 'light',
+      activeId: 'cmss',
+      ingestStep: 0,
+      chatOpen: false,
+      syncing: false,
+      selectedClin: 'c0002',
+      assignmentsByContract: asg,
+      chatMessages: [{role:'ai', text:"Hi Priya \u2014 I'm reading your live contract data. Ask me anything, or tap a suggested question below."}]
+    };
+  }
+
+  get liveAgo(){ return '4 min ago'; }
+
+  // ---------- multi-contract data ----------
+  get contracts(){ return [
+    {
+      id:'cmss', name:'Cybersecurity Modernization Support Services', short:'CMSS \u2014 CISA', mark:'CM',
+      agency:'DHS \u00b7 CISA', number:'70RCSA24C00000187', vehicle:'SF-26 \u00b7 CPFF',
+      popStart:'01 Dec 2025', popEnd:'30 Nov 2026', currentWeek:33, totalWeeks:52, hue:'#4361ee',
+      employees:[
+        {id:'grace',name:'Grace Okafor',role:'Program Manager',tier:3,rate:210,years:14},
+        {id:'daniel',name:'Daniel Ford',role:'Deputy PM',tier:2,rate:165,years:8},
+        {id:'dana',name:'Dana Reyes',role:'Cyber Engineer III',tier:3,rate:188,years:11},
+        {id:'marcus',name:'Marcus Hill',role:'Cyber Engineer III',tier:3,rate:188,years:10},
+        {id:'sofia',name:'Sofia Alvarez',role:'Cyber Engineer III',tier:3,rate:180,years:9},
+        {id:'aisha',name:'Aisha Khan',role:'Cyber Engineer III',tier:3,rate:188,years:12},
+        {id:'priya',name:'Priya Nair',role:'Cyber Engineer II',tier:2,rate:150,years:5},
+        {id:'wei',name:'Wei Chen',role:'Cyber Engineer I',tier:1,rate:118,years:1.5},
+        {id:'luis',name:'Luis Romero',role:'DevSecOps Lead',tier:3,rate:175,years:10},
+        {id:'hana',name:'Hana Kim',role:'Cloud Engineer II',tier:2,rate:145,years:6},
+        {id:'owen',name:'Owen Blake',role:'Cloud Engineer II',tier:2,rate:145,years:5}
+      ],
+      clins:[
+        {id:'c0001',code:'CLIN 0001',short:'PM',name:'Program Management',ceiling:870000,spent:495000,hue:'#4361ee',reqTier:2,reqLabel:'PM / Analyst II'},
+        {id:'c0002',code:'CLIN 0002',short:'Cyber Eng',name:'Cybersecurity Engineering',ceiling:1660000,spent:1335840,hue:'#7c5cff',reqTier:2,reqLabel:'Cyber Engineer II'},
+        {id:'c0003',code:'CLIN 0003',short:'Cloud',name:'Cloud & DevSecOps',ceiling:1000000,spent:613800,hue:'#06b6d4',reqTier:2,reqLabel:'Cloud Engineer II'}
+      ],
+      nonLabor:{id:'c0004',code:'CLIN 0004',short:'Travel',name:'Travel & ODCs',ceiling:180000,spent:96000,hue:'#ef8f2a'},
+      base:{grace:{c0001:40},daniel:{c0001:40},dana:{c0002:40},marcus:{c0002:40},sofia:{c0002:40},aisha:{c0002:40},priya:{c0002:40},wei:{c0002:40},luis:{c0003:40},hana:{c0003:40},owen:{c0003:40}},
+      fixPlan:{grace:{c0001:40},daniel:{c0001:40},dana:{c0002:24},marcus:{c0002:24},sofia:{c0002:24},aisha:{c0002:0},priya:{c0002:28},wei:{c0002:0,c0003:0},luis:{c0003:40},hana:{c0003:40},owen:{c0003:40}},
+      integrations:[
+        {code:'AD',name:'ADP',detail:'Payroll \u00b7 roster',hue:'#d0202f',status:'synced'},
+        {code:'QB',name:'QuickBooks Time',detail:'Timesheets \u00b7 live',hue:'#2ca01c',status:'live'},
+        {code:'UN',name:'Unanet',detail:'Billing \u00b7 LCAT rates',hue:'#0a66c2',status:'synced'},
+        {code:'JR',name:'Jira',detail:'Delivery \u00b7 milestones',hue:'#1868db',status:'synced'}
+      ]
+    },
+    {
+      id:'nla', name:'Naval Logistics Analytics', short:'NLA \u2014 Navy', mark:'NL',
+      agency:'U.S. Navy \u00b7 NAVSUP', number:'N0018925C0042', vehicle:'SF-1449 \u00b7 T&M',
+      popStart:'01 Mar 2026', popEnd:'28 Feb 2027', currentWeek:20, totalWeeks:52, hue:'#10b981',
+      employees:[
+        {id:'ana',name:'Ana Ruiz',role:'Data Eng Lead',tier:3,rate:170,years:12},
+        {id:'ben',name:'Ben Cole',role:'Data Engineer II',tier:2,rate:140,years:6},
+        {id:'cara',name:'Cara Lin',role:'Data Engineer II',tier:2,rate:140,years:5},
+        {id:'dev',name:'Dev Shah',role:'Analyst II',tier:2,rate:130,years:5},
+        {id:'ella',name:'Ella Fox',role:'Analyst I',tier:1,rate:105,years:2}
+      ],
+      clins:[
+        {id:'c0001',code:'CLIN 0001',short:'Data Eng',name:'Data Engineering',ceiling:1400000,spent:430000,hue:'#4361ee',reqTier:2,reqLabel:'Data Engineer II'},
+        {id:'c0002',code:'CLIN 0002',short:'Analytics',name:'Analytics & Reporting',ceiling:900000,spent:250000,hue:'#06b6d4',reqTier:1,reqLabel:'Analyst I'}
+      ],
+      nonLabor:{id:'c0003',code:'CLIN 0003',short:'Travel',name:'Travel & ODCs',ceiling:60000,spent:12000,hue:'#ef8f2a'},
+      base:{ana:{c0001:40},ben:{c0001:40},cara:{c0001:40},dev:{c0002:40},ella:{c0002:40}},
+      fixPlan:null,
+      integrations:[
+        {code:'GU',name:'Gusto',detail:'Payroll \u00b7 roster',hue:'#f45d48',status:'synced'},
+        {code:'HV',name:'Harvest',detail:'Timesheets \u00b7 live',hue:'#f6552b',status:'live'},
+        {code:'GH',name:'GitHub',detail:'Delivery \u00b7 velocity',hue:'#1f2328',status:'synced'}
+      ]
+    },
+    {
+      id:'dpm', name:'IRS Data Platform Modernization', short:'DPM \u2014 IRS', mark:'DP',
+      agency:'U.S. Treasury \u00b7 IRS', number:'TIRNO24C00031', vehicle:'SF-26 \u00b7 CPFF',
+      popStart:'15 Sep 2025', popEnd:'14 Sep 2026', currentWeek:40, totalWeeks:52, hue:'#ef8f2a',
+      employees:[
+        {id:'ravi',name:'Ravi Patel',role:'Platform Eng III',tier:3,rate:165,years:11},
+        {id:'mia',name:'Mia Torres',role:'Platform Eng II',tier:2,rate:138,years:6},
+        {id:'omar',name:'Omar Said',role:'Platform Eng II',tier:2,rate:135,years:5},
+        {id:'sara',name:'Sara Ito',role:'Platform Eng II',tier:2,rate:132,years:5},
+        {id:'noah',name:'Noah Berg',role:'Data Migration Eng II',tier:2,rate:130,years:6},
+        {id:'ivy',name:'Ivy Nguyen',role:'Data Migration Eng I',tier:1,rate:102,years:2}
+      ],
+      clins:[
+        {id:'c0001',code:'CLIN 0001',short:'Platform',name:'Platform Engineering',ceiling:1200000,spent:900000,hue:'#4361ee',reqTier:2,reqLabel:'Platform Eng II'},
+        {id:'c0002',code:'CLIN 0002',short:'Migration',name:'Data Migration',ceiling:700000,spent:585000,hue:'#7c5cff',reqTier:1,reqLabel:'Migration Eng I'}
+      ],
+      nonLabor:{id:'c0003',code:'CLIN 0003',short:'Travel',name:'Travel & ODCs',ceiling:90000,spent:70000,hue:'#ef8f2a'},
+      base:{ravi:{c0001:40},mia:{c0001:40},omar:{c0001:40},sara:{c0001:40},noah:{c0002:40},ivy:{c0002:40}},
+      fixPlan:null,
+      integrations:[
+        {code:'AD',name:'ADP',detail:'Payroll \u00b7 roster',hue:'#d0202f',status:'synced'},
+        {code:'CL',name:'Clockify',detail:'Timesheets \u00b7 live',hue:'#03a9f4',status:'live'},
+        {code:'DK',name:'Deltek',detail:'Billing \u00b7 LCAT rates',hue:'#4b2e83',status:'syncing'}
+      ]
+    }
+  ];}
+
+  // ---------- active accessors ----------
+  get active(){ return this.contracts.find(c=>c.id===this.state.activeId)||this.contracts[0]; }
+  get activeAsg(){ return this.state.assignmentsByContract[this.state.activeId]||{}; }
+  get contract(){ return this.active; }
+  get currentWeek(){ return this.active.currentWeek; }
+  get totalWeeks(){ return this.active.totalWeeks; }
+  get employees(){ return this.active.employees; }
+  get clinDefs(){ return this.active.clins; }
+  get nonLaborClin(){ return this.active.nonLabor; }
+
+  // ---------- theme ----------
+  get tokens(){
+    const light={bg:'#eef1f8',panel:'#ffffff',panel2:'#f3f5fb',border:'#e6e9f2',text:'#1a2233',dim:'#5f6b80',faint:'#9aa6bd',accent:'#4361ee',accent2:'#06b6d4',good:'#10b981',goodBg:'#e6f7f1',warn:'#ef8f2a',warnBg:'#fdf1e2',bad:'#f05252',badBg:'#fdecec',grid:'rgba(26,34,51,0.06)',inputBg:'#ffffff'};
+    const dark={bg:'#0b1120',panel:'#141d31',panel2:'#1c2840',border:'#2b3b59',text:'#eaf0fb',dim:'#a3b1c9',faint:'#6d7d97',accent:'#6d8bff',accent2:'#34d3e0',good:'#34d399',goodBg:'#0f2a20',warn:'#fbbf24',warnBg:'#2c2110',bad:'#fb7185',badBg:'#2c1518',grid:'rgba(255,255,255,0.06)',inputBg:'#0d1626'};
+    return this.state.theme==='dark'?dark:light;
+  }
+  get rootStyle(){
+    const t=this.tokens;
+    return `--bg:${t.bg};--panel:${t.panel};--panel2:${t.panel2};--border:${t.border};--text:${t.text};--dim:${t.dim};--faint:${t.faint};--accent:${t.accent};--accent2:${t.accent2};--good:${t.good};--goodBg:${t.goodBg};--warn:${t.warn};--warnBg:${t.warnBg};--bad:${t.bad};--badBg:${t.badBg};--grid:${t.grid};--inputBg:${t.inputBg};background:${t.bg};color:${t.text};min-height:100vh;font-family:'Manrope',system-ui,sans-serif;-webkit-font-smoothing:antialiased`;
+  }
+
+  money(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
+  moneyM(n){ return '$'+(n/1e6).toFixed(2)+'M'; }
+
+  // ---------- computation (contract-aware) ----------
+  burnForC(contract, asg, clinId){
+    let sum=0; contract.employees.forEach(e=>{ const h=(asg[e.id]&&asg[e.id][clinId])||0; sum+=h*e.rate; }); return sum;
+  }
+  computeClinFor(contract, asg, def){
+    const weekly=this.burnForC(contract,asg,def.id);
+    const remaining=def.ceiling-def.spent;
+    const pctNum=def.spent/def.ceiling;
+    const weeksLeft=weekly>0?remaining/weekly:999;
+    const exhaustWeek=contract.currentWeek+weeksLeft;
+    const runwayDays=weekly>0?Math.round(weeksLeft*7):999;
+    let status;
+    if(weekly<=0) status='paused';
+    else if(exhaustWeek<contract.totalWeeks-1) status='over';
+    else if(exhaustWeek<contract.totalWeeks+2) status='watch';
+    else status='ok';
+    return {...def,weekly,remaining,pctNum,weeksLeft,exhaustWeek,runwayDays,status,totalWeeks:contract.totalWeeks,currentWeek:contract.currentWeek};
+  }
+  burnFor(clinId){ return this.burnForC(this.active,this.activeAsg,clinId); }
+  get computedClins(){ return this.active.clins.map(d=>this.computeClinFor(this.active,this.activeAsg,d)); }
+  flagsFor(clinId,empId){
+    const emp=this.active.employees.find(e=>e.id===empId);
+    const def=this.active.clins.find(c=>c.id===clinId);
+    const h=(this.activeAsg[empId]&&this.activeAsg[empId][clinId])||0;
+    return h>0 && emp.tier<def.reqTier;
+  }
+  get allFlags(){ const out=[]; this.active.clins.forEach(c=>this.active.employees.forEach(e=>{ if(this.flagsFor(c.id,e.id)) out.push({clin:c,emp:e}); })); return out; }
+  nonLaborSpentFor(contract){ const list=(this.state.expensesByContract||{})[contract.id]||[]; return list.reduce((s,x)=>s+(+x.amount||0),0); }
+  get totalCeiling(){ return this.active.clins.reduce((s,c)=>s+c.ceiling,0)+this.active.nonLabor.ceiling; }
+  get totalSpent(){ return this.active.clins.reduce((s,c)=>s+c.spent,0)+this.nonLaborSpentFor(this.active); }
+  get totalWeekly(){ return this.active.clins.reduce((s,c)=>s+this.burnFor(c.id),0); }
+
+  // ---------- handlers ----------
+  onNav=(e)=>{ this.setState({view:e.currentTarget.dataset.view}); };
+  onOpenContract=(e)=>{
+    const id=e.currentTarget.dataset.cid;
+    const c=this.contracts.find(x=>x.id===id);
+    const asg=this.state.assignmentsByContract[id];
+    const worst=[...c.clins.map(d=>this.computeClinFor(c,asg,d))].sort((a,b)=>a.exhaustWeek-b.exhaustWeek)[0];
+    this.setState({activeId:id, selectedClin:worst?worst.id:c.clins[0].id, view:'flightdeck'});
+  };
+  toggleTheme=()=>{ this.setState(s=>({theme:s.theme==='dark'?'light':'dark'})); };
+  toggleChat=()=>{ this.setState(s=>({chatOpen:!s.chatOpen})); };
+  onSelectClin=(e)=>{ this.setState({selectedClin:e.currentTarget.dataset.clin}); };
+  goSimulate=()=>{ this.setState({view:'allocate'}); };
+  syncNow=()=>{ this.setState({syncing:true}); setTimeout(()=>this.setState({syncing:false}),1300); };
+  runIngest=()=>{ this.setState({ingestStep:1}); setTimeout(()=>this.setState({ingestStep:2}),2200); };
+  confirmIngest=()=>{ this.setState({ingestStep:3, activeId:'cmss', selectedClin:'c0002', view:'flightdeck'}); };
+  resetIngest=()=>{ this.setState({ingestStep:0}); };
+  onHours=(e)=>{
+    const emp=e.target.dataset.emp, clin=e.target.dataset.clin;
+    let v=e.target.value===''?0:Math.max(0,Math.min(80,+e.target.value));
+    this.setState(s=>{
+      const all=JSON.parse(JSON.stringify(s.assignmentsByContract));
+      if(!all[s.activeId][emp]) all[s.activeId][emp]={};
+      all[s.activeId][emp][clin]=v;
+      return {assignmentsByContract:all};
+    });
+  };
+  resetPlan=()=>{
+    this.setState(s=>{
+      const all=JSON.parse(JSON.stringify(s.assignmentsByContract));
+      all[s.activeId]=JSON.parse(JSON.stringify(this.active.base));
+      return {assignmentsByContract:all};
+    });
+  };
+  onDraftExp=(e)=>{ const f=e.target.dataset.field, v=e.target.value; this.setState(s=>({draftExp:{...s.draftExp,[f]:v}})); };
+  addExpense=()=>{
+    const d=this.state.draftExp;
+    if(!d.desc || !(+d.amount>0)) return;
+    this.setState(s=>{
+      const all=JSON.parse(JSON.stringify(s.expensesByContract));
+      all[s.activeId]=[...(all[s.activeId]||[]),{date:d.date||new Date().toISOString().slice(0,10),desc:d.desc,cat:d.cat||'ODC',amount:Math.round(+d.amount)}];
+      return {expensesByContract:all, draftExp:{date:'',desc:'',cat:'Travel',amount:''}};
+    });
+  };
+  deleteExpense=(e)=>{
+    const i=+e.currentTarget.dataset.i;
+    this.setState(s=>{
+      const all=JSON.parse(JSON.stringify(s.expensesByContract));
+      all[s.activeId]=(all[s.activeId]||[]).filter((_,idx)=>idx!==i);
+      return {expensesByContract:all};
+    });
+  };
+  downloadCsv(name,rows){
+    const esc=(v)=>{ v=(v==null?'':''+v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+    const csv=rows.map(r=>r.map(esc).join(',')).join('\r\n');
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },120);
+  }
+  exportExcel=()=>{
+    if(this.state.view==='portfolio'){
+      const rows=[['Contract','Agency','Contract number','Vehicle','Ceiling','Spent to date','% burned','Weekly burn','Runway (days)','Status']];
+      this.contracts.forEach(c=>{
+        const asg=this.state.assignmentsByContract[c.id];
+        const clins=c.clins.map(d=>this.computeClinFor(c,asg,d));
+        const w=[...clins].sort((a,b)=>a.exhaustWeek-b.exhaustWeek)[0];
+        const nlSpent=this.nonLaborSpentFor(c);
+        const totalCeil=c.clins.reduce((s,x)=>s+x.ceiling,0)+c.nonLabor.ceiling;
+        const totalSpent=c.clins.reduce((s,x)=>s+x.spent,0)+nlSpent;
+        const weekly=clins.reduce((s,x)=>s+x.weekly,0);
+        const overall=clins.some(x=>x.status==='over')?'Over ceiling':clins.some(x=>x.status==='watch')?'Watch':'On pace';
+        rows.push([c.name,c.agency,c.number,c.vehicle,totalCeil,totalSpent,Math.round(totalSpent/totalCeil*100)+'%',weekly,w?w.runwayDays:'',overall]);
+      });
+      this.downloadCsv('runway-portfolio.csv',rows);
+      return;
+    }
+    const c=this.active, asg=this.activeAsg, rows=[];
+    rows.push(['CLIN SUMMARY — '+c.name]);
+    rows.push(['CLIN','Description','Ceiling','Spent to date','% burned','Weekly burn','Proj. exhaustion (wk)','Runway (days)','Status']);
+    this.computedClins.forEach(x=>rows.push([x.code,x.name,x.ceiling,x.spent,Math.round(x.pctNum*100)+'%',x.weekly,x.status==='paused'?'':Math.round(x.exhaustWeek),x.status==='paused'?'':x.runwayDays,this.pill(x.status).label]));
+    const nl=c.nonLabor, nlSpent=this.nonLaborSpentFor(c);
+    rows.push([nl.code,nl.name+' (non-labor)',nl.ceiling,nlSpent,Math.round(nlSpent/nl.ceiling*100)+'%','','','','Tracked']);
+    rows.push([]);
+    rows.push(['ALLOCATION MATRIX — hrs/wk']);
+    rows.push(['Employee','Role','LCAT tier','Rate ($/hr)'].concat(c.clins.map(x=>x.code)).concat(['Weekly $']));
+    c.employees.forEach(e=>{
+      const hrs=c.clins.map(x=>(asg[e.id]&&asg[e.id][x.id])||0);
+      rows.push([e.name,e.role,e.tier,e.rate].concat(hrs).concat([e.rate*hrs.reduce((s,h)=>s+h,0)]));
+    });
+    rows.push([]);
+    rows.push(['NON-LABOR EXPENSE LOG — '+nl.code+' '+nl.name]);
+    rows.push(['Date','Description','Category','Amount ($)']);
+    (this.state.expensesByContract[c.id]||[]).forEach(x=>rows.push([x.date,x.desc,x.cat,x.amount]));
+    this.downloadCsv('runway-'+c.id+'.csv',rows);
+  };
+  applyFix=()=>{
+    if(!this.active.fixPlan) return;
+    this.setState(s=>{
+      const all=JSON.parse(JSON.stringify(s.assignmentsByContract));
+      all[s.activeId]=JSON.parse(JSON.stringify(this.active.fixPlan));
+      return {assignmentsByContract:all};
+    });
+  };
+  get chatSuggestionList(){ return [
+    {key:'risk',label:'Which CLIN is most at risk?'},
+    {key:'fix',label:'How do I fix my tightest line?'},
+    {key:'lcat',label:'Are we compliant on labor categories?'},
+    {key:'runway',label:"What's our overall runway?"}
+  ];}
+  askChat=(e)=>{
+    const key=e.currentTarget.dataset.key;
+    const q=this.chatSuggestionList.find(s=>s.key===key);
+    const answer=this.chatAnswer(key);
+    this.setState(s=>({chatMessages:[...s.chatMessages,{role:'user',text:q.label},{role:'ai',text:answer}]}));
+  };
+  chatAnswer(key){
+    const cs=this.computedClins;
+    const worst=[...cs].sort((a,b)=>a.exhaustWeek-b.exhaustWeek)[0];
+    const flags=this.allFlags;
+    if(key==='risk'){
+      if(worst.status==='over') return `On ${this.active.short}, ${worst.code} \u2014 ${worst.name} \u2014 is most at risk: ${Math.round(worst.pctNum*100)}% burned with only ${worst.runwayDays} days of runway. It exhausts in week ${Math.round(worst.exhaustWeek)}, ${Math.round(worst.totalWeeks-worst.exhaustWeek)} weeks before the PoP ends.`;
+      return `${this.active.short} is in good shape \u2014 no line is projected to blow the ceiling. The tightest is ${worst.code} (${worst.name}) with ${worst.runwayDays} days of runway, landing around week ${Math.round(worst.exhaustWeek)}.`;
+    }
+    if(key==='fix'){
+      if(worst.status==='over' && this.active.fixPlan) return `To keep ${worst.code} under budget: roll one senior engineer to the bench, move the junior off the line (which clears the LCAT flag), and trim the remaining seniors to ~24 hrs/wk. Forward burn drops from ${this.money(worst.weekly)}/wk to ~$18K/wk and runway extends past the finish line. Hit "Apply suggested fix" on the Allocation Matrix to simulate it.`;
+      if(worst.status==='over') return `${worst.code} is over pace \u2014 open the Allocation Matrix and trim hours or swap in a lower labor category until the projected exhaustion clears week ${worst.totalWeeks}.`;
+      return `Nothing urgent on ${this.active.short} \u2014 every CLIN finishes under its ceiling. Keep watching ${worst.code}, your tightest line, as timesheets sync.`;
+    }
+    if(key==='lcat'){
+      if(flags.length) return `One flag on ${this.active.short}: ${flags[0].emp.name} (${flags[0].emp.role}, ${flags[0].emp.years} yrs) is charging to ${flags[0].clin.code}, which requires ${flags[0].clin.reqLabel}. That's a DCAA/FAR mismatch \u2014 reassign or upgrade the role before invoicing.`;
+      return `All labor categories on ${this.active.short} check out \u2014 every assigned person meets or exceeds their CLIN's required LCAT. No billing-audit exposure.`;
+    }
+    if(key==='runway'){
+      return `${this.active.short} has ${worst.runwayDays} days of runway, set by ${worst.code}. You've burned ${Math.round(this.totalSpent/this.totalCeiling*100)}% of the ceiling with ${this.totalWeeks-this.currentWeek} weeks left, at ${this.money(this.totalWeekly)}/wk across ${this.active.clins.length} labor lines.`;
+    }
+    return 'I can help with that \u2014 try a suggested question.';
+  }
+
+  navStyle(id){
+    const active=this.state.view===id; const t=this.tokens;
+    const base='display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;cursor:pointer;transition:background .15s;';
+    if(active) return base+`background:${this.state.theme==='dark'?'rgba(109,139,255,.16)':'#e9edfd'};color:${t.accent}`;
+    return base+`color:${t.dim}`;
+  }
+  pill(status){
+    const t=this.tokens; const m={
+      over:['Over ceiling',t.bad,t.badBg], watch:['Watch',t.warn,t.warnBg], ok:['On pace',t.good,t.goodBg], paused:['Paused',t.faint,t.panel2]
+    }[status]||['\u2014',t.dim,t.panel2];
+    return {label:m[0], color:m[1], style:`font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;color:${m[1]};background:${m[2]};margin-left:auto;white-space:nowrap`};
+  }
+  initials(name){ const p=name.trim().split(/\s+/); return ((p[0]||'')[0]||'')+((p[1]||'')[0]||''); }
+
+  renderVals(){
+    const t=this.tokens;
+    const cs=this.computedClins;
+    const csById={}; cs.forEach(c=>csById[c.id]=c);
+    const worst=[...cs].sort((a,b)=>a.exhaustWeek-b.exhaustWeek)[0];
+    const flags=this.allFlags;
+
+    const panelStyle=`background:var(--panel,#fff);border:1px solid var(--border,#e6e9f2);border-radius:16px;padding:18px;box-shadow:${this.state.theme==='dark'?'0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.3)':'0 1px 2px rgba(26,34,51,.04),0 10px 26px rgba(26,34,51,.05)'}`;
+    const tileStyle=panelStyle;
+
+    const heroColor=worst.status==='over'?t.bad:worst.status==='watch'?t.warn:t.good;
+    const heroColor2=worst.status==='over'?'#c23636':worst.status==='watch'?'#c26e12':'#0b8f65';
+    const heroSub=worst.status==='over'?`blows the ceiling in week ${Math.round(worst.exhaustWeek)}`:worst.status==='watch'?`lands tight at week ${Math.round(worst.exhaustWeek)}`:`clears the finish line`;
+
+    // clin cards (flight deck)
+    const clinCards=cs.map(c=>{
+      const p=this.pill(c.status);
+      const rc=c.status==='over'?t.bad:c.status==='watch'?t.warn:t.good;
+      const sel=this.state.selectedClin===c.id;
+      return {id:c.id,code:c.code,name:c.name,hue:c.hue,
+        spentF:this.moneyM(c.spent),ceilingF:this.moneyM(c.ceiling),
+        pct:Math.round(c.pctNum*100)+'%',barPct:Math.min(100,Math.round(c.pctNum*100))+'%',
+        barColor:c.pctNum>0.85?t.bad:c.pctNum>0.7?t.warn:c.hue,
+        statusLabel:p.label,pillStyle:p.style,
+        runwayLabel:c.status==='paused'?'no burn':c.runwayDays+'d runway',runwayColor:rc,
+        cardStyle:`border:1px solid ${sel?c.hue:t.border};border-radius:14px;padding:13px 14px;background:var(--panel,#fff);cursor:pointer;box-shadow:${sel?'0 0 0 3px '+(this.state.theme==='dark'?'rgba(109,139,255,.14)':'rgba(67,97,238,.08)'):'none'}`};
+    });
+    const nl=this.nonLaborClin;
+    const nlSpent=this.nonLaborSpentFor(this.active);
+    const nlPctNum=nlSpent/nl.ceiling;
+    clinCards.push({id:nl.id,code:nl.code,name:nl.name,hue:nl.hue,spentF:this.money(nlSpent),ceilingF:this.money(nl.ceiling),pct:Math.round(nlPctNum*100)+'%',barPct:Math.min(100,Math.round(nlPctNum*100))+'%',barColor:nlPctNum>0.85?t.bad:nlPctNum>0.7?t.warn:nl.hue,statusLabel:'Tracked',pillStyle:`font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;color:${t.dim};background:${t.panel2};margin-left:auto;white-space:nowrap`,runwayLabel:'non-labor',runwayColor:t.dim,cardStyle:`border:1px solid ${t.border};border-radius:14px;padding:13px 14px;background:var(--panel,#fff);cursor:pointer`});
+
+    // expense log (active non-labor CLIN)
+    const expList=(this.state.expensesByContract||{})[this.state.activeId]||[];
+    const expTotal=expList.reduce((s,x)=>s+(+x.amount||0),0);
+    const expPctNum=expTotal/nl.ceiling;
+    const expColor=expPctNum>1?t.bad:expPctNum>0.85?t.warn:t.good;
+    const catHue={Travel:'#4361ee',ODC:'#06b6d4',Materials:'#7c5cff',Subcontractor:'#ef8f2a',Other:'#5f6b80'};
+    const expRows=expList.map((x,i)=>{ const ch=catHue[x.cat]||t.dim; return {i,date:x.date,desc:x.desc,cat:x.cat,amountF:this.money(x.amount),catStyle:`display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;color:${ch};background:${ch}1f`}; });
+    const expPill=expPctNum>1?['Over ceiling',t.bad,t.badBg]:expPctNum>0.85?['Near ceiling',t.warn,t.warnBg]:['On track',t.good,t.goodBg];
+    const expInputStyle=`height:38px;padding:0 11px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--inputBg,#fff);color:var(--text,#1a2233);font-size:13px`;
+
+    const clinChips=cs.map(c=>({id:c.id,code:c.code,short:c.short,chipStyle:`font-family:'Manrope',sans-serif;font-size:12px;font-weight:600;padding:7px 13px;border-radius:9px;cursor:pointer;border:1px solid ${this.state.selectedClin===c.id?c.hue:t.border};background:${this.state.selectedClin===c.id?(this.state.theme==='dark'?'rgba(255,255,255,.05)':'#f3f5fb'):'transparent'};color:${this.state.selectedClin===c.id?c.hue:t.dim}`}));
+
+    const sc=csById[this.state.selectedClin]||cs[0];
+    const chart=this.buildChart(sc,t);
+
+    // matrix
+    const laborClins=cs.map(c=>{
+      const p=this.pill(c.status);
+      const rc=c.status==='over'?t.bad:c.status==='watch'?t.warn:t.good;
+      return {id:c.id,code:c.code,name:c.name,hue:c.hue,weeklyF:this.money(c.weekly),
+        burnColor:c.status==='over'?t.bad:t.text,statusLabel:p.label,pillStyle:p.style,edgeColor:c.status==='over'?t.bad:t.border,
+        exhaustLabel:c.status==='paused'?'\u2014':(c.exhaustWeek>c.totalWeeks?`wk ${Math.round(c.exhaustWeek)} \u00b7 past PoP`:`week ${Math.round(c.exhaustWeek)}`),
+        runwayLabel:c.status==='paused'?'no burn':c.runwayDays+' days',runwayColor:rc};
+    });
+    const tierMap={1:['Jr',t.dim],2:['Mid',t.accent],3:['Sr',t.accent2]};
+    const avPal=['#4361ee','#06b6d4','#7c5cff','#ef8f2a','#10b981','#f05252'];
+    const matrixRows=this.employees.map((e,i)=>{
+      const cells=this.clinDefs.map(c=>{
+        const h=(this.activeAsg[e.id]&&this.activeAsg[e.id][c.id])||0;
+        const flag=this.flagsFor(c.id,e.id);
+        return {clinId:c.id,hours:h,flag,
+          cellBg:h>0?(flag?t.badBg:(this.state.theme==='dark'?'rgba(255,255,255,.02)':'#fafcff')):'transparent',
+          inputStyle:`width:56px;height:32px;text-align:center;border-radius:8px;border:1px solid ${h>0?(flag?t.bad:t.border):t.border};background:var(--inputBg,#fff);color:var(--text,#1a2233);font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:${h>0?'600':'400'}`};
+      });
+      const tm=tierMap[e.tier];
+      const ac=avPal[i%avPal.length];
+      return {id:e.id,name:e.name,role:e.role,rateF:this.money(e.rate)+'/hr',
+        initials:this.initials(e.name).toUpperCase(),
+        avatarStyle:`width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:${ac}1f;color:${ac};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'Space Grotesk',sans-serif`,
+        tierLabel:tm[0],tierStyle:`display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;color:${tm[1]};background:${this.state.theme==='dark'?'rgba(255,255,255,.06)':'#eef2fb'}`,
+        cells,weeklyF:this.money(e.rate*Object.values(this.activeAsg[e.id]||{}).reduce((s,h)=>s+h,0))};
+    });
+
+    // portfolio
+    const portCards=this.contracts.map(c=>{
+      const asg=this.state.assignmentsByContract[c.id];
+      const clins=c.clins.map(d=>this.computeClinFor(c,asg,d));
+      const w=[...clins].sort((a,b)=>a.exhaustWeek-b.exhaustWeek)[0];
+      const totalCeil=c.clins.reduce((s,x)=>s+x.ceiling,0)+c.nonLabor.ceiling;
+      const totalSpent=c.clins.reduce((s,x)=>s+x.spent,0)+this.nonLaborSpentFor(c);
+      const weekly=c.clins.reduce((s,x)=>s+this.burnForC(c,asg,x.id),0);
+      const onPace=clins.filter(x=>x.status==='ok').length;
+      const overall=clins.some(x=>x.status==='over')?'over':clins.some(x=>x.status==='watch')?'watch':'ok';
+      const p=this.pill(overall);
+      const rc=overall==='over'?t.bad:overall==='watch'?t.warn:t.good;
+      const segments=clins.map(x=>{
+        const col=x.pctNum>0.85?t.bad:x.pctNum>0.7?t.warn:x.hue;
+        return {style:`width:${Math.max(6,Math.round(x.ceiling/totalCeil*100))}%;background:${col};margin-right:2px;border-radius:3px`};
+      });
+      const live=c.integrations.find(g=>g.status==='live');
+      const syncColor=c.integrations.some(g=>g.status==='syncing')?t.warn:t.good;
+      return {id:c.id,name:c.name,agency:c.agency,mark:c.mark,hue:c.hue,
+        statusLabel:p.label,pillStyle:p.style,runwayColor:rc,runwayDays:w?w.runwayDays:'\u2014',
+        pct:Math.round(totalSpent/totalCeil*100)+'%',weeklyF:this.money(weekly),
+        onPaceLabel:`${onPace} of ${clins.length} lines on pace`,segments,
+        syncLabel:live?`${live.name} live \u00b7 synced ${this.liveAgo}`:'Synced '+this.liveAgo,
+        syncDotStyle:`width:8px;height:8px;border-radius:50%;background:${syncColor}`,
+        cardStyle:`border:1px solid ${overall==='over'?t.bad:t.border};border-radius:16px;padding:16px 17px;background:var(--panel,#fff);cursor:pointer;box-shadow:${overall==='over'?'0 0 0 3px '+t.badBg+', ':''}${this.state.theme==='dark'?'0 10px 26px rgba(0,0,0,.28)':'0 8px 22px rgba(26,34,51,.05)'};transition:transform .12s`};
+    });
+    const portAtRiskN=portCards.filter(p=>p.statusLabel!=='On pace').length;
+
+    // integrations (active) with dot styles
+    const igDot=(st)=>st==='syncing'?`width:8px;height:8px;border-radius:50%;background:${t.warn};animation:rwblink 1.2s infinite`:`width:8px;height:8px;border-radius:50%;background:${t.good}`;
+    const integrations=this.active.integrations.map(g=>({code:g.code,name:g.name,detail:g.detail,hue:g.hue,dotStyle:igDot(g.status)}));
+
+    // ingest sources (from CMSS as the "new contract" default set)
+    const badgeMap={live:['Live',t.good,t.goodBg],synced:['Synced',t.good,t.goodBg],syncing:['Syncing',t.warn,t.warnBg]};
+    const ingestSources=this.contracts[0].integrations.concat([{code:'CT',name:'Clockify',detail:'Timesheets',hue:'#03a9f4',status:'synced'},{code:'RP',name:'Rippling',detail:'Payroll',hue:'#f2c94c',status:'synced'}]).map(g=>{
+      const b=badgeMap[g.status]||badgeMap.synced;
+      return {code:g.code,name:g.name,kind:g.detail,hue:g.hue,badge:b[0],
+        badgeStyle:`font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;color:${b[1]};background:${b[2]};white-space:nowrap`,
+        rowStyle:`display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--border,#e6e9f2);border-radius:11px;background:var(--panel,#fff)`};
+    });
+
+    // extraction
+    const conf=(v)=>{ const col=v>=95?t.good:v>=88?t.accent:t.warn; const bg=v>=95?t.goodBg:v>=88?(this.state.theme==='dark'?'rgba(109,139,255,.14)':'#e9edfd'):t.warnBg; return `font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:6px;color:${col};background:${bg}`; };
+    const extractMeta=[
+      {label:'Agency',value:'DHS \u00b7 CISA',conf:'98%',confStyle:conf(98)},
+      {label:'Contract number',value:'70RCSA24C00000187',conf:'99%',confStyle:conf(99)},
+      {label:'Vehicle / type',value:'SF-26 \u00b7 CPFF',conf:'96%',confStyle:conf(96)},
+      {label:'Total ceiling',value:'$3.71M',conf:'94%',confStyle:conf(94)},
+      {label:'Obligated funding',value:'$3.71M',conf:'91%',confStyle:conf(91)},
+      {label:'Period of performance',value:'01 Dec 25 \u2013 30 Nov 26',conf:'97%',confStyle:conf(97)}
+    ];
+    const extractClins=[
+      {code:'0001',name:'Program Management',type:'Labor \u00b7 CPFF',ceilingF:this.moneyM(870000),conf:'97%',confStyle:conf(97)},
+      {code:'0002',name:'Cybersecurity Engineering',type:'Labor \u00b7 CPFF',ceilingF:this.moneyM(1660000),conf:'95%',confStyle:conf(95)},
+      {code:'0003',name:'Cloud & DevSecOps',type:'Labor \u00b7 CPFF',ceilingF:this.moneyM(1000000),conf:'93%',confStyle:conf(93)},
+      {code:'0004',name:'Travel & ODCs',type:'Non-labor',ceilingF:this.money(180000),conf:'83%',confStyle:conf(83)}
+    ];
+
+    const tripwires=cs.filter(c=>c.status==='over').map(c=>({
+      code:c.code,name:c.name,pct:Math.round(c.pctNum*100)+'%',
+      headline:`At the current staffing mix, ${c.code} exhausts in week ${Math.round(c.exhaustWeek)} \u2014 ${Math.round(c.totalWeeks-c.exhaustWeek)} weeks before the PoP ends. Only ${c.runwayDays} days of runway remain.`,
+      fixSteps:['Roll Aisha Khan (Cyber Engineer III) to the bench','Move Wei Chen (Engineer I) off 0002 \u2014 also clears the LCAT flag','Trim Dana, Marcus & Sofia to 24 hrs/wk; Priya to 28 hrs/wk'],
+      fixResult:`Forward burn ${this.money(c.weekly)} \u2192 ~$18K/wk \u00b7 lands under ceiling near week 51`
+    }));
+
+    const chatMessages=this.state.chatMessages.map(m=>({
+      text:m.text,
+      wrapStyle:`display:flex;${m.role==='user'?'justify-content:flex-end':'justify-content:flex-start'}`,
+      bubbleStyle:m.role==='user'
+        ?`max-width:82%;padding:10px 13px;border-radius:14px 14px 3px 14px;background:var(--accent,#4361ee);color:#fff;font-size:13px;line-height:1.5`
+        :`max-width:86%;padding:11px 13px;border-radius:14px 14px 14px 3px;background:var(--panel2,#f3f5fb);border:1px solid var(--border,#e6e9f2);color:var(--text,#1a2233);font-size:13px;line-height:1.55`
+    }));
+
+    const flag0=flags[0];
+    const portValueNum=this.contracts.reduce((s,c)=>s+c.clins.reduce((a,x)=>a+x.ceiling,0)+c.nonLabor.ceiling,0);
+    const portWeeklyNum=this.contracts.reduce((s,c)=>s+c.clins.reduce((a,x)=>a+this.burnForC(c,this.state.assignmentsByContract[c.id],x.id),0),0);
+
+    return {
+      rootStyle:this.rootStyle,
+      contract:this.active, currentWeek:this.currentWeek, totalWeeks:this.totalWeeks,
+      weeksRemaining:this.totalWeeks-this.currentWeek, popPct:Math.round(this.currentWeek/this.totalWeeks*100)+'%',
+      liveAgo:this.liveAgo,
+      nav0Style:this.navStyle('portfolio'),nav1Style:this.navStyle('flightdeck'),nav2Style:this.navStyle('allocate'),navExpStyle:this.navStyle('expenses'),nav3Style:this.navStyle('ingest'),
+      isPortfolio:this.state.view==='portfolio',isFlight:this.state.view==='flightdeck',isAllocate:this.state.view==='allocate',isExpenses:this.state.view==='expenses',isIngest:this.state.view==='ingest',
+      // expenses
+      nlCode:nl.code,nlName:nl.name,nlHue:nl.hue,
+      expRows,expEmpty:expList.length===0,expCount:expList.length,
+      expTotalF:this.money(expTotal),expCeilingF:this.money(nl.ceiling),expRemainingF:this.money(Math.max(0,nl.ceiling-expTotal)),
+      expPct:Math.round(expPctNum*100)+'%',expBarPct:Math.min(100,Math.round(expPctNum*100))+'%',expColor,
+      expPillLabel:expPill[0],expPillStyle:`font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;color:${expPill[1]};background:${expPill[2]};margin-left:auto`,
+      expInputStyle,draftDate:this.state.draftExp.date,draftDesc:this.state.draftExp.desc,draftCat:this.state.draftExp.cat,draftAmount:this.state.draftExp.amount,
+      onDraftExp:this.onDraftExp,addExpense:this.addExpense,deleteExpense:this.deleteExpense,exportExcel:this.exportExcel,
+      panelStyle,tileStyle,
+      headerMain:this.state.view==='portfolio'?'Portfolio':this.active.name,
+      headerSub:this.state.view==='portfolio'?`${this.contracts.length} active contracts \u00b7 live`:this.active.agency,
+      showContractMeta:this.state.view!=='portfolio',
+      healthLabel:worst.status==='over'?'1 line over ceiling':worst.status==='watch'?'On pace \u00b7 watch':'All lines on pace',
+      healthDotStyle:`width:9px;height:9px;border-radius:50%;background:${heroColor};box-shadow:0 0 0 3px ${worst.status==='over'?t.badBg:worst.status==='watch'?t.warnBg:t.goodBg}`,
+      complianceLabel:flags.length?`${flags.length} LCAT flag`:'Compliant',
+      complianceBadgeStyle:`display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:10px;font-size:12px;font-weight:600;color:${flags.length?t.bad:t.good};background:${flags.length?t.badBg:t.goodBg}`,
+      themeIcon:this.state.theme==='dark'?'\u2600':'\u263D',
+      heroColor,heroColor2,heroDays:worst.runwayDays,heroClin:worst.code,heroSub,
+      contractPct:Math.round(this.totalSpent/this.totalCeiling*100)+'%',
+      contractSpentF:this.moneyM(this.totalSpent),contractCeilF:this.moneyM(this.totalCeiling),
+      totalWeeklyF:this.money(this.totalWeekly),laborCount:this.active.clins.length,
+      clinCards,clinChips,chart,integrations,
+      syncLabel:this.state.syncing?'Syncing\u2026':'Sync now',
+      syncIconStyle:this.state.syncing?'display:inline-flex;animation:rwspin .8s linear infinite':'display:inline-flex',
+      // portfolio
+      portCards,portCount:this.contracts.length,portValue:this.moneyM(portValueNum),
+      portWeekly:this.money(portWeeklyNum),portAtRisk:portAtRiskN,
+      portAlertBg:portAtRiskN?t.warnBg:t.goodBg,portAlertEdge:portAtRiskN?t.warn:t.good,portAlertColor:portAtRiskN?t.warn:t.good,
+      // matrix
+      laborClins,matrixRows,hasFixPlan:!!this.active.fixPlan,
+      hasFlags:flags.length>0,flagText:flags.length?`${flags.length} LCAT compliance flag`:'',
+      flagDetail:flag0?`${flag0.emp.name} (${flag0.emp.role}, ${flag0.emp.years} yrs) is charging to ${flag0.clin.code}, which requires ${flag0.clin.reqLabel}. Reassign or upgrade before invoicing.`:'',
+      // ingest
+      ingestUpload:this.state.ingestStep===0,ingestExtracting:this.state.ingestStep===1,ingestReview:this.state.ingestStep===2,
+      ingestSources,extractMeta,extractClins,
+      tripwires,allClear:tripwires.length===0,
+      chatOpen:this.state.chatOpen,chatMessages,chatSuggestions:this.chatSuggestionList,
+      onNav:this.onNav,onOpenContract:this.onOpenContract,toggleTheme:this.toggleTheme,toggleChat:this.toggleChat,
+      onSelectClin:this.onSelectClin,goSimulate:this.goSimulate,syncNow:this.syncNow,
+      runIngest:this.runIngest,confirmIngest:this.confirmIngest,resetIngest:this.resetIngest,
+      onHours:this.onHours,resetPlan:this.resetPlan,applyFix:this.applyFix,askChat:this.askChat
+    };
+  }
+
+  buildChart(c,t){
+    const W=1180,H=420,padL=70,padR=30,padT=28,padB=52;
+    const plotW=W-padL-padR, plotH=H-padT-padB;
+    const tot=c.totalWeeks, cw=c.currentWeek;
+    const ymax=c.ceiling*1.12;
+    const mx=(w)=>padL+plotW*(w/tot);
+    const my=(v)=>padT+plotH*(1-v/ymax);
+    const baseY=my(0);
+    const projEndWeek=Math.min(c.exhaustWeek,tot);
+    const projEndVal=c.spent+c.weekly*(projEndWeek-cw);
+    const exhaustShow=c.status!=='paused'&&c.exhaustWeek<=tot;
+    const exX=mx(Math.min(c.exhaustWeek,tot));
+    const projColor=c.status==='over'?t.bad:c.status==='watch'?t.warn:t.good;
+    const actualStop=t.accent;
+    const yTicks=[0,0.5,1].map(k=>({y:my(c.ceiling*k).toFixed(1),ty:(my(c.ceiling*k)+4).toFixed(1),label:this.moneyM(c.ceiling*k)}));
+    const xTicks=[0,13,26,39,52].map(w=>({x:mx(w).toFixed(1),label:'wk '+w}));
+    const x0=mx(0).toFixed(1), yc=my(c.spent).toFixed(1), xc=mx(cw).toFixed(1), pe=mx(projEndWeek).toFixed(1), pv=my(projEndVal).toFixed(1);
+    return {
+      code:c.code,name:c.name,projColor,actualStop,ceilingF:this.moneyM(c.ceiling),
+      ceilingY:my(c.ceiling).toFixed(1),ceilingLabelY:(my(c.ceiling)-8).toFixed(1),ceilBandH:(my(c.ceiling)-padT).toFixed(1),
+      todayX:xc,todayY:yc,
+      paceD:`M${x0},${baseY.toFixed(1)} L${mx(tot).toFixed(1)},${my(c.ceiling).toFixed(1)}`,
+      actualD:`M${x0},${baseY.toFixed(1)} L${xc},${yc}`,
+      projD:`M${xc},${yc} L${pe},${pv}`,
+      actualArea:`M${x0},${baseY.toFixed(1)} L${xc},${yc} L${xc},${baseY.toFixed(1)} Z`,
+      projArea:`M${xc},${yc} L${pe},${pv} L${pe},${baseY.toFixed(1)} L${xc},${baseY.toFixed(1)} Z`,
+      yTicks,xTicks,exhaustShow,exhaustX:exX.toFixed(1),exhaustWeek:Math.round(c.exhaustWeek),
+      exhaustLabelX:(exX>W-260?exX-10:exX+10).toFixed(1),exhaustLabelY:(my(c.ceiling)+20).toFixed(1),
+      exhaustAnchor:exX>W-260?'end':'start'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -38,6 +38,22 @@ def init_db():
             synced_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # Manually-logged non-labor actuals (travel / ODC / materials / subs), keyed
+    # to a contract and one of its non-labor CLINs. Cost-reimbursable spend that
+    # never shows up on a timesheet; the burn engine folds each CLIN's entries in
+    # as that CLIN's spend.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            clin TEXT,
+            date TEXT,
+            description TEXT,
+            category TEXT,
+            amount REAL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
     conn.commit()
     conn.close()
 
@@ -134,3 +150,66 @@ def get_timesheets(contract_id: int) -> list:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def add_expense(
+    contract_id: int,
+    clin: str,
+    date: str,
+    description: str,
+    category: str,
+    amount: float,
+) -> dict:
+    """Log one non-labor actual against a contract's CLIN. Returns the new row."""
+    conn = get_conn()
+    cur = conn.execute(
+        """INSERT INTO expenses (contract_id, clin, date, description, category, amount)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (contract_id, clin, date, description, category, float(amount or 0)),
+    )
+    conn.commit()
+    eid = cur.lastrowid
+    conn.close()
+    return {
+        "id": eid,
+        "contract_id": contract_id,
+        "clin": clin,
+        "date": date,
+        "description": description,
+        "category": category,
+        "amount": float(amount or 0),
+    }
+
+
+def list_expenses(contract_id: int, clin: Optional[str] = None) -> list:
+    """All logged expenses for a contract, newest first. Optionally scoped to one
+    CLIN."""
+    conn = get_conn()
+    if clin is not None:
+        rows = conn.execute(
+            """SELECT id, contract_id, clin, date, description, category, amount
+               FROM expenses WHERE contract_id = ? AND clin = ?
+               ORDER BY date DESC, id DESC""",
+            (contract_id, clin),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT id, contract_id, clin, date, description, category, amount
+               FROM expenses WHERE contract_id = ? ORDER BY date DESC, id DESC""",
+            (contract_id,),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_expense(contract_id: int, expense_id: int) -> bool:
+    """Remove one expense (scoped to its contract). Returns True if a row went."""
+    conn = get_conn()
+    cur = conn.execute(
+        "DELETE FROM expenses WHERE id = ? AND contract_id = ?",
+        (expense_id, contract_id),
+    )
+    conn.commit()
+    deleted = cur.rowcount > 0
+    conn.close()
+    return deleted

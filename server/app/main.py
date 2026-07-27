@@ -5,7 +5,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import burn, db, extract, sources
-from .schemas import Extraction
+from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
 # uploaded. Points at the Fixtura burn-demo SF-26 so the one-click sample flows
@@ -160,15 +160,54 @@ def sync_timesheets(
 @app.get("/api/contracts/{contract_id}/burn")
 def contract_burn(contract_id: int):
     """Full Flight Deck payload: the active period's burn, runway and tripwires
-    for one contract against its synced timesheets."""
+    for one contract against its synced timesheets and logged non-labor actuals."""
     contract = db.get_contract(contract_id)
     if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
-    return burn.compute(contract, db.get_timesheets(contract_id))
+    return burn.compute(
+        contract,
+        db.get_timesheets(contract_id),
+        db.list_expenses(contract_id),
+    )
 
 
 @app.get("/api/portfolio")
 def portfolio():
     """Cross-contract KPI aggregate + one summary card per contract."""
-    pairs = [(c, db.get_timesheets(c["id"])) for c in db.list_contracts()]
+    pairs = [
+        (c, db.get_timesheets(c["id"]), db.list_expenses(c["id"]))
+        for c in db.list_contracts()
+    ]
     return burn.portfolio(pairs)
+
+
+@app.get("/api/contracts/{contract_id}/expenses")
+def get_expenses(contract_id: int, clin: Optional[str] = None):
+    """Logged non-labor actuals for a contract, optionally scoped to one CLIN."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return db.list_expenses(contract_id, clin)
+
+
+@app.post("/api/contracts/{contract_id}/expenses")
+def create_expense(contract_id: int, body: ExpenseIn):
+    """Log one non-labor actual (travel / ODC / materials / sub). It rolls into
+    the CLIN's burn on the next burn read."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return db.add_expense(
+        contract_id,
+        body.clin.strip(),
+        body.date,
+        body.description,
+        body.category,
+        body.amount,
+    )
+
+
+@app.delete("/api/contracts/{contract_id}/expenses/{expense_id}")
+def remove_expense(contract_id: int, expense_id: int):
+    """Delete one logged expense."""
+    if not db.delete_expense(contract_id, expense_id):
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    return {"deleted": expense_id}

@@ -13,7 +13,7 @@ const tileLabel = {
 };
 const tileNum = { fontFamily: grotesk, fontWeight: 700, fontSize: 30, color: "var(--text)", marginTop: 8 };
 
-export default function FlightDeck({ contractId, setActiveId }) {
+export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) {
   const [burn, setBurn] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -426,25 +426,30 @@ export default function FlightDeck({ contractId, setActiveId }) {
           const hue = hueFor(i);
           const p = pill(c.status);
           const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
-          const runwayLabel =
-            c.status === "tracked"
-              ? "non-labor"
-              : c.status === "paused"
-                ? "no burn"
-                : `${c.runway_days}d runway`;
-          const runwayColor = c.status === "tracked" ? "var(--dim)" : statusColor(c.status);
-          const clickable = c.is_labor;
-          const sel = clickable && selectedClin && c.id === selectedClin.id;
+          // Non-labor CLINs have no timesheet burn — their card routes into the
+          // expense log to add/see actuals; labor cards select the burn chart.
+          const runwayLabel = !c.is_labor
+            ? "log actuals →"
+            : c.status === "paused"
+              ? "no burn"
+              : `${c.runway_days}d runway`;
+          const runwayColor = !c.is_labor
+            ? "var(--accent)"
+            : statusColor(c.status);
+          const sel = c.is_labor && selectedClin && c.id === selectedClin.id;
+          const onCardClick = c.is_labor
+            ? () => setSelected(c.id)
+            : () => onOpenExpenses?.(c.id);
           return (
             <div
               key={c.id + c.code}
-              onClick={clickable ? () => setSelected(c.id) : undefined}
+              onClick={onCardClick}
               style={{
                 border: `1px solid ${sel ? hue : "var(--border)"}`,
                 borderRadius: 14,
                 padding: "13px 14px",
                 background: "var(--panel)",
-                cursor: clickable ? "pointer" : "default",
+                cursor: "pointer",
                 boxShadow: sel ? `0 0 0 3px ${hue}22` : "none",
               }}
             >
