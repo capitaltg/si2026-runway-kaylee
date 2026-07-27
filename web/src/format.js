@@ -16,6 +16,7 @@ const PILL = {
   over: { label: "Over ceiling", color: "--bad", bg: "--badBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
+  under: { label: "Under pace", color: "--warn", bg: "--warnBg" },
   paused: { label: "Paused", color: "--faint", bg: "--panel2" },
   tracked: { label: "Tracked", color: "--dim", bg: "--panel2" },
 };
@@ -40,7 +41,11 @@ export function pill(status) {
 
 // status → the accent color a runway/exhaustion figure should take.
 export const statusColor = (status) =>
-  status === "over" ? "var(--bad)" : status === "watch" ? "var(--warn)" : "var(--good)";
+  status === "over"
+    ? "var(--bad)"
+    : status === "watch" || status === "under"
+      ? "var(--warn)"
+      : "var(--good)";
 
 export const panelStyle = {
   background: "var(--panel)",

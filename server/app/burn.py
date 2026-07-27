@@ -19,6 +19,10 @@ from typing import List, Optional
 # Status thresholds, ported verbatim from the design's computeClinFor.
 _PAUSED_WEEKS_LEFT = 999
 _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
+# Under-burn tripwire: at the current pace the CLIN won't consume its budget
+# until this fraction of the PoP *past* the finish line — a large unspent
+# balance / slipping delivery signal, symmetric to the over-ceiling tripwire.
+_UNDER_SLACK_FRAC = 0.15
 
 
 def _d(s: Optional[str]) -> Optional[date]:
@@ -115,6 +119,7 @@ def _pill(status: str) -> str:
         "over": "Over ceiling",
         "watch": "Watch",
         "ok": "On pace",
+        "under": "Under pace",
         "paused": "Paused",
     }.get(status, "—")
 
@@ -186,6 +191,8 @@ def _compute_clin(
         status = "over"
     elif exhaust_week < total_weeks + 2:
         status = "watch"
+    elif exhaust_week > total_weeks * (1 + _UNDER_SLACK_FRAC):
+        status = "under"
     else:
         status = "ok"
 
@@ -363,6 +370,28 @@ def compute(
         if c["status"] == "over"
     ]
 
+    # Under-burn: too slow to land the budget by PoP end. Projected end-of-PoP
+    # spend uses the same forward weekly pace the runway is built on, so the
+    # unspent figure is real, not invented.
+    weeks_remaining = max(0, tw - cw)
+    underburn = [
+        {
+            "code": c["code"],
+            "name": c["name"],
+            "pct": c["pct"],
+            "exhaust_week": c["exhaust_week"],
+            "weeks_slack": round((c["exhaust_week"] or tw) - tw),
+            "budget": c["budget"],
+            "spent": c["spent"],
+            "projected_unspent": round(
+                max(0.0, c["budget"] - (c["spent"] + c["weekly"] * weeks_remaining)), 2
+            ),
+            "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+        }
+        for c in computed
+        if c["status"] == "under"
+    ]
+
     return {
         "contract": {
             "id": contract.get("id"),
@@ -397,7 +426,8 @@ def compute(
         ),
         "clins": computed + nl_cards,
         "tripwires": tripwires,
-        "all_clear": len(tripwires) == 0,
+        "underburn": underburn,
+        "all_clear": len(tripwires) == 0 and len(underburn) == 0,
         "sync": {
             "rows": len(rows),
             "people": len({r.get("employee_id") for r in rows if r.get("employee_id")}),
@@ -422,6 +452,8 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
             overall = "over"
         elif any(x["status"] == "watch" for x in b["clins"]):
             overall = "watch"
+        elif any(x["status"] == "under" for x in b["clins"]):
+            overall = "under"
         else:
             overall = "ok"
         on_pace = sum(1 for x in labor if x["status"] == "ok")
