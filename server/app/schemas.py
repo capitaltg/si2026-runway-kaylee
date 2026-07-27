@@ -118,3 +118,18 @@ class Extraction(BaseModel):
     contract: ContractHeader
     periods: List[Period]
     clins: List[CLIN]
+
+
+class ExpenseIn(BaseModel):
+    clin: str = Field(
+        description="The non-labor CLIN this actual charges to, e.g. '0003'"
+    )
+    date: Optional[str] = Field(default=None, description="Expense date, ISO 8601")
+    description: Optional[str] = Field(
+        default=None, description="Free-text description"
+    )
+    category: Optional[str] = Field(
+        default=None,
+        description="Travel / ODC / Materials / Subcontractor / Other",
+    )
+    amount: float = Field(description="Amount in US dollars")

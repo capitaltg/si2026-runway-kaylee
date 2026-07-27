@@ -254,8 +254,25 @@ def _clock(contract: dict, rows: List[dict]):
     }
 
 
-def compute(contract: dict, rows: List[dict]) -> dict:
-    """Full Flight Deck payload for one contract + its synced timesheets."""
+def _nl_status(spent: float, ceiling: float) -> str:
+    """Status for a non-labor CLIN from its logged actuals. No timesheet pace to
+    project, so it's a straight spent-vs-ceiling read: nothing logged reads
+    `tracked`, otherwise the same ceiling bands the labor cards use."""
+    if spent <= 0:
+        return "tracked"
+    pct = (spent / ceiling) if ceiling else 0.0
+    if pct >= 1.0:
+        return "over"
+    if pct >= 0.8:
+        return "watch"
+    return "ok"
+
+
+def compute(
+    contract: dict, rows: List[dict], expenses: Optional[List[dict]] = None
+) -> dict:
+    """Full Flight Deck payload for one contract + its synced timesheets and any
+    logged non-labor actuals (expenses)."""
     header = contract.get("contract") or {}
     clk = _clock(contract, rows)
     cw, tw = clk["current_week"], clk["total_weeks"]
@@ -287,21 +304,33 @@ def compute(contract: dict, rows: List[dict]) -> dict:
     )
 
     computed = [_compute_clin(c, rows, cw, tw, funded=funded_for(c)) for c in labor]
-    # Non-labor CLINs: no expense feature yet (#7), so spent is 0 / tracked-only.
+    # Non-labor CLINs are cost-reimbursable — their spend is the sum of manually
+    # logged actuals (travel / ODC / materials / subs), not timesheet hours.
+    exp_by_clin = {}
+    exp_count = {}
+    for e in expenses or []:
+        k = str(e.get("clin") or "").strip()
+        exp_by_clin[k] = exp_by_clin.get(k, 0.0) + float(e.get("amount") or 0)
+        exp_count[k] = exp_count.get(k, 0) + 1
     nl_cards = []
     for c in nonlabor:
         ceiling = float(c.get("ceiling") or 0)
+        num = _clin_num(c)
+        spent = exp_by_clin.get(num, 0.0)
+        status = _nl_status(spent, ceiling)
         nl_cards.append(
             {
-                "id": _clin_num(c),
-                "code": f"CLIN {_clin_num(c)}",
+                "id": num,
+                "code": f"CLIN {num}",
                 "name": c.get("title"),
                 "is_labor": False,
                 "ceiling": ceiling,
-                "spent": 0.0,
-                "pct": 0.0,
-                "status": "tracked",
-                "status_label": "Tracked",
+                "spent": round(spent, 2),
+                "pct": round((spent / ceiling) if ceiling else 0.0, 4),
+                "remaining": round(ceiling - spent, 2),
+                "entries": exp_count.get(num, 0),
+                "status": status,
+                "status_label": "Tracked" if status == "tracked" else _pill(status),
                 "rate_source": "n/a",
             }
         )
@@ -311,7 +340,8 @@ def compute(contract: dict, rows: List[dict]) -> dict:
 
     labor_ceiling = sum(c["ceiling"] for c in computed)
     total_ceiling = labor_ceiling + sum(c["ceiling"] for c in nl_cards)
-    total_spent = sum(c["spent"] for c in computed)
+    # Both feeds roll into burn: labor hours × rate, plus logged non-labor actuals.
+    total_spent = sum(c["spent"] for c in computed) + sum(c["spent"] for c in nl_cards)
     total_weekly = sum(c["weekly"] for c in computed)
 
     tripwires = [
@@ -379,15 +409,18 @@ def compute(contract: dict, rows: List[dict]) -> dict:
 
 def portfolio(contracts_with_rows: List[tuple]) -> dict:
     """Cross-contract KPI aggregate + one summary card per contract.
-    `contracts_with_rows` is a list of (contract_dict, timesheet_rows)."""
+    `contracts_with_rows` is a list of
+    (contract_dict, timesheet_rows, expense_rows)."""
     cards = []
-    for contract, rows in contracts_with_rows:
-        b = compute(contract, rows)
+    for contract, rows, expenses in contracts_with_rows:
+        b = compute(contract, rows, expenses)
         c, t = b["contract"], b["totals"]
         labor = [x for x in b["clins"] if x.get("is_labor")]
-        if any(x["status"] == "over" for x in labor):
+        # Overall health watches every CLIN — a non-labor CLIN over its ceiling is
+        # just as much a breach as a labor one.
+        if any(x["status"] == "over" for x in b["clins"]):
             overall = "over"
-        elif any(x["status"] == "watch" for x in labor):
+        elif any(x["status"] == "watch" for x in b["clins"]):
             overall = "watch"
         else:
             overall = "ok"
