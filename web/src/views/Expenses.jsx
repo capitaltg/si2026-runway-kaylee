@@ -71,6 +71,8 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
   const [draft, setDraft] = useState(emptyDraft());
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  // The expense the user clicked × on — drives the "are you sure?" modal.
+  const [confirming, setConfirming] = useState(null);
 
   // No contract picked yet — fall back to the newest ingested one, like the
   // Flight Deck does, so navigating straight here still lands on something.
@@ -158,9 +160,12 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
     }
   }
 
-  async function onDelete(id) {
+  async function confirmDelete() {
+    const ex = confirming;
+    setConfirming(null);
+    if (!ex) return;
     try {
-      await deleteExpense(contractId, id);
+      await deleteExpense(contractId, ex.id);
       reload();
     } catch (e) {
       setError(e.message);
@@ -410,7 +415,7 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <button
-                        onClick={() => onDelete(ex.id)}
+                        onClick={() => setConfirming(ex)}
                         title="Remove"
                         style={{
                           width: 26,
@@ -451,6 +456,74 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
             </table>
           </div>
         </>
+      )}
+
+      {confirming && (
+        <div
+          onClick={() => setConfirming(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,20,35,.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              ...panelStyle,
+              maxWidth: 380,
+              width: "90%",
+              boxShadow: "0 20px 50px rgba(0,0,0,.28)",
+            }}
+          >
+            <div style={{ fontFamily: grotesk, fontWeight: 600, fontSize: 16, color: "var(--text)" }}>
+              Delete this expense?
+            </div>
+            <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 8, lineHeight: 1.5 }}>
+              <b style={{ color: "var(--text)" }}>{money(confirming.amount)}</b>
+              {confirming.description ? ` — ${confirming.description}` : ""}
+              {confirming.date ? ` (${confirming.date})` : ""}. This can't be undone.
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+              <button
+                onClick={() => setConfirming(null)}
+                style={{
+                  height: 36,
+                  padding: "0 16px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "var(--panel2)",
+                  color: "var(--text)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  height: 36,
+                  padding: "0 16px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "var(--bad)",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
