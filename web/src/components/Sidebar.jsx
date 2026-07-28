@@ -35,6 +35,13 @@ const ICONS = {
       <path d="M14 3v5h5" strokeLinejoin="round" /><path d="M9 13l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  funding: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M3 21h18" strokeLinecap="round" />
+      <path d="M6 21V12M11 21V7M16 21V15" strokeLinecap="round" />
+      <path d="M6 12l5-5 5 8 3-6" strokeLinecap="round" strokeLinejoin="round" opacity=".55" />
+    </svg>
+  ),
 };
 
 const PORTFOLIO = { key: "portfolio", label: "Portfolio", sub: "All contracts" };
@@ -42,6 +49,7 @@ const CONTRACT_NAV = [
   { key: "flightdeck", label: "Flight Deck", sub: "Live burn & runway" },
   { key: "allocate", label: "Allocation Matrix", sub: "Staff → CLINs" },
   { key: "expenses", label: "Expenses", sub: "Non-labor CLINs" },
+  { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
   { key: "ingest", label: "Contract Ingest", sub: "PDF → data" },
 ];
 

@@ -212,6 +212,26 @@ async def add_modification(contract_id: int, file: UploadFile = File(...)):
     return {"id": contract_id, "piid_mismatch": piid_mismatch, **summary}
 
 
+@app.get("/api/contracts/{contract_id}/funding")
+def contract_funding(contract_id: int):
+    """The contract's dated funding history — the SF-26 award plus every
+    ingested SF-30 mod — with ceiling vs. obligated. Powers the Funding History
+    view's timeline and progress bar; mods land here via POST .../mods."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    header = contract.get("contract") or {}
+    return {
+        "id": contract_id,
+        "piid": contract.get("piid"),
+        "name": header.get("contractor") or contract.get("piid"),
+        "total_ceiling": header.get("total_ceiling"),
+        "total_obligated": header.get("total_obligated"),
+        "incrementally_funded": header.get("incrementally_funded"),
+        "obligation_history": contract.get("obligation_history") or [],
+    }
+
+
 @app.get("/api/contracts")
 def contracts():
     return db.list_contracts()

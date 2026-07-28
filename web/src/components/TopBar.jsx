@@ -11,6 +11,7 @@ const HEADERS = {
   flightdeck: { main: null, sub: "Flight Deck · Live burn & runway", meta: true },
   allocate: { main: "Allocation Matrix", sub: "Staff → CLINs", meta: true },
   expenses: { main: "Expenses", sub: "Non-labor CLINs", meta: true },
+  funding: { main: "Funding History", sub: "Award + SF-30 mods", meta: true },
   ingest: { main: "Contract Ingest", sub: "PDF → data", meta: false },
   chat: { main: "Ask Runway", sub: "Live answers on your burn", meta: true },
 };

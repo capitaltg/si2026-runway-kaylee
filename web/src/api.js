@@ -68,6 +68,32 @@ export async function deleteExpense(contractId, expenseId) {
   return r.json();
 }
 
+export async function getFunding(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/funding`);
+  if (!r.ok) throw new Error(`Funding failed (${r.status})`);
+  return r.json();
+}
+
+export async function addMod(contractId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/mods`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!r.ok) {
+    let detail = `Mod upload failed (${r.status})`;
+    try {
+      const j = await r.json();
+      if (j.detail) detail = j.detail;
+    } catch {
+      // non-JSON error body; keep the status-code message
+    }
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
 export async function syncTimesheets(contractId, { rows, seed } = {}) {
   // Only send params the caller actually set, so the backend's demo defaults
   // (row count + seed tuned to burn the bundled contract on plan) govern.
