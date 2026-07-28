@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 
@@ -52,15 +53,17 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
         if file is not None:
             data = await file.read()
             if (file.filename or "").lower().endswith(".pdf"):
-                result = extract.extract_from_pdf(data)
+                result = await asyncio.to_thread(extract.extract_from_pdf, data)
             else:
-                result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+                result = await asyncio.to_thread(
+                    extract.extract_from_text, data.decode("utf-8", "ignore")
+                )
         elif SAMPLE.lower().endswith(".pdf"):
             with open(SAMPLE, "rb") as f:
-                result = extract.extract_from_pdf(f.read())
+                result = await asyncio.to_thread(extract.extract_from_pdf, f.read())
         else:
             with open(SAMPLE, "r", encoding="utf-8") as f:
-                result = extract.extract_from_text(f.read())
+                result = await asyncio.to_thread(extract.extract_from_text, f.read())
     except Exception as e:
         # Return a real error (with CORS headers) instead of an unhandled 500,
         # which Starlette leaves CORS-less so the browser reports "Load failed".
@@ -89,9 +92,11 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     try:
         data = await file.read()
         if (file.filename or "").lower().endswith(".pdf"):
-            result = extract.extract_from_pdf(data)
+            result = await asyncio.to_thread(extract.extract_from_pdf, data)
         else:
-            result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+            result = await asyncio.to_thread(
+                extract.extract_from_text, data.decode("utf-8", "ignore")
+            )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
@@ -194,9 +199,11 @@ async def add_modification(contract_id: int, file: UploadFile = File(...)):
     try:
         data = await file.read()
         if (file.filename or "").lower().endswith(".pdf"):
-            mod = extract.extract_mod_from_pdf(data)
+            mod = await asyncio.to_thread(extract.extract_mod_from_pdf, data)
         else:
-            mod = extract.extract_mod_from_text(data.decode("utf-8", "ignore"))
+            mod = await asyncio.to_thread(
+                extract.extract_mod_from_text, data.decode("utf-8", "ignore")
+            )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
