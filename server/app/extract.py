@@ -107,7 +107,9 @@ INSTRUCTION_MOD = (
 )
 
 
-def _parse_schema(content, system: str, output_format, max_tokens: int):
+def _parse_schema(
+    content, system: str, output_format, max_tokens: int, constrained=True
+):
     """Extract `output_format` from `content`, enforcing the schema whichever way
     the provider supports.
 
@@ -120,22 +122,29 @@ def _parse_schema(content, system: str, output_format, max_tokens: int):
     ask for plain JSON against the same schema and validate it here instead.
 
     The guarantee moves from the decoder to `model_validate_json`, so a malformed
-    response still raises rather than returning half-populated data. The strict
-    path is tried first so providers that *can* enforce it still do — the smaller
-    `Modification` schema compiles on Bedrock and never reaches the fallback.
+    response still raises rather than returning half-populated data.
+
+    `constrained=False` skips the parse attempt and goes straight to plain JSON.
+    Callers pass this when they already know the grammar won't compile (the award
+    `Extraction` schema on Bedrock), so we don't pay the full grammar-compilation
+    *timeout* on every ingest just to prove a call that always fails. Providers
+    that *can* enforce the schema keep `constrained=True` and still do — the
+    smaller `Modification` schema compiles on Bedrock, as does everything on the
+    RUNWAY_PROVIDER=anthropic path.
     """
-    try:
-        resp = client.messages.parse(
-            model=MODEL,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": content}],
-            output_format=output_format,
-        )
-        return resp.parsed_output
-    except Exception as e:
-        if "grammar" not in str(e).lower():
-            raise
+    if constrained:
+        try:
+            resp = client.messages.parse(
+                model=MODEL,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": content}],
+                output_format=output_format,
+            )
+            return resp.parsed_output
+        except Exception as e:
+            if "grammar" not in str(e).lower():
+                raise
 
     blocks = (
         content if isinstance(content, list) else [{"type": "text", "text": content}]
@@ -169,7 +178,14 @@ def _parse(content) -> Extraction:
     # 16000, not 8000: adaptive thinking is on by default on current models and
     # max_tokens caps thinking plus response text together, so a budget sized for
     # the JSON alone can truncate a large award mid-object.
-    parsed = _parse_schema(content, SYSTEM, Extraction, 16000)
+    #
+    # constrained only on providers that can compile the Extraction grammar. On
+    # Bedrock it never compiles, so the parse attempt is a guaranteed
+    # grammar-compilation timeout on every award ingest — skip straight to plain
+    # JSON and save that dead wait.
+    parsed = _parse_schema(
+        content, SYSTEM, Extraction, 16000, constrained=(PROVIDER != "bedrock")
+    )
     try:
         return confidence.apply(parsed)
     except Exception:
