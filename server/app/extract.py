@@ -1,8 +1,28 @@
 import base64
+import json
 import os
+import re
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from . import confidence
 from .schemas import Extraction, Modification
+
+# Load the server's dotenv files before any credential lookup. Without this the
+# app only saw credentials that happened to be exported in the shell that
+# launched it, so a server started from a fresh terminal 502'd the ingest routes
+# with "could not resolve credentials from session" while the keys sat unread in
+# server/.env.local.
+#
+# Precedence, highest first (override=False means the first value loaded wins,
+# so anything already in the real environment beats both files):
+#   1. the process environment  — CI, one-off `VAR=... uvicorn ...`
+#   2. .env.local               — machine-specific secrets, gitignored
+#   3. .env                     — shared defaults, gitignored
+_SERVER_DIR = Path(__file__).resolve().parents[1]
+for _env_file in (".env.local", ".env"):
+    load_dotenv(_SERVER_DIR / _env_file, override=False)
 
 # Provider switch: "bedrock" (default — classic AWS credentials) or "anthropic"
 # (direct API key). Set RUNWAY_PROVIDER=anthropic to route through the Anthropic
@@ -87,15 +107,69 @@ INSTRUCTION_MOD = (
 )
 
 
-def _parse(content) -> Extraction:
-    resp = client.messages.parse(
-        model=MODEL,
-        max_tokens=8000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": content}],
-        output_format=Extraction,
+def _parse_schema(content, system: str, output_format, max_tokens: int):
+    """Extract `output_format` from `content`, enforcing the schema whichever way
+    the provider supports.
+
+    Preferred path is constrained decoding (`messages.parse`), where the schema is
+    enforced during generation. Bedrock refuses to compile this app's `Extraction`
+    grammar and answers `400 Grammar compilation timed out` — the CLIN ->
+    labor_rates nesting plus the free-form `field_confidence` map exceed what its
+    decoder will build, on every model this account can reach (the Opus tier,
+    which might manage it, is Marketplace-denied). So on that specific failure,
+    ask for plain JSON against the same schema and validate it here instead.
+
+    The guarantee moves from the decoder to `model_validate_json`, so a malformed
+    response still raises rather than returning half-populated data. The strict
+    path is tried first so providers that *can* enforce it still do — the smaller
+    `Modification` schema compiles on Bedrock and never reaches the fallback.
+    """
+    try:
+        resp = client.messages.parse(
+            model=MODEL,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": content}],
+            output_format=output_format,
+        )
+        return resp.parsed_output
+    except Exception as e:
+        if "grammar" not in str(e).lower():
+            raise
+
+    blocks = (
+        content if isinstance(content, list) else [{"type": "text", "text": content}]
     )
-    parsed = resp.parsed_output
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[
+            {
+                "role": "user",
+                "content": blocks
+                + [
+                    {
+                        "type": "text",
+                        "text": "Return ONLY a JSON object conforming to this JSON "
+                        "Schema. No prose and no code fence.\n\n"
+                        + json.dumps(output_format.model_json_schema()),
+                    }
+                ],
+            }
+        ],
+    )
+    text = "".join(b.text for b in resp.content if b.type == "text").strip()
+    # Strip a ``` / ```json fence if the model added one despite the instruction.
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.DOTALL).strip()
+    return output_format.model_validate_json(text)
+
+
+def _parse(content) -> Extraction:
+    # 16000, not 8000: adaptive thinking is on by default on current models and
+    # max_tokens caps thinking plus response text together, so a budget sized for
+    # the JSON alone can truncate a large award mid-object.
+    parsed = _parse_schema(content, SYSTEM, Extraction, 16000)
     try:
         return confidence.apply(parsed)
     except Exception:
@@ -126,14 +200,9 @@ def extract_from_pdf(pdf_bytes: bytes) -> Extraction:
 
 
 def _parse_mod(content) -> Modification:
-    resp = client.messages.parse(
-        model=MODEL,
-        max_tokens=2000,
-        system=SYSTEM_MOD,
-        messages=[{"role": "user", "content": content}],
-        output_format=Modification,
-    )
-    return resp.parsed_output
+    # 8000, not 2000: see the max_tokens note in _parse — thinking shares the
+    # budget, and 2000 leaves little room for it plus the JSON.
+    return _parse_schema(content, SYSTEM_MOD, Modification, 8000)
 
 
 def extract_mod_from_text(text: str) -> Modification:
