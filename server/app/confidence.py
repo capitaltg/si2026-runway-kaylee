@@ -82,8 +82,6 @@ def apply(ext: Extraction) -> Extraction:
                 if f in fc:
                     fc[f] = min(fc[f], CROSS_FAIL_CAP)
 
-    h.field_confidence = fc
-
     clin_total = 0.0
     for cl in ext.clins:
         score = cl.confidence if cl.confidence is not None else CLIN_BASELINE
@@ -95,8 +93,19 @@ def apply(ext: Extraction) -> Extraction:
 
     # Cross-check: summed CLIN ceilings shouldn't blow well past the contract
     # ceiling (5% slack for rounding / option lines).
+    #
+    # When they do, the header total is as suspect as the lines, so badge it too
+    # rather than only the CLINs. A misread leading digit on total_ceiling looks
+    # exactly like this — observed on a real extraction: the header came back
+    # $3,701,569.60 for an award whose own CLIN schedule summed to $8,701,569.60.
+    # The schedule is the more trustworthy side (many independently-read figures
+    # that agree), so the single total is what gets flagged for review.
     if _money(h.total_ceiling) and clin_total > h.total_ceiling * 1.05:
         for cl in ext.clins:
             cl.confidence = min(cl.confidence, CROSS_FAIL_CAP)
+        if "total_ceiling" in fc:
+            fc["total_ceiling"] = min(fc["total_ceiling"], CROSS_FAIL_CAP)
 
+    # Assigned last so the cross-checks above can still lower a field's score.
+    h.field_confidence = fc
     return ext
