@@ -71,9 +71,38 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
     return result.model_dump()
 
 
+def _seed_award_obligation(data: dict) -> None:
+    """Seed the base-award funding as the first obligation_history entry, so the
+    funding timeline starts where the money started rather than at the first mod.
+
+    The award (SF-26 / SF-1449) carries only the initial obligation; SF-30 mods
+    fold their later actions on top via _merge_mod. Without this seed the history
+    began empty and the first timeline point was P00001 — the award baseline (and
+    the true starting cumulative the mods build on) was lost. No-op when a history
+    is already present or the award states no obligated amount."""
+    if data.get("obligation_history"):
+        return
+    header = data.get("contract") or {}
+    obligated = header.get("total_obligated")
+    if obligated is None:
+        return
+    data["obligation_history"] = [
+        {
+            "mod": "Award",
+            "date": header.get("effective_date"),
+            "action": "Initial award / base-period funding",
+            "amount": obligated,
+            "cumulative_obligated": obligated,
+            "description": None,
+        }
+    ]
+
+
 @app.post("/api/contracts/confirm")
 def confirm(extraction: Extraction):
-    cid = db.save_contract(extraction.contract.piid, extraction.model_dump())
+    data = extraction.model_dump()
+    _seed_award_obligation(data)
+    cid = db.save_contract(extraction.contract.piid, data)
     return {"id": cid, "piid": extraction.contract.piid}
 
 
