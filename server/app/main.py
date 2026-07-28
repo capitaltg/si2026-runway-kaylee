@@ -130,6 +130,88 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     }
 
 
+def _merge_mod(existing: dict, mod: dict) -> dict:
+    """Fold one extracted SF-30 action into a contract's stored obligation
+    history and refresh total_obligated. Pure (no I/O) so it's unit-testable.
+
+    Idempotent by mod number: re-ingesting the same SF-30 replaces its entry
+    rather than double-counting the dollars. total_obligated tracks the highest
+    cumulative figure the mods state (funding is monotonic), falling back to the
+    sum of per-action amounts when a doc omitted its running cumulative."""
+    history = existing.get("obligation_history") or []
+    entry = {
+        "mod": mod.get("mod_number"),
+        "date": mod.get("effective_date"),
+        "action": mod.get("action_type") or "modification",
+        "amount": mod.get("amount_obligated"),
+        "cumulative_obligated": mod.get("cumulative_obligated"),
+        "description": mod.get("description"),
+    }
+    by_num = {h.get("mod"): h for h in history}
+    replaced = entry["mod"] in by_num
+    by_num[entry["mod"]] = entry
+    merged = sorted(
+        by_num.values(), key=lambda h: (h.get("date") or "", h.get("mod") or "")
+    )
+    existing["obligation_history"] = merged
+
+    header = existing.setdefault("contract", {})
+    cums = [
+        float(h["cumulative_obligated"])
+        for h in merged
+        if h.get("cumulative_obligated") is not None
+    ]
+    amts = [float(h["amount"]) for h in merged if h.get("amount") is not None]
+    if cums:
+        header["total_obligated"] = max(cums)
+    elif amts:
+        header["total_obligated"] = round(sum(amts), 2)
+    ceiling = header.get("total_ceiling")
+    if header.get("total_obligated") is not None and ceiling:
+        header["incrementally_funded"] = float(header["total_obligated"]) < float(
+            ceiling
+        )
+    return {
+        "mod": entry["mod"],
+        "replaced": replaced,
+        "history_len": len(merged),
+        "total_obligated": header.get("total_obligated"),
+    }
+
+
+@app.post("/api/contracts/{contract_id}/mods")
+async def add_modification(contract_id: int, file: UploadFile = File(...)):
+    """Ingest one SF-30 modification against an already-ingested contract. The
+    dated funding action is folded into the contract's obligation history and
+    total_obligated is refreshed, so the burn engine can read funding *pace*
+    (obligations landing vs. dollars burned) — not just a single obligated
+    figure. Ingest a contract's SF-30 stack one doc at a time to rebuild the
+    full history; the SF-26 award already carries the initial obligation."""
+    existing = db.get_contract(contract_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+
+    try:
+        data = await file.read()
+        if (file.filename or "").lower().endswith(".pdf"):
+            mod = extract.extract_mod_from_pdf(data)
+        else:
+            mod = extract.extract_mod_from_text(data.decode("utf-8", "ignore"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
+
+    parsed = mod.model_dump()
+    # A mod restates the contract number (block 10A); flag (don't block) a
+    # mismatch, since OCR/extraction of that block can be imperfect.
+    doc_piid = (parsed.get("piid") or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+
+    summary = _merge_mod(existing, parsed)
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+    db.update_contract(contract_id, blob)
+    return {"id": contract_id, "piid_mismatch": piid_mismatch, **summary}
+
+
 @app.get("/api/contracts")
 def contracts():
     return db.list_contracts()
