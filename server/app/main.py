@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 
@@ -52,15 +53,17 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
         if file is not None:
             data = await file.read()
             if (file.filename or "").lower().endswith(".pdf"):
-                result = extract.extract_from_pdf(data)
+                result = await asyncio.to_thread(extract.extract_from_pdf, data)
             else:
-                result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+                result = await asyncio.to_thread(
+                    extract.extract_from_text, data.decode("utf-8", "ignore")
+                )
         elif SAMPLE.lower().endswith(".pdf"):
             with open(SAMPLE, "rb") as f:
-                result = extract.extract_from_pdf(f.read())
+                result = await asyncio.to_thread(extract.extract_from_pdf, f.read())
         else:
             with open(SAMPLE, "r", encoding="utf-8") as f:
-                result = extract.extract_from_text(f.read())
+                result = await asyncio.to_thread(extract.extract_from_text, f.read())
     except Exception as e:
         # Return a real error (with CORS headers) instead of an unhandled 500,
         # which Starlette leaves CORS-less so the browser reports "Load failed".
@@ -68,9 +71,38 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
     return result.model_dump()
 
 
+def _seed_award_obligation(data: dict) -> None:
+    """Seed the base-award funding as the first obligation_history entry, so the
+    funding timeline starts where the money started rather than at the first mod.
+
+    The award (SF-26 / SF-1449) carries only the initial obligation; SF-30 mods
+    fold their later actions on top via _merge_mod. Without this seed the history
+    began empty and the first timeline point was P00001 — the award baseline (and
+    the true starting cumulative the mods build on) was lost. No-op when a history
+    is already present or the award states no obligated amount."""
+    if data.get("obligation_history"):
+        return
+    header = data.get("contract") or {}
+    obligated = header.get("total_obligated")
+    if obligated is None:
+        return
+    data["obligation_history"] = [
+        {
+            "mod": "Award",
+            "date": header.get("effective_date"),
+            "action": "Initial award / base-period funding",
+            "amount": obligated,
+            "cumulative_obligated": obligated,
+            "description": None,
+        }
+    ]
+
+
 @app.post("/api/contracts/confirm")
 def confirm(extraction: Extraction):
-    cid = db.save_contract(extraction.contract.piid, extraction.model_dump())
+    data = extraction.model_dump()
+    _seed_award_obligation(data)
+    cid = db.save_contract(extraction.contract.piid, data)
     return {"id": cid, "piid": extraction.contract.piid}
 
 
@@ -89,9 +121,11 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     try:
         data = await file.read()
         if (file.filename or "").lower().endswith(".pdf"):
-            result = extract.extract_from_pdf(data)
+            result = await asyncio.to_thread(extract.extract_from_pdf, data)
         else:
-            result = extract.extract_from_text(data.decode("utf-8", "ignore"))
+            result = await asyncio.to_thread(
+                extract.extract_from_text, data.decode("utf-8", "ignore")
+            )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
@@ -194,9 +228,11 @@ async def add_modification(contract_id: int, file: UploadFile = File(...)):
     try:
         data = await file.read()
         if (file.filename or "").lower().endswith(".pdf"):
-            mod = extract.extract_mod_from_pdf(data)
+            mod = await asyncio.to_thread(extract.extract_mod_from_pdf, data)
         else:
-            mod = extract.extract_mod_from_text(data.decode("utf-8", "ignore"))
+            mod = await asyncio.to_thread(
+                extract.extract_mod_from_text, data.decode("utf-8", "ignore")
+            )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 

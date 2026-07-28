@@ -806,7 +806,11 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
         style={{
           display: "grid",
           gridTemplateColumns: editing ? "120px 1fr 80px 130px 34px" : "150px 1fr 70px 130px",
-          gap: 10, alignItems: "center", padding: "9px 16px",
+          // One size for the whole row: without this, cells with no explicit
+          // fontSize (CLIN #, type, ceiling) fall back to the 16px browser
+          // default and dwarf the 13px title beside them — the "different sizes"
+          // messiness. 13 matches the title and the labor-rate table cells.
+          gap: 10, alignItems: "center", padding: "9px 16px", fontSize: 13,
         }}
       >
         <div style={{ ...mono, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
