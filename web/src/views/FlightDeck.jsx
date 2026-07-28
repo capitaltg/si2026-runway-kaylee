@@ -82,12 +82,16 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
     return <div style={{ padding: "40px", color: "var(--dim)" }}>Loading flight deck…</div>;
   }
 
-  const { contract, totals, hero, tripwires, underburn = [], all_clear, sync } = burn;
+  const { contract, totals, hero, tripwires, underburn = [], funding = [], all_clear, sync } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
   const heroColor2 =
-    hero?.status === "over" ? "#c23636" : hero?.status === "watch" ? "#c26e12" : "#0b8f65";
+    hero?.status === "over"
+      ? "#c23636"
+      : hero?.status === "watch" || hero?.status === "funding"
+        ? "#c26e12"
+        : "#0b8f65";
   // Live-data strip shows only sources actually feeding this project.
   const liveSources = sources.filter((s) => s.status === "live" || s.status === "synced");
   const stripSources = liveSources.length ? liveSources : sources;
@@ -96,9 +100,11 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
       ? hero?.limited_by === "funding"
         ? "runs out of funded dollars before the PoP ends"
         : "blows the ceiling before the PoP ends"
-      : hero?.status === "watch"
-        ? "lands tight against the finish line"
-        : "clears the finish line";
+      : hero?.status === "funding"
+        ? "needs its next funding mod before the PoP ends"
+        : hero?.status === "watch"
+          ? "lands tight against the finish line"
+          : "clears the finish line";
 
   return (
     <div style={{ padding: "24px 26px 60px", maxWidth: 1280 }}>
@@ -231,6 +237,67 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
               <b>{moneyM(ub.projected_unspent)}</b> — not consuming it until ~{ub.weeks_slack} weeks
               after the PoP ends. Under-staffing or slipping delivery can leave money unspent and
               jeopardize option-year exercise.
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/* funding-pace watch — amber, routine incremental funding awaiting its
+          next obligation; deliberately not the red over-ceiling tripwire (#22) */}
+      {funding.map((fw) => (
+        <div
+          key={fw.code}
+          style={{
+            border: "1px solid var(--warn)",
+            background: "var(--warnBg)",
+            borderRadius: 16,
+            padding: "16px 18px",
+            marginBottom: 16,
+            display: "flex",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              flex: "0 0 38px",
+              borderRadius: 11,
+              background: "var(--warn)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            $
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--warn)" }}>
+                {fw.mod_in_progress ? "Funding request outstanding" : "Funding due"} — {fw.code}{" "}
+                {fw.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "'IBM Plex Mono',monospace",
+                  background: "var(--warn)",
+                  color: "#fff",
+                  padding: "2px 8px",
+                  borderRadius: 20,
+                }}
+              >
+                {pct(fw.funded_frac)} funded
+              </span>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+              At the current burn rate, {fw.code} spends through its funded {moneyM(fw.funded)} in
+              week {Math.round(fw.exhaust_week)} — {fw.weeks_early} weeks before the PoP ends. This is
+              routine incremental funding ({pct(fw.funded_frac)} obligated at {pct(fw.elapsed_frac)}{" "}
+              of the PoP elapsed), so it needs its next funding mod, not a course correction.
+              {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
             </div>
           </div>
         </div>
