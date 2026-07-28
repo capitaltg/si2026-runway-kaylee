@@ -94,6 +94,12 @@ class ContractHeader(BaseModel):
     incrementally_funded: Optional[bool] = Field(
         default=None, description="True if incrementally funded (obligated < ceiling)"
     )
+    mod_in_progress: Optional[bool] = Field(
+        default=None,
+        description="True if a funding modification (e.g. a pending SF-30) is "
+        "outstanding. Reframes the funding tripwire to 'funding request "
+        "outstanding' rather than an over-ceiling alarm (#22).",
+    )
     effective_date: Optional[str] = Field(
         default=None, description="Contract effective date, ISO 8601"
     )
@@ -118,6 +124,58 @@ class Extraction(BaseModel):
     contract: ContractHeader
     periods: List[Period]
     clins: List[CLIN]
+
+
+class Modification(BaseModel):
+    """One contract modification (SF-30) — a single dated funding action against
+    an already-awarded contract. Flat on purpose: the whole obligation history is
+    rebuilt by ingesting a *stack* of these one doc at a time, so each extraction
+    is one self-contained record (no nested list to trip Bedrock's constrained
+    decoding, per the note on ContractHeader.field_confidence).
+
+    An SF-30's Block 14 narrative carries everything a funding-pace read needs:
+    the PIID being modified, the mod number, the effective date, the dollars
+    obligated by this action, and the resulting cumulative obligated."""
+
+    piid: str = Field(
+        description="Contract/order number being modified (SF-30 block 10A)"
+    )
+    mod_number: str = Field(
+        description="Amendment/modification number, e.g. 'P00001' (SF-30 block 2)"
+    )
+    effective_date: Optional[str] = Field(
+        default=None, description="Modification effective date, ISO 8601"
+    )
+    amount_obligated: Optional[float] = Field(
+        default=None,
+        description="Dollars obligated BY THIS ACTION (the increment), in dollars",
+    )
+    prev_obligated: Optional[float] = Field(
+        default=None,
+        description="Cumulative obligated BEFORE this action, if the narrative "
+        "states the 'from' figure (e.g. 'increased from $X to $Y')",
+    )
+    cumulative_obligated: Optional[float] = Field(
+        default=None,
+        description="Total cumulative obligated AFTER this action, in dollars",
+    )
+    total_ceiling: Optional[float] = Field(
+        default=None,
+        description="Total contract ceiling as restated on the mod, for cross-check",
+    )
+    action_type: Optional[str] = Field(
+        default=None,
+        description="One of: 'incremental_funding', 'option_exercise', "
+        "'administrative' — inferred from the modification narrative",
+    )
+    is_bilateral: Optional[bool] = Field(
+        default=None,
+        description="True if a bilateral supplemental agreement (both parties "
+        "sign, block 13C); False if a unilateral change order (CO only, 13A)",
+    )
+    description: Optional[str] = Field(
+        default=None, description="The modification narrative (SF-30 block 14)"
+    )
 
 
 class ExpenseIn(BaseModel):

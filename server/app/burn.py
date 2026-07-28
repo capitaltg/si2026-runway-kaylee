@@ -23,6 +23,19 @@ _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
 # until this fraction of the PoP *past* the finish line — a large unspent
 # balance / slipping delivery signal, symmetric to the over-ceiling tripwire.
 _UNDER_SLACK_FRAC = 0.15
+# Funding-pace tripwire (#22). An incrementally-funded CLIN whose funded slice
+# runs out before the PoP ends is only a real alarm when funding is falling
+# *behind* the burn — incremental funding in tranches is routine. Funding is
+# treated as keeping pace when the obligated fraction stays within this slack of
+# the elapsed-clock fraction; below that, obligations are genuinely lagging spend
+# and the tripwire stays red. Honest read from data we already have (obligated,
+# ceiling, PoP clock) — no obligation time-series required.
+_FUND_LAG_SLACK = 0.15
+# Minimum weeks elapsed in the active period before an obligation *rate* can be
+# read off the mod history. Below this, a single early tranche divided by one or
+# two weeks produces an enormous weekly figure that says nothing about funding
+# behaviour — the caller falls back to the funded-vs-elapsed proxy instead.
+_PACE_MIN_WEEKS = 4
 
 
 def _d(s: Optional[str]) -> Optional[date]:
@@ -38,54 +51,185 @@ def _weeks_between(a: Optional[date], b: Optional[date]) -> Optional[int]:
     return round((b - a).days / 7)
 
 
-def _base_period(contract: dict) -> dict:
-    """The period the burn clock runs against: the first exercised period, else
-    the first period."""
-    periods = contract.get("periods") or []
-    for p in periods:
-        if p.get("exercised"):
+def _period_window(p: dict):
+    return _d(p.get("pop_start")), _d(p.get("pop_end"))
+
+
+def _exercised(contract: dict) -> List[dict]:
+    """Exercised periods in PoP order. An un-exercised option is not in play: no
+    obligated dollars, no charges, and its ceiling is not yet spendable."""
+    periods = [p for p in (contract.get("periods") or []) if p.get("exercised")]
+    return sorted(periods, key=lambda p: (p.get("pop_start") or ""))
+
+
+def _anchor_date(rows: List[dict]) -> date:
+    """The "now" the period clock is read against: the latest synced timesheet
+    week if there is one, else today. Anchoring to the data keeps a demo coherent
+    when seeded award dates don't line up with seeded timesheet dates."""
+    weeks = sorted({r.get("week_ending") for r in rows if r.get("week_ending")})
+    return (_d(weeks[-1]) if weeks else None) or date.today()
+
+
+def _active_period(contract: dict, rows: List[dict]) -> dict:
+    """The period the burn clock runs against: the *current* exercised period —
+    the one the anchor date actually falls inside.
+
+    This used to return the *first* exercised period, which is the root of the
+    funding-window-vs-PoP mismatch. A contract's obligated total is cumulative
+    contract-to-date and spans every period exercised so far; a period of
+    performance is one period. Anchoring to the first exercised period pinned
+    every stat to a window that may have closed years ago, and made the
+    cumulative obligation look bigger than the single-period ceiling it was being
+    compared against — which silently switched the whole incremental-funding read
+    off (see `compute`).
+
+    Selection, in order:
+      * the exercised period whose window contains the anchor date
+      * past every exercised window  → the last one (overrun / close-out)
+      * before every window          → the first one (not started yet)
+      * in a gap between periods     → the last one that has already started
+      * no dated periods / none exercised → the first period, else {}
+    """
+    periods = _exercised(contract) or (contract.get("periods") or [])
+    if not periods:
+        return {}
+    dated = [p for p in periods if _d(p.get("pop_start"))]
+    if not dated:
+        return periods[0]
+
+    anchor = _anchor_date(rows)
+    for p in dated:
+        start, end = _period_window(p)
+        if start <= anchor and (end is None or anchor <= end):
             return p
-    return periods[0] if periods else {}
+    started = [p for p in dated if _d(p.get("pop_start")) <= anchor]
+    return started[-1] if started else dated[0]
 
 
-def _active_clins(contract: dict) -> List[dict]:
-    """CLINs that belong to the current active period — the one the burn clock
-    runs against (`_base_period`: the first exercised period).
+def _period_clins(contract: dict, period: dict) -> List[dict]:
+    """The CLINs belonging to one period.
 
     This is the guard against counting money that isn't in play yet. An award
     lists every option year's CLINs up front, but only the current period has
     obligated dollars and timesheet charges against it. Pricing all of them
-    would inflate the ceiling and wreck the burn %, runway, and tripwire math.
-    Un-exercised option CLINs are excluded here; exercised option CLINs carry
-    no timesheets of their own (labor charges land on the base CLINs) so they
-    would read as paused anyway. Keeping this consistent with `_clock`, which
-    already anchors the week clock to the same base period.
+    inflates the ceiling and wrecks the burn %, runway and tripwire math.
 
-    Degrades gracefully: if no CLIN carries a period label there is nothing to
-    filter on, so every CLIN is kept.
+    Matches on the CLIN's `period` label. Degrades gracefully: if no CLIN carries
+    a label there is nothing to filter on, so every CLIN is kept — and `compute`
+    reports that fallback as `clin_scope: "all"` rather than letting an
+    over-counted ceiling pass as a scoped one.
     """
-    active_name = (_base_period(contract).get("name") or "").strip().lower()
+    name = (period.get("name") or "").strip().lower()
     clins = contract.get("clins") or []
     labeled = [c for c in clins if (c.get("period") or "").strip()]
-    if not active_name or not labeled:
+    if not name or not labeled:
         return clins
-    return [c for c in clins if (c.get("period") or "").strip().lower() == active_name]
+    return [c for c in clins if (c.get("period") or "").strip().lower() == name]
+
+
+def _prior_consumed(contract: dict, period: dict) -> float:
+    """Obligated dollars already consumed by the exercised periods that ran
+    before this one.
+
+    Obligation is cumulative contract-to-date; a period of performance is not.
+    Once a prior period has been performed and closed out its funding is spent
+    and is no longer available to the current period — the rest of the ceiling is
+    what later periods draw against. Netting this out is what makes
+    `total_obligated` comparable to a *period* ceiling at all.
+
+    A closed prior period is treated as having consumed its own ceiling: that is
+    what it was funded and performed to. Prior-period actuals aren't available to
+    net out precisely (only the current period's timesheets are synced), so the
+    period ceiling is the honest document-backed approximation — and it is
+    reported in the payload as `prior_consumed` rather than folded in silently.
+    """
+    start = _d(period.get("pop_start"))
+    if not start:
+        return 0.0
+    total = 0.0
+    for p in _exercised(contract):
+        if p is period:
+            continue
+        p_start = _d(p.get("pop_start"))
+        if p_start and p_start < start:
+            total += float(p.get("ceiling") or 0)
+    return total
 
 
 def _clin_num(clin: dict) -> str:
     return str(clin.get("clin") or "").strip()
 
 
-def _rows_for_clin(clin: dict, rows: List[dict]) -> List[dict]:
-    """Timesheet rows charged to this CLIN. Exact charge_code match first, then
-    subCLIN prefix (e.g. '0001AA' rolls up to '0001')."""
+def _slot(num: str) -> str:
+    """A CLIN's "slot": its trailing three digits, ignoring subCLIN letters.
+
+    Federal awards number option-year CLINs to mirror the base year — base 0001
+    becomes 1001 in Option 1 and 2001 in Option 2 — so the slot is a line item's
+    stable identity across periods. Timesheet feeds commonly keep charging the
+    original base charge code for the life of the contract, so matching on the
+    slot is what lets the *current* period's CLIN pick up its own charges.
+    """
+    digits = "".join(ch for ch in str(num or "") if ch.isdigit())
+    return digits[-3:]
+
+
+def _effective_window(period: dict, rows: List[dict]):
+    """The date window to scope charges to — or an open window when the timesheet
+    feed doesn't overlap the period at all.
+
+    Scoping to the PoP is what keeps a multi-period contract honest, but applied
+    blindly it also zeroes out the deliberate non-overlap fallback `_clock`
+    relies on: a seeded award whose dates don't line up with the seeded timesheet
+    dates (Fixtura alignment, task #1) would report $0 burn and "all clear"
+    instead of a coherent demo. So the window is only enforced when at least one
+    synced week actually falls inside it; otherwise the feed is treated as
+    belonging to this period wholesale, matching how `_clock` falls back to
+    "weeks of timesheets logged".
+    """
+    start, end = _period_window(period)
+    if not start and not end:
+        return (None, None), False
+    for r in rows:
+        wk = _d(r.get("week_ending"))
+        if wk and not ((start and wk < start) or (end and wk > end)):
+            return (start, end), True
+    return (None, None), False
+
+
+def _rows_for_clin(clin: dict, rows: List[dict], window=(None, None)) -> List[dict]:
+    """Timesheet rows charged to this CLIN *within the active period's window*.
+
+    Two scoping rules, both needed to keep a multi-period contract honest:
+      * date — only weeks inside the active PoP count toward this period's burn.
+        Without it, a prior period's charges inflate the current period's spend
+        and its forward pace.
+      * CLIN — exact charge_code, then subCLIN prefix ('0001AA' rolls up to
+        '0001'), then the period slot (a '0001' charge rolls into Option 2's
+        2001). Slots are unique inside a single period, so that last match can't
+        collide across the CLINs being priced here.
+    """
     num = _clin_num(clin)
     if not num:
         return []
-    exact = [r for r in rows if (r.get("charge_code") or "").strip() == num]
+    start, end = window
+    scoped = []
+    for r in rows:
+        wk = _d(r.get("week_ending"))
+        if wk and ((start and wk < start) or (end and wk > end)):
+            continue
+        scoped.append(r)
+
+    def code(r):
+        return (r.get("charge_code") or "").strip()
+
+    exact = [r for r in scoped if code(r) == num]
     if exact:
         return exact
-    return [r for r in rows if (r.get("charge_code") or "").strip().startswith(num)]
+    prefix = [r for r in scoped if code(r).startswith(num)]
+    if prefix:
+        return prefix
+    slot = _slot(num)
+    return [r for r in scoped if slot and _slot(code(r)) == slot]
 
 
 def _rate_resolver(clin: dict):
@@ -120,6 +264,7 @@ def _pill(status: str) -> str:
         "watch": "Watch",
         "ok": "On pace",
         "under": "Under pace",
+        "funding": "Funding due",
         "paused": "Paused",
     }.get(status, "—")
 
@@ -130,17 +275,26 @@ def _compute_clin(
     current_week: int,
     total_weeks: int,
     funded: Optional[float] = None,
+    mod_in_progress: bool = False,
+    funding_keeps_pace_override: Optional[bool] = None,
+    window=(None, None),
+    past_pop: bool = False,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
-    `funded` is the obligated/funded dollars backing this CLIN right now. When it
-    is set and below the CLIN ceiling, the contract is incrementally funded, so
-    the binding constraint is the funded money, not the full ceiling (FAR
-    52.232-22, Limitation of Funds): runway, status and the exhaust week are
-    measured against `funded`. When it's None (or >= ceiling) the CLIN behaves
-    exactly as before and everything is measured against the ceiling."""
+    `funded` is the obligated/funded dollars backing this CLIN right now — the
+    active period's share of the obligation, already net of what prior periods
+    consumed (see `compute`). When it is set and below the CLIN ceiling the
+    contract is incrementally funded, so the binding constraint is the funded
+    money, not the full ceiling (FAR 52.232-22, Limitation of Funds): runway,
+    status and the exhaust week are measured against `funded`. When it's None
+    (or >= ceiling) everything is measured against the ceiling.
+
+    `window` scopes the charges to the active PoP; `past_pop` says the anchor date
+    is already beyond the finish line, in which case a forward projection has
+    nothing left to project into and status is read off realized spend."""
     rate_for, blended, source = _rate_resolver(clin)
-    clin_rows = _rows_for_clin(clin, rows)
+    clin_rows = _rows_for_clin(clin, rows, window)
 
     spent = 0.0
     unmatched = set()
@@ -171,7 +325,11 @@ def _compute_clin(
     # The dollars this CLIN can actually spend before it stalls: the funded
     # amount when incrementally funded, otherwise the full ceiling. Runway is
     # measured against this; the ceiling is still reported for the % display.
-    incrementally_funded = funded is not None and 0 < funded < ceiling
+    # Zero is a real funded amount, not "no data": an option can be exercised
+    # before any money is obligated against it, and that is the tightest funding
+    # state there is. The old `0 < funded` guard treated it as no-funding-info and
+    # fell back to a full-ceiling runway, hiding exactly the case that matters.
+    incrementally_funded = funded is not None and funded < ceiling
     budget = funded if incrementally_funded else ceiling
     remaining = budget - spent
     pct = (spent / ceiling) if ceiling else 0.0
@@ -182,13 +340,67 @@ def _compute_clin(
         runway_days = None
     else:
         weeks_left = remaining / weekly
-        runway_days = round(weeks_left * 7)
+        # Runway floors at zero. Once spend is past the binding budget there is no
+        # time left to report, and the overrun belongs in dollars (`remaining` and
+        # `overspent`), not in negative days — this read "-98 days" on the hero
+        # tile. `exhaust_week` keeps the true (already-past) crossing point.
+        runway_days = max(0, round(weeks_left * 7))
     exhaust_week = current_week + weeks_left
+
+    # Funding-pace context (#22). When the binding budget is the funded slice
+    # (not the full ceiling), the slice running out early is routine incremental
+    # funding — only a red alarm when funding is genuinely lagging burn.
+    #   funded_frac vs elapsed_frac  → is obligation keeping pace with the clock?
+    #   ceiling_breached             → does projected spend blow the *actual*
+    #                                  ceiling (a real breach, not just a mod gap)?
+    # Clamped for the proxy and for display: the clock itself is uncapped now (so
+    # overrun is visible), but "% of the PoP elapsed" past 100% would make the
+    # proxy demand more than full funding to read as keeping pace.
+    elapsed_frac = min(1.0, current_week / total_weeks) if total_weeks else 0.0
+    funded_frac = (funded / ceiling) if (funded is not None and ceiling) else 1.0
+    # Funding keeps pace: prefer the real signal derived from ingested SF-30
+    # obligation history (dollars landing vs. burned, computed contract-wide in
+    # compute()); fall back to the funded-fraction-vs-elapsed-clock proxy when no
+    # mod history has been ingested yet.
+    if funding_keeps_pace_override is not None:
+        funding_keeps_pace = funding_keeps_pace_override
+        pace_source = "obligation_history"
+    else:
+        funding_keeps_pace = funded_frac >= elapsed_frac - _FUND_LAG_SLACK
+        pace_source = "proxy"
+    ceiling_exhaust = current_week + (ceiling - spent) / weekly if weekly > 0 else None
+    ceiling_breached = ceiling_exhaust is not None and ceiling_exhaust < total_weeks - 1
 
     if weekly <= 0:
         status = "paused"
+    elif past_pop:
+        # Past the finish line: there is no remaining PoP to project into, so a
+        # forward exhaust week is meaningless. Read realized spend against the
+        # binding budget instead, on the same bands the non-labor cards use — a
+        # period that ended with a large unspent balance is an under-burn, one
+        # that spent through its budget is a breach.
+        pct_budget = (spent / budget) if budget else 0.0
+        if pct_budget >= 1.0:
+            status = "over"
+        elif pct_budget >= 0.8:
+            status = "watch"
+        else:
+            status = "under"
     elif exhaust_week < total_weeks - 1:
-        status = "over"
+        # Binding budget runs out before the finish line. If that budget is the
+        # funded slice and the ceiling still holds, don't cry wolf on routine
+        # incremental funding: an outstanding mod or funding keeping pace with
+        # the elapsed clock downgrades it to an amber "funding due". Only a real
+        # ceiling breach, or funding genuinely lagging with no mod flagged, stays
+        # red.
+        if (
+            incrementally_funded
+            and not ceiling_breached
+            and (mod_in_progress or funding_keeps_pace)
+        ):
+            status = "funding"
+        else:
+            status = "over"
     elif exhaust_week < total_weeks + 2:
         status = "watch"
     elif exhaust_week > total_weeks * (1 + _UNDER_SLACK_FRAC):
@@ -216,10 +428,20 @@ def _compute_clin(
         "budget": round(budget, 2),
         "funded": round(funded, 2) if funded is not None else None,
         "incrementally_funded": incrementally_funded,
+        # Funding-pace read (#22): obligated vs elapsed-clock fraction, whether
+        # funding is keeping pace, and whether a mod is flagged outstanding.
+        "funded_frac": round(funded_frac, 4),
+        "elapsed_frac": round(elapsed_frac, 4),
+        "funding_keeps_pace": funding_keeps_pace,
+        "funding_pace_source": pace_source,
+        "mod_in_progress": bool(mod_in_progress),
         "spent": round(spent, 2),
         "pct": round(pct, 4),
         "weekly": round(weekly, 2),
         "remaining": round(remaining, 2),
+        # Dollars already spent past the binding budget, when there are any. The
+        # honest expression of a negative balance, since runway now floors at 0.
+        "overspent": round(-remaining, 2) if remaining < 0 else 0.0,
         "weeks_left": None if status == "paused" else round(weeks_left, 2),
         "exhaust_week": None if status == "paused" else round(exhaust_week, 2),
         "runway_days": runway_days,
@@ -232,11 +454,19 @@ def _compute_clin(
     }
 
 
-def _clock(contract: dict, rows: List[dict]):
-    """Derive (current_week, total_weeks, pop_start, pop_end). Anchored to the
-    timesheet data so the demo is coherent even before the Fixtura seed alignment
-    (task #1) makes the award dates line up with the timesheet dates."""
-    period = _base_period(contract)
+def _clock(period: dict, rows: List[dict]):
+    """Derive the week clock for the *active* period: (current_week, total_weeks,
+    pop_start, pop_end) plus whether the anchor is already past the finish line.
+    Anchored to the timesheet data so the demo is coherent even before the Fixtura
+    seed alignment (task #1) makes the award dates line up with the timesheet
+    dates.
+
+    `current_week` is no longer clamped to `total_weeks`. The clamp hid overrun
+    entirely — a contract still charging after PoP end read as week 52 of 52 —
+    zeroed `weeks_remaining` (which degenerated the under-burn projection) and
+    pinned the elapsed fraction at 1.0, quietly breaking the funding-pace proxy.
+    Overrun is now reported as `past_pop` / `weeks_overrun` instead.
+    """
     pop_start = _d(period.get("pop_start"))
     pop_end = _d(period.get("pop_end"))
     total_weeks = _weeks_between(pop_start, pop_end) or 52
@@ -250,7 +480,7 @@ def _clock(contract: dict, rows: List[dict]):
         # Dates don't overlap the PoP yet — treat "weeks of timesheets logged" as
         # how far into execution we are.
         current_week = len(weeks)
-    current_week = max(1, min(current_week, total_weeks))
+    current_week = max(1, current_week)
 
     return {
         "current_week": current_week,
@@ -258,6 +488,8 @@ def _clock(contract: dict, rows: List[dict]):
         "pop_start": period.get("pop_start"),
         "pop_end": period.get("pop_end"),
         "latest_week": weeks[-1] if weeks else None,
+        "past_pop": current_week > total_weeks,
+        "weeks_overrun": max(0, current_week - total_weeks),
     }
 
 
@@ -275,42 +507,164 @@ def _nl_status(spent: float, ceiling: float) -> str:
     return "ok"
 
 
+def _funding_pace_from_history(
+    contract: dict, period: dict, current_week: int, burn_weekly: float
+):
+    """Funding pace from ingested SF-30 obligation history (#18): are obligated
+    dollars landing at least as fast as they're being burned? If so, a funded
+    slice draining before PoP end is just the next tranche not yet posted —
+    routine, not a shortfall.
+
+    Scoped to the active period, and to per-action *increments* rather than the
+    running cumulative. The previous version divided the latest cumulative
+    obligated by the elapsed week count, which averaged the week-zero award lump
+    over the clock: for one unchanged history it returned "keeping pace" early in
+    a period and "lagging" later, with no new money required. That verdict tracked
+    the calendar rather than funding behaviour, and it compared a contract-to-date
+    figure against a period clock and a trailing-4-week burn rate — three
+    different windows.
+
+    Now: dollars obligated *inside this period's window*, over the weeks elapsed
+    *in this period*, against the same forward burn rate the runway is built on.
+
+    Returns (keeps_pace, obligation_weekly), or (None, None) when there isn't
+    enough in-period history to judge — no dated action inside the window, or
+    fewer than `_PACE_MIN_WEEKS` elapsed so a single early tranche would set the
+    rate. The caller then falls back to the funded-vs-elapsed proxy."""
+    start, end = _period_window(period)
+    pop_weeks = _weeks_between(start, end)
+    elapsed = min(current_week, pop_weeks) if pop_weeks else current_week
+    if elapsed < _PACE_MIN_WEEKS:
+        return None, None
+
+    in_period = []
+    for h in contract.get("obligation_history") or []:
+        d = _d(h.get("date"))
+        if d is None or (start and d < start) or (end and d > end):
+            continue
+        in_period.append(h)
+    if not in_period:
+        return None, None
+
+    # Prefer each action's stated increment; fall back to the cumulative delta
+    # across the window when the docs only stated running totals.
+    amounts = [float(h["amount"]) for h in in_period if h.get("amount") is not None]
+    if amounts:
+        obligated_in_period = sum(amounts)
+    else:
+        cums = sorted(
+            float(h["cumulative_obligated"])
+            for h in in_period
+            if h.get("cumulative_obligated") is not None
+        )
+        if len(cums) < 2:
+            return None, None
+        obligated_in_period = cums[-1] - cums[0]
+
+    obligation_weekly = obligated_in_period / elapsed
+    return (obligation_weekly >= burn_weekly), round(obligation_weekly, 2)
+
+
 def compute(
     contract: dict, rows: List[dict], expenses: Optional[List[dict]] = None
 ) -> dict:
     """Full Flight Deck payload for one contract + its synced timesheets and any
     logged non-labor actuals (expenses)."""
     header = contract.get("contract") or {}
-    clk = _clock(contract, rows)
+    # The *current* exercised period, not the first one — see _active_period.
+    period = _active_period(contract, rows)
+    clk = _clock(period, rows)
     cw, tw = clk["current_week"], clk["total_weeks"]
+    window, window_applied = _effective_window(period, rows)
+    past_pop = clk["past_pop"]
 
     # Only the active period's CLINs — never the whole award's option years.
-    # See _active_clins for why (over-counting ceiling breaks every downstream
-    # stat). Consistent with _clock, which runs the week clock off the same
-    # base period.
-    clins = _active_clins(contract)
+    # See _period_clins for why (over-counting ceiling breaks every downstream
+    # stat). Consistent with _clock, which runs the week clock off the same period.
+    clins = _period_clins(contract, period)
     labor = [c for c in clins if c.get("is_labor")]
     nonlabor = [c for c in clins if not c.get("is_labor")]
+    clin_scope = (
+        "period"
+        if any((c.get("period") or "").strip() for c in contract.get("clins") or [])
+        and (period.get("name") or "").strip()
+        else "all"
+    )
 
-    # Funded-dollar allocation. An award carries one total obligated figure, not a
-    # per-CLIN split, so spread it across the active period's CLINs pro-rata by
-    # ceiling — each CLIN's funded slice is its share of the obligated money. This
-    # is what lets the engine warn when *funded* dollars (not the full ceiling)
-    # run out early, the incremental-funding case (FAR 52.232-22). When nothing is
-    # obligated, or it already covers the whole active ceiling, funded is None and
-    # every CLIN falls back to ceiling-based runway.
+    # Funded-dollar allocation, in two steps.
+    #
+    # 1. How much obligated money is available to *this* period. Obligation is
+    #    cumulative contract-to-date and spans every period exercised so far, so
+    #    the raw `total_obligated` is not comparable to one period's ceiling:
+    #    netting out what prior periods already consumed is what makes it so.
+    #    Without this, a contract past its first period reads obligated > period
+    #    ceiling and the entire incremental-funding path switches off — the
+    #    funding tripwire becomes unreachable on exactly the contracts that need
+    #    it. Capped at the period ceiling, and floored at zero (an option can be
+    #    exercised before its funding lands, which is a real, reportable state).
+    # 2. An award carries no per-CLIN funding split, so spread the period's funded
+    #    dollars across its CLINs pro-rata by ceiling. That's what lets the engine
+    #    warn when *funded* dollars run out early rather than the full ceiling —
+    #    the incremental-funding case (FAR 52.232-22, Limitation of Funds).
+    #
+    # When nothing is obligated, or the obligation already covers this period's
+    # whole ceiling, funded is None and every CLIN falls back to ceiling runway.
     active_ceiling = sum(float(c.get("ceiling") or 0) for c in clins)
     obligated = header.get("total_obligated")
+    prior_consumed = _prior_consumed(contract, period)
+    period_funded = None
+    if obligated is not None and active_ceiling:
+        available = max(0.0, float(obligated) - prior_consumed)
+        if available < active_ceiling:
+            period_funded = available
     funded_frac = (
-        float(obligated) / active_ceiling
-        if obligated and active_ceiling and float(obligated) < active_ceiling
-        else None
+        (period_funded / active_ceiling) if period_funded is not None else None
     )
     funded_for = lambda c: (
         funded_frac * float(c.get("ceiling") or 0) if funded_frac is not None else None
     )
+    # Outstanding funding mod (a set flag, or a future SF-30 ingest, #18) softens
+    # the funding tripwire to "request outstanding" rather than an alarm (#22).
+    mod_in_progress = bool(header.get("mod_in_progress"))
 
-    computed = [_compute_clin(c, rows, cw, tw, funded=funded_for(c)) for c in labor]
+    # First pass with the proxy, just to total the forward burn rate. If SF-30
+    # mods have been ingested, re-derive funding pace from that real obligation
+    # history (dollars landing vs. burned) and recompute the labor CLINs with it;
+    # otherwise the proxy result stands (no extra work for award-only contracts).
+    prelim = [
+        _compute_clin(
+            c,
+            rows,
+            cw,
+            tw,
+            funded=funded_for(c),
+            mod_in_progress=mod_in_progress,
+            window=window,
+            past_pop=past_pop,
+        )
+        for c in labor
+    ]
+    burn_weekly = sum(c["weekly"] for c in prelim)
+    pace_override, obligation_weekly = _funding_pace_from_history(
+        contract, period, cw, burn_weekly
+    )
+    if pace_override is None:
+        computed = prelim
+    else:
+        computed = [
+            _compute_clin(
+                c,
+                rows,
+                cw,
+                tw,
+                funded=funded_for(c),
+                mod_in_progress=mod_in_progress,
+                funding_keeps_pace_override=pace_override,
+                window=window,
+                past_pop=past_pop,
+            )
+            for c in labor
+        ]
     # Non-labor CLINs are cost-reimbursable — their spend is the sum of manually
     # logged actuals (travel / ODC / materials / subs), not timesheet hours.
     exp_by_clin = {}
@@ -392,6 +746,29 @@ def compute(
         if c["status"] == "under"
     ]
 
+    # Funding-pace watch (#22): the funded slice runs out before PoP end, but the
+    # ceiling holds and funding is keeping pace with the clock (or a mod is
+    # flagged). Amber, not red — routine incremental funding awaiting its next
+    # obligation, deliberately kept distinct from a real over-ceiling breach so
+    # the red tripwire keeps its signal.
+    funding = [
+        {
+            "code": c["code"],
+            "name": c["name"],
+            "pct": c["pct"],
+            "exhaust_week": c["exhaust_week"],
+            "weeks_early": round(tw - (c["exhaust_week"] or tw)),
+            "runway_days": c["runway_days"],
+            "funded": c["funded"],
+            "budget": c["budget"],
+            "funded_frac": c["funded_frac"],
+            "elapsed_frac": c["elapsed_frac"],
+            "mod_in_progress": c["mod_in_progress"],
+        }
+        for c in computed
+        if c["status"] == "funding"
+    ]
+
     return {
         "contract": {
             "id": contract.get("id"),
@@ -404,6 +781,34 @@ def compute(
             "current_week": cw,
             "total_weeks": tw,
             "weeks_remaining": max(0, tw - cw),
+            # The active period, and the funding arithmetic that scopes a
+            # contract-to-date obligation down to it. Reported rather than
+            # implied so the numbers on screen can be reconciled to the award:
+            #   period_funded = min(period_ceiling, obligated - prior_consumed)
+            "period": period.get("name"),
+            "period_ceiling": round(active_ceiling, 2),
+            "contract_ceiling": header.get("total_ceiling"),
+            "obligated": obligated,
+            "prior_consumed": round(prior_consumed, 2),
+            "period_funded": (
+                round(period_funded, 2) if period_funded is not None else None
+            ),
+            "incrementally_funded": period_funded is not None,
+            # True when no CLIN carried a period label, so the CLIN set could not
+            # be scoped and every period's ceiling is in these totals.
+            "clin_scope": clin_scope,
+            # False when the synced weeks don't overlap this PoP at all, so
+            # charges could not be date-scoped to the period (see
+            # _effective_window) — the burn figures are the whole feed.
+            "pop_scoped": window_applied,
+            "past_pop": past_pop,
+            "weeks_overrun": clk["weeks_overrun"],
+            # How funding pace was judged: from ingested SF-30 obligation history
+            # (dollars landing vs. burned) or the funded-vs-elapsed proxy.
+            "funding_pace_source": (
+                "obligation_history" if pace_override is not None else "proxy"
+            ),
+            "obligation_weekly": obligation_weekly,
         },
         "totals": {
             "ceiling": round(total_ceiling, 2),
@@ -427,7 +832,8 @@ def compute(
         "clins": computed + nl_cards,
         "tripwires": tripwires,
         "underburn": underburn,
-        "all_clear": len(tripwires) == 0 and len(underburn) == 0,
+        "funding": funding,
+        "all_clear": len(tripwires) == 0 and len(underburn) == 0 and len(funding) == 0,
         "sync": {
             "rows": len(rows),
             "people": len({r.get("employee_id") for r in rows if r.get("employee_id")}),
@@ -450,7 +856,9 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
         # just as much a breach as a labor one.
         if any(x["status"] == "over" for x in b["clins"]):
             overall = "over"
-        elif any(x["status"] == "watch" for x in b["clins"]):
+        elif any(x["status"] in ("watch", "funding") for x in b["clins"]):
+            # Funding-due (#22) rolls up amber alongside watch — not a breach, but
+            # not all-clear either; the contract needs its next funding action.
             overall = "watch"
         elif any(x["status"] == "under" for x in b["clins"]):
             overall = "under"

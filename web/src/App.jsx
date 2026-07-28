@@ -5,6 +5,7 @@ import Ingest from "./views/Ingest.jsx";
 import Portfolio from "./views/Portfolio.jsx";
 import FlightDeck from "./views/FlightDeck.jsx";
 import Expenses from "./views/Expenses.jsx";
+import FundingHistory from "./views/FundingHistory.jsx";
 import { applyTheme } from "./theme.js";
 import { getBurn } from "./api.js";
 
@@ -111,6 +112,8 @@ export default function App() {
             <FlightDeck contractId={activeId} setActiveId={setActiveId} onOpenExpenses={openExpenses} />
           ) : view === "expenses" ? (
             <Expenses contractId={activeId} initialClin={expenseClin} setActiveId={setActiveId} />
+          ) : view === "funding" ? (
+            <FundingHistory contractId={activeId} />
           ) : view === "allocate" ? (
             <Placeholder name="Allocation Matrix" note="Staff → CLINs allocation is coming soon (issue #21)." />
           ) : view === "chat" ? (

@@ -43,7 +43,7 @@ export function pill(status) {
 export const statusColor = (status) =>
   status === "over"
     ? "var(--bad)"
-    : status === "watch" || status === "under"
+    : status === "watch" || status === "under" || status === "funding"
       ? "var(--warn)"
       : "var(--good)";
 
