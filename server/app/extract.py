@@ -1,8 +1,26 @@
 import base64
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from . import confidence
 from .schemas import Extraction, Modification
+
+# Load the server's dotenv files before any credential lookup. Without this the
+# app only saw credentials that happened to be exported in the shell that
+# launched it, so a server started from a fresh terminal 502'd the ingest routes
+# with "could not resolve credentials from session" while the keys sat unread in
+# server/.env.local.
+#
+# Precedence, highest first (override=False means the first value loaded wins,
+# so anything already in the real environment beats both files):
+#   1. the process environment  — CI, one-off `VAR=... uvicorn ...`
+#   2. .env.local               — machine-specific secrets, gitignored
+#   3. .env                     — shared defaults, gitignored
+_SERVER_DIR = Path(__file__).resolve().parents[1]
+for _env_file in (".env.local", ".env"):
+    load_dotenv(_SERVER_DIR / _env_file, override=False)
 
 # Provider switch: "bedrock" (default — classic AWS credentials) or "anthropic"
 # (direct API key). Set RUNWAY_PROVIDER=anthropic to route through the Anthropic
