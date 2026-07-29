@@ -4,8 +4,10 @@ from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from . import burn, db, extract, sources
+from . import ask, burn, db, extract, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -377,3 +379,35 @@ def remove_expense(contract_id: int, expense_id: int):
     if not db.delete_expense(contract_id, expense_id):
         raise HTTPException(status_code=404, detail="Expense not found.")
     return {"deleted": expense_id}
+
+
+class AskIn(BaseModel):
+    """One Ask Runway turn. `history` is the prior conversation (user/assistant
+    turns) for follow-up drill-downs; `contract_id` is the contract the user
+    currently has open, so 'this contract' resolves to it."""
+
+    question: str
+    history: list[dict] = []
+    contract_id: Optional[int] = None
+
+
+@app.post("/api/ask")
+def ask_runway(body: AskIn):
+    """Ask Runway (#15): a natural-language answer grounded in the burn engine's
+    numbers, streamed back as plain text so the chat feels live. The model never
+    recomputes — it reasons over the portfolio + per-contract burn payloads that
+    ask.build_grounding assembles (see ask.py)."""
+    q = (body.question or "").strip()
+    if not q:
+        raise HTTPException(status_code=422, detail="Ask a question.")
+
+    def gen():
+        try:
+            yield from ask.stream_answer(q, body.history, body.contract_id)
+        except Exception as e:
+            # The stream has already started (200 + headers sent), so surface the
+            # failure inline in the answer text rather than as an HTTP error the
+            # frontend can no longer catch.
+            yield f"\n\n[Ask Runway hit an error: {e}]"
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")

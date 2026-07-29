@@ -6,6 +6,7 @@ import Portfolio from "./views/Portfolio.jsx";
 import FlightDeck from "./views/FlightDeck.jsx";
 import Expenses from "./views/Expenses.jsx";
 import FundingHistory from "./views/FundingHistory.jsx";
+import AskRunway from "./views/AskRunway.jsx";
 import { applyTheme } from "./theme.js";
 import { getBurn } from "./api.js";
 
@@ -56,6 +57,8 @@ export default function App() {
   const [view, setView] = useState("portfolio");
   const [theme, setTheme] = useState("light");
   const [activeId, setActiveId] = useState(null);
+  // Ask Runway is a slide-out drawer overlaid on any view, not a view itself.
+  const [askOpen, setAskOpen] = useState(false);
   // The non-labor CLIN a Flight Deck card asked the Expenses view to open on.
   const [expenseClin, setExpenseClin] = useState(null);
   // Burn summary for the active contract, used only to dress the global chrome
@@ -101,7 +104,7 @@ export default function App() {
           theme={theme}
           toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           onExport={() => exportCsv(chrome)}
-          onAskRunway={() => setView("chat")}
+          onAskRunway={() => setAskOpen(true)}
         />
         <div style={{ flex: 1, overflow: "auto" }}>
           {view === "ingest" ? (
@@ -116,13 +119,16 @@ export default function App() {
             <FundingHistory contractId={activeId} />
           ) : view === "allocate" ? (
             <Placeholder name="Allocation Matrix" note="Staff → CLINs allocation is coming soon (issue #21)." />
-          ) : view === "chat" ? (
-            <Placeholder name="Ask Runway" note="Live AI answers on your burn are coming soon (issue #15)." />
           ) : (
             <Placeholder name={view} note="Coming soon." />
           )}
         </div>
       </main>
+      <AskRunway
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        contractId={activeId}
+      />
     </div>
   );
 }
