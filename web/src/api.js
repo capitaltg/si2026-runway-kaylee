@@ -111,3 +111,28 @@ export async function syncTimesheets(contractId, { rows, seed } = {}) {
   if (!r.ok) throw new Error(`Sync failed (${r.status})`);
   return r.json();
 }
+
+// Ask Runway (#15). Streams a plain-text answer grounded in the burn engine's
+// numbers; onChunk fires with each incremental piece so the panel can render the
+// answer as it arrives. Returns the full answer once the stream closes.
+export async function askRunway({ question, history = [], contractId = null }, onChunk) {
+  const r = await fetch(`${BASE}/api/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history, contract_id: contractId }),
+  });
+  if (!r.ok || !r.body) throw new Error(`Ask failed (${r.status})`);
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (chunk) {
+      full += chunk;
+      onChunk?.(chunk);
+    }
+  }
+  return full;
+}
