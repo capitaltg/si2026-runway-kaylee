@@ -99,9 +99,14 @@ def _seed_award_obligation(data: dict) -> None:
 
 
 @app.post("/api/contracts/confirm")
-def confirm(extraction: Extraction):
+def confirm(extraction: Extraction, seed: Optional[int] = None):
+    """Save a reviewed extraction as a contract. An optional Fixtura `seed`
+    records which data batch this award was generated against, so its timesheet
+    syncs stay coherent (see sync_timesheets' seed precedence)."""
     data = extraction.model_dump()
     _seed_award_obligation(data)
+    if seed is not None:
+        data["sync_seed"] = seed
     cid = db.save_contract(extraction.contract.piid, data)
     return {"id": cid, "piid": extraction.contract.piid}
 
@@ -275,18 +280,41 @@ def contracts():
 
 @app.post("/api/contracts/{contract_id}/timesheets/sync")
 def sync_timesheets(
-    contract_id: int, rows: int = sources.DEMO_SYNC_ROWS, seed: int = 42
+    contract_id: int, rows: int = sources.DEMO_SYNC_ROWS, seed: Optional[int] = None
 ):
     """Pull a fresh timesheet batch from Fixtura and cache it against this
     contract. Delete-then-insert (via db.replace_timesheets) so a re-sync
-    never double-counts hours."""
-    if db.get_contract(contract_id) is None:
+    never double-counts hours.
+
+    Seed precedence: an explicit ?seed wins; otherwise the seed this contract was
+    last synced with (persisted on its blob), otherwise the module default. So a
+    contract keeps generating the *coherent* batch it was ingested against —
+    different demo bundles carry different seeds, and the auto-sync (which passes
+    no seed) reuses each contract's own seed instead of a single hardwired one."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
+    effective_seed = (
+        seed
+        if seed is not None
+        else (
+            contract.get("sync_seed")
+            if contract.get("sync_seed") is not None
+            else sources.DEFAULT_SYNC_SEED
+        )
+    )
     try:
-        ts = sources.fetch_timesheets(rows=rows, seed=seed)
+        ts = sources.fetch_timesheets(rows=rows, seed=effective_seed)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Timesheet sync failed: {e}")
     stored = db.replace_timesheets(contract_id, ts)
+    # Remember an explicitly chosen seed so future auto-syncs stay coherent.
+    if seed is not None and contract.get("sync_seed") != seed:
+        blob = {
+            k: v for k, v in contract.items() if k not in ("id", "piid", "created_at")
+        }
+        blob["sync_seed"] = seed
+        db.update_contract(contract_id, blob)
     return {
         "id": contract_id,
         "rows": stored,

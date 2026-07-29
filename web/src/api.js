@@ -14,8 +14,11 @@ export async function getSources() {
   return r.json();
 }
 
-export async function confirm(extraction) {
-  const r = await fetch(`${BASE}/api/contracts/confirm`, {
+export async function confirm(extraction, seed) {
+  // seed (optional) records the Fixtura batch this award came from, so future
+  // timesheet syncs for this contract stay coherent instead of using the default.
+  const q = seed != null && seed !== "" ? `?seed=${encodeURIComponent(seed)}` : "";
+  const r = await fetch(`${BASE}/api/contracts/confirm${q}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(extraction),

@@ -340,6 +340,9 @@ export default function Ingest({ onSaved }) {
   const [editing, setEditing] = useState(false);
   const [fileName, setFileName] = useState(null);
   const [error, setError] = useState(null);
+  // Optional Fixtura seed for the demo bundle this award came from, stored on the
+  // contract so its timesheet syncs stay coherent (blank = use the default).
+  const [seed, setSeed] = useState("");
   const fileRef = useRef(null);
 
   async function run(file) {
@@ -376,6 +379,7 @@ export default function Ingest({ onSaved }) {
   function reset() {
     setResult(null);
     setFileName(null);
+    setSeed("");
     setEditing(false);
     setStage("upload");
   }
@@ -386,7 +390,7 @@ export default function Ingest({ onSaved }) {
       return;
     }
     try {
-      const saved = await confirm(result);
+      const saved = await confirm(result, seed === "" ? null : Number(seed));
       reset();
       onSaved?.(saved.id); // jump straight to the new contract's flight deck
     } catch (e) {
@@ -521,6 +525,8 @@ export default function Ingest({ onSaved }) {
           setEditing={setEditing}
           onReset={reset}
           onConfirm={onConfirm}
+          seed={seed}
+          setSeed={setSeed}
         />
       )}
     </div>
@@ -530,7 +536,7 @@ export default function Ingest({ onSaved }) {
 // The review/edit surface. The SAME form powers three cases: reviewing an AI
 // extraction, editing it, and manual entry (which is just an empty draft opened
 // in edit mode). Everything saves through POST /api/contracts/confirm.
-function Review({ value, onChange, editing, setEditing, onReset, onConfirm }) {
+function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed, setSeed }) {
   const [openRates, setOpenRates] = useState({}); // clin index -> expanded?
   const c = value.contract || {};
   const fc = c.field_confidence || {};
@@ -764,7 +770,25 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16 }}>
+        <label
+          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)" }}
+          title="Fixtura seed this award was generated with. Stored on the contract so its timesheet syncs stay coherent. Leave blank for the default."
+        >
+          Data seed
+          <input
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            placeholder="default"
+            style={{
+              width: 88, height: 38, padding: "0 10px", borderRadius: 10,
+              border: "1px solid var(--border)", background: "var(--panel2)",
+              color: "var(--text)", fontSize: 13,
+            }}
+          />
+        </label>
+        <div style={{ flex: 1 }} />
         <button
           onClick={onReset}
           style={{
