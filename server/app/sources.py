@@ -41,6 +41,11 @@ DEMO_SCENARIO_OPTS = {
 # burn on plan (funded dollars then exhaust ~wk 34). Any caller can override it.
 DEMO_SYNC_ROWS = 460
 
+# Fallback Fixtura seed for a contract that hasn't recorded its own. The demo's
+# burn-demo bundle was generated at this seed; other bundles (e.g. funding-pace)
+# carry their own, persisted per-contract and passed back on sync.
+DEFAULT_SYNC_SEED = 42
+
 # The five commercial systems we show as placeholders. Real GovCon timesheet /
 # payroll / billing tools, matching the design's vendor set — marked "Not
 # connected" because we have no live integration with them here.
@@ -101,7 +106,7 @@ def _probe_fixtura() -> dict:
     return box
 
 
-def fetch_timesheets(rows: int = DEMO_SYNC_ROWS, seed: int = 42) -> list:
+def fetch_timesheets(rows: int = DEMO_SYNC_ROWS, seed: int = DEFAULT_SYNC_SEED) -> list:
     """Live-pull a full timesheet batch from Fixtura for the sync endpoint.
 
     Unlike `_probe_fixtura` (which swallows errors to keep the Step-1 sources
