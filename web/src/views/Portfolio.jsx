@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getPortfolio } from "../api.js";
+import { getPortfolio, getAllocationConflicts } from "../api.js";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
@@ -24,11 +24,15 @@ const initials = (name) =>
 export default function Portfolio({ onOpen }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [conflicts, setConflicts] = useState(null);
 
   useEffect(() => {
     getPortfolio()
       .then(setData)
       .catch((e) => setError(e.message));
+    getAllocationConflicts()
+      .then(setConflicts)
+      .catch(() => setConflicts(null));
   }, []);
 
   if (error) {
@@ -171,6 +175,71 @@ export default function Portfolio({ onOpen }) {
           );
         })}
       </div>
+
+      {/* resource conflicts — people booked >100% across contracts */}
+      {conflicts && conflicts.count > 0 && (
+        <div style={{ ...panelStyle, marginTop: 22, borderColor: "var(--warn)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2">
+              <path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" strokeLinejoin="round" />
+              <path d="M12 9v4M12 17h.01" strokeLinecap="round" />
+            </svg>
+            <h3 style={{ margin: 0, fontFamily: grotesk, fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
+              Resource conflicts
+            </h3>
+            <span style={{ fontSize: 12, color: "var(--dim)" }}>
+              {conflicts.count} {conflicts.count === 1 ? "person" : "people"} booked over a full week across contracts
+            </span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 12 }}>
+            {conflicts.conflicts.map((p) => (
+              <div
+                key={p.employee_id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "9px 12px",
+                  borderRadius: 11,
+                  background: "var(--panel2)",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontWeight: 600, color: "var(--text)", minWidth: 150 }}>{p.name}</span>
+                <span
+                  style={{
+                    fontFamily: "'IBM Plex Mono',monospace",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    color: p.utilization > 1.5 ? "var(--bad)" : "var(--warn)",
+                  }}
+                >
+                  {Math.round(p.utilization * 100)}% · {p.total_hours} hrs/wk
+                </span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {p.assignments.map((a, i) => (
+                    <span
+                      key={i}
+                      onClick={() => onOpen(a.contract_id)}
+                      title="Open contract"
+                      style={{
+                        fontSize: 11,
+                        color: "var(--dim)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 7,
+                        padding: "2px 8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {a.contract} · {a.hours}h
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
