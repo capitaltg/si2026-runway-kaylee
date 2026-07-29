@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import ask, burn, db, extract, sources
+from . import allocation, ask, burn, db, extract, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -337,6 +337,122 @@ def contract_burn(contract_id: int):
         db.get_timesheets(contract_id),
         db.list_expenses(contract_id),
     )
+
+
+class RenameIn(BaseModel):
+    """A user-chosen contract nickname. Empty/omitted clears it back to the legal
+    name."""
+
+    name: Optional[str] = None
+
+
+@app.put("/api/contracts/{contract_id}/name")
+def rename_contract(contract_id: int, body: RenameIn):
+    """Set or clear a contract's nickname (a callsign like 'FALCON'). The nickname
+    becomes the display name everywhere the burn payload feeds (sidebar, Flight
+    Deck, Portfolio, allocation, Ask Runway)."""
+    updated = db.rename_contract(contract_id, body.name)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {
+        "id": contract_id,
+        "nickname": updated.get("nickname"),
+        "piid": updated.get("piid"),
+    }
+
+
+@app.get("/api/contracts/{contract_id}/allocation")
+def contract_allocation(contract_id: int):
+    """Allocation matrix (#21): the employee x labor-CLIN hrs/wk grid for the
+    active period, with each CLIN's budget/spend/clock, for the what-if simulator.
+    The frontend edits cells and recomputes runway live; see allocation.py."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return allocation.compute_allocation(
+        contract,
+        db.get_timesheets(contract_id),
+        db.list_expenses(contract_id),
+    )
+
+
+class PlanIn(BaseModel):
+    """A saved allocation what-if plan: a name plus the opaque sim state the
+    frontend needs to reload it (per-person hrs grid, planned adds, removals)."""
+
+    name: str
+    data: dict = {}
+
+
+@app.get("/api/contracts/{contract_id}/plans")
+def get_plans(contract_id: int):
+    """A contract's saved allocation plans, newest first, with their full state."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return db.list_plans(contract_id)
+
+
+@app.post("/api/contracts/{contract_id}/plans")
+def create_plan(contract_id: int, body: PlanIn):
+    """Save a named allocation what-if plan for later reload."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    name = (body.name or "").strip() or "Untitled plan"
+    return db.save_plan(contract_id, name, body.data)
+
+
+@app.delete("/api/contracts/{contract_id}/plans/{plan_id}")
+def remove_plan(contract_id: int, plan_id: int):
+    """Delete one saved allocation plan."""
+    if not db.delete_plan(contract_id, plan_id):
+        raise HTTPException(status_code=404, detail="Plan not found.")
+    return {"deleted": plan_id}
+
+
+@app.get("/api/allocation/conflicts")
+def allocation_conflicts():
+    """Portfolio resource conflicts: people booked past a full 40-hr week once
+    their hours are summed across every contract. Matches on employee_id, so it
+    only surfaces real overlaps (e.g. a shared roster) — never double-counts one
+    person on one contract."""
+    people = {}
+    for c in db.list_contracts():
+        alloc = allocation.compute_allocation(
+            c, db.get_timesheets(c["id"]), db.list_expenses(c["id"])
+        )
+        cname = alloc["contract"]["name"]
+        for e in alloc["employees"]:
+            hrs = sum(cell["hours"] for cell in e.get("cells", {}).values())
+            if hrs <= 0:
+                continue
+            p = people.setdefault(
+                e["id"],
+                {
+                    "employee_id": e["id"],
+                    "name": e["name"],
+                    "total_hours": 0.0,
+                    "assignments": [],
+                },
+            )
+            p["total_hours"] += hrs
+            p["assignments"].append(
+                {
+                    "contract_id": alloc["contract"]["id"],
+                    "contract": cname,
+                    "hours": round(hrs, 1),
+                }
+            )
+    conflicts = [
+        {
+            **p,
+            "total_hours": round(p["total_hours"], 1),
+            "utilization": round(p["total_hours"] / 40, 2),
+        }
+        for p in people.values()
+        if len(p["assignments"]) >= 2 and p["total_hours"] > 40
+    ]
+    conflicts.sort(key=lambda p: -p["total_hours"])
+    return {"count": len(conflicts), "conflicts": conflicts}
 
 
 @app.get("/api/portfolio")

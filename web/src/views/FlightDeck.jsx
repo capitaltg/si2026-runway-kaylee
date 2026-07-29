@@ -13,12 +13,16 @@ const tileLabel = {
 };
 const tileNum = { fontFamily: grotesk, fontWeight: 700, fontSize: 30, color: "var(--text)", marginTop: 8 };
 
-export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) {
+export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, onRename }) {
   const [burn, setBurn] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
+  // Inline contract rename (nickname) right on the title.
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const cancelRename = useRef(false);
   // Contracts we've already auto-synced once, so we don't re-sync on every load.
   const autoSyncedRef = useRef(new Set());
 
@@ -106,14 +110,80 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses }) 
           ? "lands tight against the finish line"
           : "clears the finish line";
 
+  function startRename() {
+    cancelRename.current = false;
+    setNameDraft(contract.nickname || "");
+    setRenaming(true);
+  }
+  async function commitRename() {
+    setRenaming(false);
+    if (cancelRename.current) {
+      cancelRename.current = false;
+      return;
+    }
+    const next = nameDraft.trim();
+    if (next !== (contract.nickname || "") && onRename) {
+      await onRename(next);
+      load(contractId);
+    }
+  }
+
   return (
     <div style={{ padding: "24px 26px 60px", maxWidth: 1280 }}>
-      {/* header */}
+      {/* header — title doubles as a rename field (nickname); official name below */}
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
-          {contract.name || contract.piid}
-        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {renaming ? (
+            <input
+              autoFocus
+              value={nameDraft}
+              placeholder="Name it (e.g. FALCON)"
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                else if (e.key === "Escape") {
+                  cancelRename.current = true;
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={commitRename}
+              style={{
+                fontFamily: grotesk,
+                fontSize: 22,
+                fontWeight: 600,
+                color: "var(--text)",
+                background: "var(--inputBg)",
+                border: "1px solid var(--accent)",
+                borderRadius: 8,
+                padding: "2px 10px",
+                minWidth: 260,
+              }}
+            />
+          ) : (
+            <>
+              <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
+                {contract.name || contract.piid}
+              </h2>
+              <button
+                onClick={startRename}
+                title="Rename this contract (give it a callsign)"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--accent)",
+                  cursor: "pointer",
+                  fontSize: 15,
+                  lineHeight: 1,
+                  padding: 2,
+                }}
+              >
+                ✎
+              </button>
+            </>
+          )}
+        </div>
         <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 5 }}>
+          {contract.nickname && contract.legal_name ? `${contract.legal_name} · ` : ""}
           {contract.agency || "—"} · {contract.piid}
         </div>
       </div>

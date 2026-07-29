@@ -35,6 +35,11 @@ DEMO_SCENARIO_OPTS = {
     # on plan — otherwise a one-person-per-line roster logs a fraction of the
     # hours and the contract reads far under budget.
     "staffing": 1.0,
+    # Draw rosters from a shared cross-contract people pool so some employees show
+    # up on more than one contract — which is what the portfolio resource-conflict
+    # detector (people booked >100% across contracts) needs to have anything to
+    # find. Identity is shared; each contract still sets its own LCAT/CLIN/rate.
+    "shared_pool": True,
 }
 # Rows to pull on a full sync. At the demo's staffing this is ~one weekly
 # timesheet per person across the in-progress period — enough logged hours to
