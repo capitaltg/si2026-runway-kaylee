@@ -69,3 +69,24 @@ test("funding memo defaults to the first funding item when no focusClin given", 
   const doc = buildDraft("funding", sampleBurn(), {});
   assert.match(renderDraftText(doc), /CLIN 0002/);
 });
+
+test("invoice bills per-CLIN incurred cost with no prose section", () => {
+  const doc = buildDraft("invoice", sampleBurn(), {});
+  assert.equal(doc.docType, "invoice");
+  // Invoice is numbers + certification only — the model rewrites nothing here.
+  assert.equal(doc.sections.filter((s) => s.kind === "prose").length, 0);
+  const text = renderDraftText(doc);
+  assert.match(text, /DRAFT/);
+  assert.match(text, /W519TC-24-C-0007/);          // PIID
+  assert.match(text, /CLIN 0001/);
+  assert.match(text, /\$0\.90M/);                   // moneyM(clin[0].spent)
+  // A certification line is present (fixed text, not model-authored).
+  assert.match(text.toLowerCase(), /certif/);
+});
+
+test("invoice flags missing spend as [verify], never $0", () => {
+  const burn = sampleBurn();
+  delete burn.clins[0].spent;                        // simulate absent actuals
+  const text = renderDraftText(buildDraft("invoice", burn, {}));
+  assert.match(text, /\[verify\]/);
+});

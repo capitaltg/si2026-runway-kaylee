@@ -92,7 +92,56 @@ function buildFunding(burn, opts) {
   };
 }
 
-const BUILDERS = { funding: buildFunding };
+function buildInvoice(burn, _opts) {
+  const c = burn.contract || {};
+  const clins = burn.clins || [];
+  const rows = clins.map((x) => [
+    vf(x.code),
+    vf(x.name),
+    moneyV(x.spent),                 // cost incurred to date (labor + expenses)
+    moneyV(x.ceiling),
+    moneyV(x.remaining),
+  ]);
+  const totalSpent = clins.every((x) => typeof x.spent === "number")
+    ? clins.reduce((s, x) => s + x.spent, 0)
+    : null;
+
+  return {
+    docType: "invoice",
+    title: "Public Voucher for Purchases and Services (SF-1034, draft)",
+    draftLabel: DRAFT_LABEL,
+    meta: [
+      { label: "Voucher for", value: vf(c.agency) },
+      { label: "Contractor", value: contractorOf(c) },
+      { label: "Contract (PIID)", value: vf(c.piid) },
+      { label: "Period of performance", value: pop(c) },
+      { label: "Billing period", value: `through ${vf(burn.sync && burn.sync.latest_week)}` },
+      { label: "Total amount claimed", value: moneyV(totalSpent) },
+    ],
+    sections: [
+      {
+        id: "lines",
+        heading: "Cost incurred by CLIN",
+        kind: "table",
+        columns: ["CLIN", "Description", "Amount claimed", "Ceiling", "Remaining"],
+        rows,
+      },
+      {
+        id: "certification",
+        heading: "Certification",
+        kind: "text",
+        text:
+          "I certify that the above amounts are correct and represent costs " +
+          "incurred in performance of the contract, that payment has not been " +
+          "received, and that the amounts claimed conform to the contract terms. " +
+          "This is a draft generated from burn data and must be reconciled to the " +
+          "accounting system of record before submission.",
+      },
+    ],
+  };
+}
+
+const BUILDERS = { funding: buildFunding, invoice: buildInvoice };
 
 export function buildDraft(docType, burn, opts = {}) {
   const build = BUILDERS[docType];
