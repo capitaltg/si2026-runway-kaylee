@@ -509,15 +509,38 @@ def _clock(period: dict, rows: List[dict]):
     }
 
 
-def _nl_status(spent: float, ceiling: float) -> str:
+def _nl_status(
+    spent: float,
+    budget: float,
+    ceiling: float,
+    incrementally_funded: bool,
+    past_pop: bool,
+    funding_keeps_pace: bool,
+    mod_in_progress: bool,
+) -> str:
     """Status for a non-labor CLIN from its logged actuals. No timesheet pace to
-    project, so it's a straight spent-vs-ceiling read: nothing logged reads
-    `tracked`, otherwise the same ceiling bands the labor cards use."""
+    project, so it's a realized spent-vs-*budget* read, where `budget` is the
+    funded slice when the CLIN is incrementally funded, else the full ceiling
+    (#41). This is the same binding-dollar denominator the labor path uses — a
+    travel/ODC CLIN past its obligated funding is a real Limitation of Funds
+    problem even while it sits under the ceiling.
+
+    Nothing logged reads `tracked`. A realized breach of the actual ceiling is
+    always red `over`. Between the funded slice and the ceiling, mirror the labor
+    softening (#22): still-live with funding keeping pace (or a mod flagged) reads
+    amber `funding` — the next obligation tranche just isn't posted yet — while a
+    finished period, or funding genuinely lagging with no mod, stays red `over`.
+    Below the binding budget, the same 80% `watch` band the labor cards use, on
+    the binding denominator."""
     if spent <= 0:
         return "tracked"
-    pct = (spent / ceiling) if ceiling else 0.0
-    if pct >= 1.0:
+    if ceiling and spent >= ceiling:
         return "over"
+    if incrementally_funded and budget and spent >= budget:
+        if not past_pop and (mod_in_progress or funding_keeps_pace):
+            return "funding"
+        return "over"
+    pct = (spent / budget) if budget else 0.0
     if pct >= 0.8:
         return "watch"
     return "ok"
@@ -689,12 +712,37 @@ def compute(
         k = str(e.get("clin") or "").strip()
         exp_by_clin[k] = exp_by_clin.get(k, 0.0) + float(e.get("amount") or 0)
         exp_count[k] = exp_count.get(k, 0) + 1
+    # Non-labor CLINs carry the same funded/budget fields the labor cards do, so
+    # they're measured against the binding budget (funded slice when incrementally
+    # funded, else the ceiling) rather than the raw ceiling (#41). The funded slice
+    # comes from the same pro-rata `funded_for` allocation labor uses; per-CLIN
+    # real-obligation splits are #21. The funding-pace read is contract-level: the
+    # SF-30 obligation-history override when present, else the funded-vs-elapsed
+    # proxy — the same signal `_compute_clin` applies to labor.
+    elapsed_frac = min(1.0, cw / tw) if tw else 0.0
     nl_cards = []
     for c in nonlabor:
         ceiling = float(c.get("ceiling") or 0)
         num = _clin_num(c)
         spent = exp_by_clin.get(num, 0.0)
-        status = _nl_status(spent, ceiling)
+        funded = funded_for(c)
+        incrementally_funded = funded is not None and funded < ceiling
+        budget = funded if incrementally_funded else ceiling
+        funded_frac = (funded / ceiling) if (funded is not None and ceiling) else 1.0
+        if pace_override is not None:
+            funding_keeps_pace = pace_override
+        else:
+            funding_keeps_pace = funded_frac >= elapsed_frac - _FUND_LAG_SLACK
+        status = _nl_status(
+            spent,
+            budget,
+            ceiling,
+            incrementally_funded,
+            past_pop,
+            funding_keeps_pace,
+            mod_in_progress,
+        )
+        remaining = budget - spent
         nl_cards.append(
             {
                 "id": num,
@@ -702,13 +750,32 @@ def compute(
                 "name": c.get("title"),
                 "is_labor": False,
                 "ceiling": ceiling,
+                # Binding budget the status is measured against, and whether it's
+                # the funded slice rather than the full ceiling (#41).
+                "funded": round(funded, 2) if funded is not None else None,
+                "budget": round(budget, 2),
+                "incrementally_funded": incrementally_funded,
                 "spent": round(spent, 2),
+                # `pct` stays ceiling-based for the display %; the two-denominator
+                # reconciliation on the card is #39. Status uses the budget.
                 "pct": round((spent / ceiling) if ceiling else 0.0, 4),
-                "remaining": round(ceiling - spent, 2),
+                "remaining": round(remaining, 2),
+                "overspent": round(spent - budget, 2) if remaining < 0 else 0.0,
                 "entries": exp_count.get(num, 0),
                 "status": status,
                 "status_label": "Tracked" if status == "tracked" else _pill(status),
                 "rate_source": "n/a",
+                # No timesheet series → no forward pace. Realized read only; the
+                # None runway fields let the tripwire lists (below) treat these
+                # rows uniformly with labor without inventing a runway.
+                "exhaust_week": None,
+                "runway_days": None,
+                "weeks_left": None,
+                "funded_frac": round(funded_frac, 4),
+                "elapsed_frac": round(elapsed_frac, 4),
+                "funding_keeps_pace": funding_keeps_pace,
+                "mod_in_progress": bool(mod_in_progress),
+                "limited_by": "funding" if incrementally_funded else "ceiling",
             }
         )
 
@@ -740,7 +807,10 @@ def compute(
             "funded": c["funded"],
             "budget": c["budget"],
         }
-        for c in computed
+        # Non-labor CLINs over their binding budget are Limitation of Funds
+        # problems too (#41), so they roll into the red list alongside labor.
+        # Their `exhaust_week` is None (realized read, no forward pace).
+        for c in computed + nl_cards
         if c["status"] == "over"
     ]
 
@@ -785,7 +855,10 @@ def compute(
             "elapsed_frac": c["elapsed_frac"],
             "mod_in_progress": c["mod_in_progress"],
         }
-        for c in computed
+        # Non-labor CLINs share the amber funding softening (#41), so a travel/ODC
+        # CLIN awaiting its next obligation lands in the same "request outstanding"
+        # list as labor rather than reading All clear.
+        for c in computed + nl_cards
         if c["status"] == "funding"
     ]
 
