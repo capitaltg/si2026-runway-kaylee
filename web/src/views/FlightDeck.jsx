@@ -263,12 +263,12 @@ export default function FlightDeck({
     return <div style={{ padding: "40px", color: "var(--dim)" }}>Loading flight deck…</div>;
   }
 
-  const { contract, totals, hero, tripwires, underburn = [], funding = [], all_clear, sync } = burn;
+  const { contract, totals, hero, tripwires, underburn = [], funding = [], data_quality = [], all_clear, sync } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
   const heroColor2 =
-    hero?.status === "over"
+    hero?.status === "over" || hero?.status === "unpriced"
       ? "#c23636"
       : hero?.status === "watch" || hero?.status === "funding"
         ? "#c26e12"
@@ -281,11 +281,13 @@ export default function FlightDeck({
       ? hero?.limited_by === "funding"
         ? "runs out of funded dollars before the PoP ends"
         : "blows the ceiling before the PoP ends"
-      : hero?.status === "funding"
-        ? "needs its next funding mod before the PoP ends"
-        : hero?.status === "watch"
-          ? "lands tight against the finish line"
-          : "clears the finish line";
+      : hero?.status === "unpriced"
+        ? "has charges the engine can't price — burn is unknown, not clear"
+        : hero?.status === "funding"
+          ? "needs its next funding mod before the PoP ends"
+          : hero?.status === "watch"
+            ? "lands tight against the finish line"
+            : "clears the finish line";
 
   function startRename() {
     cancelRename.current = false;
@@ -586,6 +588,74 @@ export default function FlightDeck({
         </div>
       ))}
 
+      {/* data-quality gaps (#40) — CLINs with charged rows the engine could not
+          price. The most dangerous state: without this the contract reads "All
+          clear" because $0 priced looks like $0 spent. Rendered above all_clear,
+          which is now gated off when any of these exist. */}
+      {data_quality.map((dq) => (
+        <div
+          key={dq.code}
+          style={{
+            border: "1px solid var(--bad)",
+            background: "var(--badBg)",
+            borderRadius: 16,
+            padding: "16px 18px",
+            marginBottom: 16,
+            display: "flex",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              flex: "0 0 38px",
+              borderRadius: 11,
+              background: "var(--bad)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            ?
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--bad)" }}>
+                Can't price {dq.code} {dq.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "'IBM Plex Mono',monospace",
+                  background: "var(--bad)",
+                  color: "#fff",
+                  padding: "2px 8px",
+                  borderRadius: 20,
+                }}
+              >
+                {dq.charged_rows} rows · $0 priced
+              </span>
+            </div>
+            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+              {dq.code} has {dq.charged_rows} charged timesheet{dq.charged_rows === 1 ? "" : "s"} but no
+              labor rate to value them — so its burn reads $0 and would otherwise show as clear. This is a
+              data gap, not a clean line.
+              {dq.unmatched_lcats.length > 0 && (
+                <>
+                  {" "}Unpriced labor categor{dq.unmatched_lcats.length === 1 ? "y" : "ies"}:{" "}
+                  <b>{dq.unmatched_lcats.join(", ")}</b>.
+                </>
+              )}
+              {" "}Import a labor-rate schedule for this contract (supplemental rates) so the engine can
+              price these hours.
+            </div>
+          </div>
+        </div>
+      ))}
+
       {all_clear && (
         <div
           style={{
@@ -724,7 +794,7 @@ export default function FlightDeck({
             Days of runway
           </div>
           <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 52, lineHeight: 1, marginTop: 8 }}>
-            {hero ? hero.days : "—"}
+            {hero && hero.days != null ? hero.days : "—"}
           </div>
           <div style={{ fontSize: 12.5, opacity: 0.92, marginTop: 8, lineHeight: 1.4 }}>
             {hero ? `Limited by ${hero.clin} · ${heroSub}` : "No burn logged yet — sync timesheets"}
