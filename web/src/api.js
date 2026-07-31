@@ -188,3 +188,28 @@ export async function askRunway({ question, history = [], contractId = null }, o
   }
   return full;
 }
+
+// Runway Drafts. Streams the narrative PROSE for a generated document (numbers
+// are filled client-side); onChunk fires per chunk so the panel can render it
+// live. Mirrors askRunway's plain-text stream. Returns the full prose on close.
+export async function draftProse({ contractId = null, docType }, onChunk) {
+  const r = await fetch(`${BASE}/api/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contract_id: contractId, doc_type: docType }),
+  });
+  if (!r.ok || !r.body) throw new Error(`Draft failed (${r.status})`);
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (chunk) {
+      full += chunk;
+      onChunk?.(chunk);
+    }
+  }
+  return full;
+}

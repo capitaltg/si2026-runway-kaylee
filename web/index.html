@@ -25,6 +25,15 @@
       @keyframes rwdash { to { stroke-dashoffset: -14; } }
       @keyframes rwping { 0% { transform: scale(.7); opacity: .7; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
       @keyframes rwblink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+      @media print {
+        body * { visibility: hidden; }
+        .draft-page, .draft-page * { visibility: visible; }
+        .draft-page {
+          position: absolute; left: 0; top: 0; width: 100%;
+          box-shadow: none !important; border: none !important; padding: 0 !important;
+        }
+        .no-print { display: none !important; }
+      }
     </style>
   </head>
   <body>
