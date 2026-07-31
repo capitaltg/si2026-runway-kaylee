@@ -773,7 +773,14 @@ def compute(
         "contract": {
             "id": contract.get("id"),
             "piid": header.get("piid") or contract.get("piid"),
-            "name": header.get("contractor") or header.get("piid"),
+            # A user-chosen callsign (e.g. "FALCON") wins the display name; the
+            # legal contractor is the fallback. `nickname` is echoed raw so the UI
+            # can tell a custom name from the legal one.
+            "name": contract.get("nickname")
+            or header.get("contractor")
+            or header.get("piid"),
+            "nickname": contract.get("nickname"),
+            "legal_name": header.get("contractor"),
             "agency": header.get("agency"),
             "vehicle": header.get("contract_type"),
             "pop_start": clk["pop_start"],

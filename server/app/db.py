@@ -54,6 +54,18 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # Saved allocation-matrix what-if plans, keyed to a contract. `data` is the
+    # JSON sim state (per-person hrs grid + planned adds + rolled-off people) so a
+    # plan reloads exactly as it was modeled.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            name TEXT,
+            data TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
     conn.commit()
     conn.close()
 
@@ -76,6 +88,25 @@ def update_contract(cid: int, data: dict) -> None:
     conn.execute("UPDATE contracts SET data = ? WHERE id = ?", (json.dumps(data), cid))
     conn.commit()
     conn.close()
+
+
+def rename_contract(cid: int, nickname: Optional[str]) -> Optional[dict]:
+    """Set (or clear) a user-chosen nickname for a contract — a callsign like
+    'FALCON' that reads better than the legal name or PIID. Stored on the data
+    blob so it surfaces everywhere the blob is splatted (list/get, and burn via
+    `nickname`). Passing an empty/None name clears it back to the legal name.
+    Returns the refreshed contract, or None if it doesn't exist."""
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+    clean = (nickname or "").strip()
+    if clean:
+        blob["nickname"] = clean
+    else:
+        blob.pop("nickname", None)
+    update_contract(cid, blob)
+    return get_contract(cid)
 
 
 def list_contracts() -> list:
@@ -200,6 +231,54 @@ def list_expenses(contract_id: int, clin: Optional[str] = None) -> list:
         ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def save_plan(contract_id: int, name: str, data: dict) -> dict:
+    """Persist one named allocation what-if plan for a contract. Returns the row."""
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT INTO plans (contract_id, name, data) VALUES (?, ?, ?)",
+        (contract_id, name, json.dumps(data)),
+    )
+    conn.commit()
+    pid = cur.lastrowid
+    row = conn.execute(
+        "SELECT id, name, created_at FROM plans WHERE id = ?", (pid,)
+    ).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def list_plans(contract_id: int) -> list:
+    """A contract's saved plans, newest first, with their full sim state."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT id, name, data, created_at FROM plans
+           WHERE contract_id = ? ORDER BY id DESC""",
+        (contract_id,),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "created_at": r["created_at"],
+            "data": json.loads(r["data"]),
+        }
+        for r in rows
+    ]
+
+
+def delete_plan(contract_id: int, plan_id: int) -> bool:
+    """Delete one saved plan (scoped to its contract). True if a row went."""
+    conn = get_conn()
+    cur = conn.execute(
+        "DELETE FROM plans WHERE id = ? AND contract_id = ?", (plan_id, contract_id)
+    )
+    conn.commit()
+    deleted = cur.rowcount > 0
+    conn.close()
+    return deleted
 
 
 def delete_expense(contract_id: int, expense_id: int) -> bool:

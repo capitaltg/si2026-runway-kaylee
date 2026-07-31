@@ -112,6 +112,58 @@ export async function syncTimesheets(contractId, { rows, seed } = {}) {
   return r.json();
 }
 
+// Give a contract a custom nickname (a callsign like "FALCON"), or clear it by
+// passing an empty name. The nickname becomes its display name app-wide.
+export async function renameContract(contractId, name) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/name`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) throw new Error(`Rename failed (${r.status})`);
+  return r.json();
+}
+
+// Allocation matrix (#21). The employee × labor-CLIN hrs/wk grid + each CLIN's
+// budget/spend/clock, for the what-if simulator (recompute happens client-side).
+export async function getAllocation(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/allocation`);
+  if (!r.ok) throw new Error(`Allocation failed (${r.status})`);
+  return r.json();
+}
+
+// Portfolio resource conflicts: people booked >100% across contracts.
+export async function getAllocationConflicts() {
+  const r = await fetch(`${BASE}/api/allocation/conflicts`);
+  if (!r.ok) throw new Error(`Conflicts failed (${r.status})`);
+  return r.json();
+}
+
+// Saved allocation what-if plans for a contract.
+export async function listPlans(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/plans`);
+  if (!r.ok) throw new Error(`Plans failed (${r.status})`);
+  return r.json();
+}
+
+export async function savePlan(contractId, name, data) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/plans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, data }),
+  });
+  if (!r.ok) throw new Error(`Save plan failed (${r.status})`);
+  return r.json();
+}
+
+export async function deletePlan(contractId, planId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/plans/${planId}`, {
+    method: "DELETE",
+  });
+  if (!r.ok) throw new Error(`Delete plan failed (${r.status})`);
+  return r.json();
+}
+
 // Ask Runway (#15). Streams a plain-text answer grounded in the burn engine's
 // numbers; onChunk fires with each incremental piece so the panel can render the
 // answer as it arrives. Returns the full answer once the stream closes.

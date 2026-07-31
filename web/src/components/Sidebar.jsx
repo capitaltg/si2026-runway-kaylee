@@ -188,16 +188,23 @@ export default function Sidebar({ view, setView, contract, hero }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text)", lineHeight: 1.3 }}>
+          <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text)", lineHeight: 1.3, flex: 1, minWidth: 0 }}>
             {contract?.name || "No contract selected"}
           </div>
           <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>
             Switch &#8599;
           </span>
         </div>
-        {contract?.piid ? (
-          <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--dim)", marginTop: 5 }}>
-            {contract.piid}
+        {contract ? (
+          <div style={{ marginTop: 5 }}>
+            {contract.nickname && contract.legal_name && (
+              <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.25 }}>{contract.legal_name}</div>
+            )}
+            {contract.piid && (
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--faint)", marginTop: 2 }}>
+                {contract.piid}
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ fontSize: 10.5, color: "var(--dim)", marginTop: 5 }}>Open one from Portfolio</div>
