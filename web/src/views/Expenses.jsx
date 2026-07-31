@@ -123,12 +123,24 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
   const logged = expenses.reduce((s, e) => s + (+e.amount || 0), 0);
   const remaining = ceiling - logged;
   const usedPct = ceiling ? logged / ceiling : 0;
-  const status = nlStatus(logged, ceiling);
+  // Prefer the engine's funding-aware status (#41) — it bands on the funded
+  // slice, not just the ceiling — and fall back to the local ceiling read only
+  // until the burn payload loads.
+  const status = card?.status || nlStatus(logged, ceiling);
   const p = pill(status);
+  const alarm = status === "over" || status === "funding";
   const remainingColor =
-    status === "over" ? "var(--bad)" : status === "watch" ? "var(--warn)" : "var(--text)";
+    status === "over"
+      ? "var(--bad)"
+      : status === "funding" || status === "watch"
+        ? "var(--warn)"
+        : "var(--text)";
   const barColor =
-    status === "over" ? "var(--bad)" : status === "watch" ? "var(--warn)" : "var(--good)";
+    status === "over"
+      ? "var(--bad)"
+      : status === "funding" || status === "watch"
+        ? "var(--warn)"
+        : "var(--good)";
 
   function onDraft(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -252,6 +264,49 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {/* funding warning — this CLIN is past its obligated (funded) slice,
+              even if the ceiling still has room (#41). Mirrors the Flight Deck
+              funding banner so the drill-down doesn't read "all fine". */}
+          {alarm && card && (
+            <div
+              style={{
+                ...panelStyle,
+                marginBottom: 16,
+                borderLeft: `3px solid ${status === "over" ? "var(--bad)" : "var(--warn)"}`,
+              }}
+            >
+              <div style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 17, lineHeight: 1.3 }}>⚠️</span>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: grotesk,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      color: status === "over" ? "var(--bad)" : "var(--warn)",
+                    }}
+                  >
+                    {status === "over"
+                      ? `Over ${card.limited_by === "funding" ? "the funded allocation" : "ceiling"}${
+                          card.overspent ? ` by ${money(card.overspent)}` : ""
+                        }`
+                      : "Over its funded allocation — awaiting the next funding action"}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 5, lineHeight: 1.5 }}>
+                    {money(card.spent)} logged against{" "}
+                    {money(card.funded != null ? card.funded : card.budget)} obligated
+                    {card.ceiling ? ` of a ${money(card.ceiling)} ceiling` : ""}.{" "}
+                    {status === "over"
+                      ? "Charging past obligated funding is a Limitation of Funds risk (FAR 52.232-22)."
+                      : card.mod_in_progress
+                        ? "A funding modification is already outstanding."
+                        : "Funding is keeping pace with the clock, so it needs its next funding mod — not a course correction."}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
