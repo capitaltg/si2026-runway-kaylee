@@ -1,0 +1,118 @@
+import { money, moneyM, pct } from "./format.js";
+
+// Runway Drafts (v1). Turn a contract's live burn payload into GovCon paperwork.
+// Every number/date/ID here comes straight from `burn` — the model never authors
+// figures. Prose sections carry deterministic "heuristic" copy so the whole
+// document is usable with AI off; when AI is on the Drafts view replaces the
+// single prose section's text with a streamed, phrased version.
+
+export const DOC_TYPES = [
+  { key: "funding", label: "Funding request", blurb: "Incremental-funding memo to the CO" },
+  { key: "invoice", label: "Invoice (SF-1034)", blurb: "Public voucher for costs incurred" },
+  { key: "cdrl", label: "Status check-in", blurb: "Monthly CDRL progress report" },
+];
+
+const DRAFT_LABEL = "DRAFT — verify before submission";
+
+// Return the value when it's real, else the literal [verify] placeholder so a
+// missing figure is visibly flagged instead of shown as $0 or a guess.
+export function vf(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : "[verify]";
+  if (typeof value === "string") return value.trim() ? value : "[verify]";
+  return "[verify]";
+}
+
+// moneyM but honours [verify] for absent inputs.
+function moneyV(n) {
+  return typeof n === "number" && Number.isFinite(n) ? moneyM(n) : "[verify]";
+}
+
+const pop = (c) => `${vf(c.pop_start)} to ${vf(c.pop_end)}`;
+const contractorOf = (c) => vf(c.legal_name || c.name);
+
+// Pick the CLIN a funding memo is about: the deep-linked one, else the first
+// funding-status line, else the worst labor line.
+function fundingFocus(burn, opts) {
+  const funding = burn.funding || [];
+  if (opts.focusClin) {
+    const hit = funding.find((f) => f.code === opts.focusClin);
+    if (hit) return hit;
+  }
+  return funding[0] || null;
+}
+
+function buildFunding(burn, opts) {
+  const c = burn.contract || {};
+  const item = fundingFocus(burn, opts) || {};
+  const code = vf(item.code);
+  // Requested increment = the still-unfunded slice of the line's ceiling. A
+  // concrete number from data, not a projection.
+  const increment =
+    typeof item.budget === "number" && typeof item.funded === "number"
+      ? item.budget - item.funded
+      : null;
+
+  const heuristic =
+    `This letter requests incremental funding for ${code} under contract ` +
+    `${vf(c.piid)}. At the current burn rate the line spends through its funded ` +
+    `${moneyV(item.funded)} in week ${item.exhaust_week != null ? Math.round(item.exhaust_week) : "[verify]"}, ` +
+    `roughly ${item.weeks_early != null ? item.weeks_early : "[verify]"} weeks before the period of ` +
+    `performance ends. To keep the effort funded through completion we request an ` +
+    `additional ${moneyV(increment)} be obligated to this line.`;
+
+  return {
+    docType: "funding",
+    title: "Incremental Funding Request",
+    draftLabel: DRAFT_LABEL,
+    meta: [
+      { label: "To", value: "[verify] (Contracting Officer)" },
+      { label: "From", value: contractorOf(c) },
+      { label: "Contract (PIID)", value: vf(c.piid) },
+      { label: "Agency", value: vf(c.agency) },
+      { label: "Period of performance", value: pop(c) },
+      { label: "Currently obligated", value: moneyV(c.obligated) },
+      { label: "Total ceiling", value: moneyV(c.contract_ceiling) },
+    ],
+    sections: [
+      { id: "justification", heading: "Justification", kind: "prose", text: heuristic },
+      {
+        id: "summary",
+        heading: "Funding summary",
+        kind: "table",
+        columns: ["Line", "Funded", "Ceiling", "Runs out", "Requested increment"],
+        rows: [[
+          code,
+          moneyV(item.funded),
+          moneyV(item.budget),
+          item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : "[verify]",
+          moneyV(increment),
+        ]],
+      },
+    ],
+  };
+}
+
+const BUILDERS = { funding: buildFunding };
+
+export function buildDraft(docType, burn, opts = {}) {
+  const build = BUILDERS[docType];
+  if (!build) throw new Error(`Unknown draft type: ${docType}`);
+  return build(burn || {}, opts || {});
+}
+
+// Flatten a Doc to plain text for the initial Copy content and print fallback.
+export function renderDraftText(doc) {
+  const lines = [doc.title.toUpperCase(), doc.draftLabel, ""];
+  for (const m of doc.meta) lines.push(`${m.label}: ${m.value}`);
+  for (const s of doc.sections) {
+    lines.push("");
+    if (s.heading) lines.push(s.heading.toUpperCase());
+    if (s.kind === "table") {
+      lines.push(s.columns.join("  |  "));
+      for (const r of s.rows) lines.push(r.join("  |  "));
+    } else {
+      lines.push(s.text);
+    }
+  }
+  return lines.join("\n");
+}
