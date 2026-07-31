@@ -37,7 +37,7 @@ const iconBtn = {
   cursor: "pointer",
 };
 
-export default function TopBar({ view, contract, theme, toggleTheme, onExport, onAskRunway }) {
+export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, toggleAi, onExport, onAskRunway }) {
   const h = HEADERS[view] || { main: view, sub: "", meta: false };
   const showMeta = h.meta && !!contract;
   const main = h.main || contract?.name || "Runway";
@@ -173,6 +173,25 @@ export default function TopBar({ view, contract, theme, toggleTheme, onExport, o
             <path d="M21 11.5a8.4 8.4 0 01-11.9 7.6L3 21l1.9-6A8.4 8.4 0 1121 11.5z" strokeLinejoin="round" />
           </svg>
           Ask Runway
+        </button>
+
+        <button
+          onClick={toggleAi}
+          aria-pressed={!!aiEnabled}
+          title={
+            aiEnabled
+              ? "AI on — Runway may use AI to phrase suggestions. Click to use built-in phrasing."
+              : "AI off — Runway uses built-in phrasing. Click to let it phrase with AI."
+          }
+          style={{
+            ...iconBtn,
+            border: `1px solid ${aiEnabled ? "var(--accent)" : "var(--border)"}`,
+            background: aiEnabled ? "var(--accent)" : "var(--panel2)",
+            color: aiEnabled ? "#fff" : "var(--dim)",
+          }}
+        >
+          <span style={{ fontSize: 14 }}>✨</span>
+          AI {aiEnabled ? "on" : "off"}
         </button>
 
         <button

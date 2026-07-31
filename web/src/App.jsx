@@ -57,11 +57,18 @@ function exportCsv(burn) {
 export default function App() {
   const [view, setView] = useState("portfolio");
   const [theme, setTheme] = useState("light");
+  // App-wide AI preference (off by default). When on, Runway may use AI to
+  // phrase things like Flight Deck suggestions; when off it uses built-in
+  // deterministic copy. Read by any feature that wants an AI path.
+  const [aiEnabled, setAiEnabled] = useState(() => localStorage.getItem("runway.ai") === "on");
   const [activeId, setActiveId] = useState(null);
   // Ask Runway is a slide-out drawer overlaid on any view, not a view itself.
   const [askOpen, setAskOpen] = useState(false);
   // The non-labor CLIN a Flight Deck card asked the Expenses view to open on.
   const [expenseClin, setExpenseClin] = useState(null);
+  // Set when a Flight Deck suggestion routes to the Allocation Matrix so it
+  // pre-applies the rebalanced plan; cleared once the Matrix consumes it.
+  const [pendingBalance, setPendingBalance] = useState(false);
   // Burn summary for the active contract, used only to dress the global chrome
   // (sidebar health card + top-bar period bar + Export). Views still fetch
   // their own data; this refreshes whenever the active contract changes.
@@ -70,6 +77,11 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Persist the AI preference so it sticks across sessions and stays app-wide.
+  useEffect(() => {
+    localStorage.setItem("runway.ai", aiEnabled ? "on" : "off");
+  }, [aiEnabled]);
 
   useEffect(() => {
     if (activeId == null) {
@@ -105,6 +117,14 @@ export default function App() {
     setView("expenses");
   }
 
+  // A trim/boost suggestion jumped us to the Allocation Matrix — flag it to
+  // pre-apply the rebalanced plan on arrival. AllocationMatrix clears the flag
+  // (onAutoBalanced) once it fires, so a later manual visit stays untouched.
+  function openAllocationBalanced() {
+    setPendingBalance(true);
+    setView("allocate");
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar view={view} setView={setView} contract={chrome?.contract} hero={chrome?.hero} />
@@ -114,6 +134,8 @@ export default function App() {
           contract={chrome?.contract}
           theme={theme}
           toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          aiEnabled={aiEnabled}
+          toggleAi={() => setAiEnabled((v) => !v)}
           onExport={() => exportCsv(chrome)}
           onAskRunway={() => setAskOpen(true)}
         />
@@ -123,13 +145,27 @@ export default function App() {
           ) : view === "portfolio" ? (
             <Portfolio onOpen={openContract} />
           ) : view === "flightdeck" ? (
-            <FlightDeck contractId={activeId} setActiveId={setActiveId} onOpenExpenses={openExpenses} onRename={onRename} />
+            <FlightDeck
+              contractId={activeId}
+              setActiveId={setActiveId}
+              onOpenExpenses={openExpenses}
+              onOpenAllocation={() => setView("allocate")}
+              onApplyFix={openAllocationBalanced}
+              onOpenFunding={() => setView("funding")}
+              onRename={onRename}
+              aiEnabled={aiEnabled}
+            />
           ) : view === "expenses" ? (
             <Expenses contractId={activeId} initialClin={expenseClin} setActiveId={setActiveId} />
           ) : view === "funding" ? (
             <FundingHistory contractId={activeId} />
           ) : view === "allocate" ? (
-            <AllocationMatrix contractId={activeId} setActiveId={setActiveId} />
+            <AllocationMatrix
+              contractId={activeId}
+              setActiveId={setActiveId}
+              autoBalance={pendingBalance}
+              onAutoBalanced={() => setPendingBalance(false)}
+            />
           ) : (
             <Placeholder name={view} note="Coming soon." />
           )}
