@@ -141,7 +141,67 @@ function buildInvoice(burn, _opts) {
   };
 }
 
-const BUILDERS = { funding: buildFunding, invoice: buildInvoice };
+function buildCdrl(burn, _opts) {
+  const c = burn.contract || {};
+  const t = burn.totals || {};
+  const clins = burn.clins || [];
+  const flags = [
+    ...(burn.tripwires || []).map((x) => `${x.code} is over pace (tripwire)`),
+    ...(burn.funding || []).map((x) => `${x.code} needs its next funding mod`),
+    ...(burn.underburn || []).map((x) => `${x.code} is under-burning`),
+  ];
+
+  const heuristic =
+    `During this reporting period the team continued performance across ` +
+    `${clins.length} CLIN(s), with ${moneyV(t.spent)} of ${moneyV(t.ceiling)} ` +
+    `expended (${typeof t.pct === "number" ? pct(t.pct) : "[verify]"} of ceiling). ` +
+    (flags.length
+      ? `Attention items for next period: ${flags.join("; ")}. `
+      : `All lines are tracking to plan. `) +
+    `Next period the team will maintain current staffing and monitor burn against pace.`;
+
+  return {
+    docType: "cdrl",
+    title: "Monthly Status Report",
+    draftLabel: DRAFT_LABEL,
+    meta: [
+      { label: "Contract (PIID)", value: vf(c.piid) },
+      { label: "Contractor", value: contractorOf(c) },
+      { label: "Reporting period", value: `through week ${vf(c.current_week)} of ${vf(c.total_weeks)}` },
+      { label: "Overall status", value: vf(burn.hero && burn.hero.status) },
+    ],
+    sections: [
+      {
+        id: "burn",
+        heading: "Burn summary by CLIN",
+        kind: "table",
+        columns: ["CLIN", "Description", "Spent", "Ceiling", "% burned", "Status"],
+        rows: clins.map((x) => [
+          vf(x.code),
+          vf(x.name),
+          moneyV(x.spent),
+          moneyV(x.ceiling),
+          typeof x.pct === "number" ? pct(x.pct) : "[verify]",
+          vf(x.status_label || x.status),
+        ]),
+      },
+      {
+        id: "flags",
+        heading: "Flags",
+        kind: "text",
+        text: flags.length ? flags.join("\n") : "No flags this period.",
+      },
+      {
+        id: "narrative",
+        heading: "Accomplishments & next-period plan",
+        kind: "prose",
+        text: heuristic,
+      },
+    ],
+  };
+}
+
+const BUILDERS = { funding: buildFunding, invoice: buildInvoice, cdrl: buildCdrl };
 
 export function buildDraft(docType, burn, opts = {}) {
   const build = BUILDERS[docType];

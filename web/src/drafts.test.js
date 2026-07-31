@@ -90,3 +90,16 @@ test("invoice flags missing spend as [verify], never $0", () => {
   const text = renderDraftText(buildDraft("invoice", burn, {}));
   assert.match(text, /\[verify\]/);
 });
+
+test("cdrl check-in summarises burn and carries one prose section", () => {
+  const doc = buildDraft("cdrl", sampleBurn(), {});
+  assert.equal(doc.docType, "cdrl");
+  assert.equal(doc.sections.filter((s) => s.kind === "prose").length, 1);
+  const text = renderDraftText(doc);
+  assert.match(text, /DRAFT/);
+  assert.match(text, /48%/);                     // pct(totals.pct) overall burned
+  assert.match(text, /CLIN 0001/);
+  assert.match(text, /CLIN 0002/);
+  // Funding-due flag surfaced in the status section.
+  assert.match(text.toLowerCase(), /funding/);
+});
