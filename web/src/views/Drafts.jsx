@@ -215,7 +215,7 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
   const ready = status === "ready";
 
   return (
-    <div style={{ padding: "24px 26px 60px", maxWidth: 900 }}>
+    <div style={{ padding: "24px 26px 60px" }}>
       <div className="no-print" style={{ marginBottom: 18 }}>
         <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
           Drafts
@@ -232,13 +232,14 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
         style={{
           display: "flex",
           gap: 10,
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           alignItems: "center",
           marginBottom: 16,
           padding: 10,
           background: "var(--panel)",
           border: "1px solid var(--border)",
           borderRadius: 12,
+          overflowX: "auto",
         }}
       >
         {/* zone 1: contract picker (by name, never PIID) */}
