@@ -28,7 +28,8 @@ function sampleBurn() {
     tripwires: [],
     underburn: [],
     funding: [
-      { code: "CLIN 0002", name: "Option Labor", pct: 0.83, exhaust_week: 42, weeks_early: 10, runway_days: 42, funded: 1_800_000, budget: 3_000_000, funded_frac: 0.6, elapsed_frac: 0.58, mod_in_progress: false },
+      // budget == funded for an incrementally funded line, as real burn output does.
+      { code: "CLIN 0002", name: "Option Labor", pct: 0.83, exhaust_week: 42, weeks_early: 10, runway_days: 42, funded: 1_800_000, budget: 1_800_000, funded_frac: 0.6, elapsed_frac: 0.58, mod_in_progress: false },
     ],
     sync: { rows: 120, latest_week: "2024-07-28" },
   };
@@ -75,6 +76,9 @@ test("funding letter tracks FAR 52.232-22, pulls the CO, and states an exhaustio
   assert.match(text, /CLIN 0002/);
   assert.match(text, /\$1\.80M/);                       // funds allotted to line
   assert.match(text, /Projected funds-exhaustion date/);
+  // Requested increment = ceiling ($3.00M) - funded ($1.80M) = $1.20M, not $0.
+  assert.match(text, /\$1\.20M/);
+  assert.doesNotMatch(prose[0].text, /\$0\.00M/);
 });
 
 test("invoice follows SF-1034 structure with certification, no prose", () => {

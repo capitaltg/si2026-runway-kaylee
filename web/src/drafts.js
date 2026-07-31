@@ -78,11 +78,14 @@ function buildFunding(burn, opts) {
   const item = fundingFocus(burn, opts) || {};
   const code = vf(item.code);
   const today = vf(opts.today);
-  // Additional funds requested = the still-unfunded slice of the line's ceiling.
+  // The funding payload's `budget` equals the FUNDED slice for an incrementally
+  // funded line (not the ceiling), so budget - funded is $0. Pull the CLIN's real
+  // ceiling from burn.clins so the request is the actual unfunded remainder.
+  const clin = (burn.clins || []).find((x) => x.code === item.code) || {};
+  const funded = item.funded != null ? item.funded : clin.funded;
+  const ceiling = clin.ceiling != null ? clin.ceiling : item.budget;
   const increment =
-    typeof item.budget === "number" && typeof item.funded === "number"
-      ? item.budget - item.funded
-      : null;
+    typeof ceiling === "number" && typeof funded === "number" ? ceiling - funded : null;
   const exhaustDate = weekToDate(c.pop_start, item.exhaust_week);
   const exhaustWk = item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : null;
   // Prefer a real calendar date; fall back to the week number, then [verify].
@@ -122,8 +125,8 @@ function buildFunding(burn, opts) {
         columns: ["Item", "Amount"],
         rows: [
           ["Total obligated to contract", moneyV(c.obligated)],
-          ["Funds allotted to line", moneyV(item.funded)],
-          ["Line ceiling (fully funded)", moneyV(item.budget)],
+          ["Funds allotted to line", moneyV(funded)],
+          ["Line ceiling (fully funded)", moneyV(ceiling)],
           ["Projected funds-exhaustion date", exhaustDate || exhaustWk || "[verify]"],
           ["Additional funds requested", moneyV(increment)],
           ["Period covered", `through ${vf(c.pop_end)}`],
