@@ -135,9 +135,14 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction }) {
           )}
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
             {heuristic.action.kind === "balance" ? (
-              <button onClick={() => onAction("simulator")} style={btnSecondary}>
-                Open simulator
-              </button>
+              <>
+                <button onClick={() => onAction("simulator")} style={btnSecondary}>
+                  Open simulator
+                </button>
+                <button onClick={() => onAction("apply-fix")} style={btnPrimary}>
+                  Apply fix
+                </button>
+              </>
             ) : (
               <button onClick={() => onAction("funding")} style={btnPrimary}>
                 Open funding history
@@ -155,6 +160,7 @@ export default function FlightDeck({
   setActiveId,
   onOpenExpenses,
   onOpenAllocation,
+  onApplyFix,
   onOpenFunding,
   onRename,
   aiEnabled,
@@ -273,10 +279,12 @@ export default function FlightDeck({
     }
   }
 
-  // Route a suggestion's action button: "simulator" opens the Allocation Matrix,
+  // Route a suggestion's action buttons: "simulator" opens the Allocation Matrix
+  // untouched, "apply-fix" opens it with the rebalanced plan pre-applied, and
   // "funding" opens the Funding History.
   function onSuggestAction(kind) {
     if (kind === "simulator") onOpenAllocation?.();
+    else if (kind === "apply-fix") onApplyFix?.();
     else if (kind === "funding") onOpenFunding?.();
   }
 
