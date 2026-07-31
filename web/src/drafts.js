@@ -47,6 +47,20 @@ export function stripMd(s) {
 const pop = (c) => `${vf(c.pop_start)} to ${vf(c.pop_end)}`;
 const contractorOf = (c) => vf(c.legal_name || c.name);
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"];
+
+// Turn a week number into a real calendar date: pop_start + (week-1) weeks.
+// Parsed as UTC so the result doesn't drift by timezone. Returns null if the
+// inputs aren't usable, so callers can fall back to [verify].
+export function weekToDate(popStart, week) {
+  if (!popStart || week == null || !Number.isFinite(week)) return null;
+  const base = new Date(`${popStart}T00:00:00Z`);
+  if (isNaN(base.getTime())) return null;
+  base.setUTCDate(base.getUTCDate() + Math.round((week - 1) * 7));
+  return `${MONTHS[base.getUTCMonth()]} ${base.getUTCDate()}, ${base.getUTCFullYear()}`;
+}
+
 // Pick the CLIN a funding letter is about: the deep-linked one, else the first
 // funding-status line.
 function fundingFocus(burn, opts) {
@@ -69,7 +83,12 @@ function buildFunding(burn, opts) {
     typeof item.budget === "number" && typeof item.funded === "number"
       ? item.budget - item.funded
       : null;
-  const exhaustWk = item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : "[verify]";
+  const exhaustDate = weekToDate(c.pop_start, item.exhaust_week);
+  const exhaustWk = item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : null;
+  // Prefer a real calendar date; fall back to the week number, then [verify].
+  const exhaustPhrase = exhaustDate
+    ? `on or about ${exhaustDate}${exhaustWk ? ` (${exhaustWk})` : ""}`
+    : exhaustWk || "[verify]";
 
   // The heuristic tracks the clause's required 75% / next-60-days language.
   const heuristic =
@@ -77,8 +96,8 @@ function buildFunding(burn, opts) {
     `notice that the costs we expect to incur under the referenced contract within ` +
     `the next 60 days, added to all costs previously incurred, will exceed 75 percent ` +
     `of the total amount presently allotted to ${code}. At the current rate of ` +
-    `performance the funds allotted to this line are projected to be exhausted in ` +
-    `${exhaustWk}. To avoid a lapse in performance we respectfully request that an ` +
+    `performance the funds allotted to this line are projected to be exhausted ` +
+    `${exhaustPhrase}. To avoid a lapse in performance we respectfully request that an ` +
     `additional ${moneyV(increment)} be obligated to the contract to cover continued ` +
     `performance through ${vf(c.pop_end)}.`;
 
@@ -88,7 +107,7 @@ function buildFunding(burn, opts) {
     draftLabel: DRAFT_LABEL,
     meta: [
       { label: "Date", value: today },
-      { label: "To", value: "[verify] (Contracting Officer)" },
+      { label: "To", value: `${vf(c.contracting_officer)} (Contracting Officer)` },
       { label: "From", value: contractorOf(c) },
       { label: "Contract No.", value: vf(c.piid) },
       { label: "Reference", value: "FAR 52.232-22, Limitation of Funds" },
@@ -105,7 +124,7 @@ function buildFunding(burn, opts) {
           ["Total obligated to contract", moneyV(c.obligated)],
           ["Funds allotted to line", moneyV(item.funded)],
           ["Line ceiling (fully funded)", moneyV(item.budget)],
-          ["Projected exhaustion", exhaustWk],
+          ["Projected funds-exhaustion date", exhaustDate || exhaustWk || "[verify]"],
           ["Additional funds requested", moneyV(increment)],
           ["Period covered", `through ${vf(c.pop_end)}`],
         ],
@@ -156,9 +175,8 @@ function buildInvoice(burn, opts) {
         kind: "table",
         columns: ["", "Amount"],
         rows: [
-          ["Previously claimed", "[verify]"],
-          ["This voucher", moneyV(totalSpent)],
-          ["Cumulative to date", "[verify]"],
+          ["Amount claimed this voucher", moneyV(totalSpent)],
+          ["Total costs incurred to date", moneyV(totalSpent)],
         ],
       },
       {

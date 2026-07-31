@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DOC_TYPES, buildDraft, renderDraftText, vf, stripMd } from "./drafts.js";
+import { DOC_TYPES, buildDraft, renderDraftText, vf, stripMd, weekToDate } from "./drafts.js";
 
 // A minimal burn payload shaped like getBurn(id) returns.
 function sampleBurn() {
@@ -17,6 +17,7 @@ function sampleBurn() {
       weeks_remaining: 22,
       contract_ceiling: 5_000_000,
       obligated: 3_000_000,
+      contracting_officer: "Jane Smith",
     },
     totals: { ceiling: 5_000_000, spent: 2_400_000, pct: 0.48, weekly: 80_000, labor_count: 3 },
     hero: { days: 60, clin: "CLIN 0002", status: "funding", limited_by: "funding" },
@@ -52,19 +53,28 @@ test("DOC_TYPES lists the three documents", () => {
   assert.deepEqual(DOC_TYPES.map((d) => d.key).sort(), ["cdrl", "funding", "invoice"]);
 });
 
-test("funding letter tracks FAR 52.232-22 and the 75% notice", () => {
+test("weekToDate converts a PoP week into a real calendar date", () => {
+  assert.equal(weekToDate("2024-01-01", 1), "January 1, 2024");
+  assert.equal(weekToDate("2024-01-01", 2), "January 8, 2024");
+  assert.equal(weekToDate(null, 5), null);
+  assert.equal(weekToDate("2024-01-01", null), null);
+});
+
+test("funding letter tracks FAR 52.232-22, pulls the CO, and states an exhaustion date", () => {
   const doc = buildDraft("funding", sampleBurn(), { focusClin: "CLIN 0002", today: "2024-07-31" });
   assert.equal(doc.docType, "funding");
   const metaText = doc.meta.map((m) => `${m.label}: ${m.value}`).join("\n");
   assert.match(metaText, /W519TC-24-C-0007/);          // contract no.
   assert.match(metaText, /FAR 52\.232-22/);            // reference clause
-  assert.match(metaText, /\[verify\]/);                // CO name not fabricated
+  assert.match(metaText, /Jane Smith/);                // CO pulled, not [verify]
   const prose = doc.sections.filter((s) => s.kind === "prose");
   assert.equal(prose.length, 1);
   assert.match(prose[0].text, /75 percent/);           // required notice language
+  assert.match(prose[0].text, /on or about \w+ \d+, \d{4}/); // real exhaustion date
   const text = renderDraftText(doc);
   assert.match(text, /CLIN 0002/);
   assert.match(text, /\$1\.80M/);                       // funds allotted to line
+  assert.match(text, /Projected funds-exhaustion date/);
 });
 
 test("invoice follows SF-1034 structure with certification, no prose", () => {
