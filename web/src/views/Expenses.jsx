@@ -121,8 +121,16 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
   const card = nonLabor.find((c) => c.id === clin);
   const ceiling = card?.ceiling || 0;
   const logged = expenses.reduce((s, e) => s + (+e.amount || 0), 0);
-  const remaining = ceiling - logged;
+  // The binding limit is the funded (obligated) slice when the CLIN is
+  // incrementally funded — that's what you should stay under (#41) — otherwise
+  // the full ceiling. `remaining` is measured against it, so it goes negative
+  // once you're over the funded limit even with ceiling room to spare.
+  const incrFunded = !!card?.incrementally_funded;
+  const funded = card?.funded ?? null;
+  const bindingLimit = incrFunded ? funded : ceiling;
+  const remaining = bindingLimit - logged;
   const usedPct = ceiling ? logged / ceiling : 0;
+  const fundedPct = incrFunded && ceiling ? funded / ceiling : null;
   // Prefer the engine's funding-aware status (#41) — it bands on the funded
   // slice, not just the ceiling — and fall back to the local ceiling read only
   // until the burn payload loads.
@@ -329,16 +337,24 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                 <div style={tileLabel}>Logged to date</div>
                 <div style={tileNum}>{money(logged)}</div>
               </div>
+              {incrFunded && (
+                <div>
+                  <div style={{ ...tileLabel, color: "var(--warn)" }}>Funded — stay under</div>
+                  <div style={{ ...tileNum, color: "var(--warn)" }}>{money(funded)}</div>
+                </div>
+              )}
               <div>
                 <div style={tileLabel}>Ceiling</div>
                 <div style={tileNum}>{money(ceiling)}</div>
               </div>
               <div>
-                <div style={tileLabel}>Remaining</div>
+                <div style={tileLabel}>
+                  {incrFunded ? "Left before funded" : "Remaining"}
+                </div>
                 <div style={{ ...tileNum, color: remainingColor }}>{money(remaining)}</div>
               </div>
             </div>
-            <div style={{ height: 10, borderRadius: 6, background: "var(--border)", marginTop: 16, overflow: "hidden" }}>
+            <div style={{ position: "relative", height: 10, borderRadius: 6, background: "var(--border)", marginTop: 16 }}>
               <div
                 style={{
                   height: "100%",
@@ -347,10 +363,33 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                   borderRadius: 6,
                 }}
               />
+              {/* funded-limit marker: the line you should stay under (#41). */}
+              {fundedPct != null && (
+                <div
+                  title={`Funded limit ${money(funded)}`}
+                  style={{
+                    position: "absolute",
+                    left: `${Math.min(100, fundedPct * 100)}%`,
+                    top: -3,
+                    bottom: -3,
+                    width: 2,
+                    background: "var(--warn)",
+                  }}
+                />
+              )}
             </div>
             <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 8 }}>
-              {pct(usedPct)} of ceiling used · {expenses.length}{" "}
-              {expenses.length === 1 ? "entry" : "entries"}
+              {incrFunded ? (
+                <>
+                  <b style={{ color: "var(--text)" }}>{pct(funded ? logged / funded : 0)}</b> of
+                  funded used ·{" "}
+                  <span style={{ color: "var(--warn)" }}>▏</span> funded limit {money(funded)} ·{" "}
+                  {pct(usedPct)} of ceiling
+                </>
+              ) : (
+                <>{pct(usedPct)} of ceiling used</>
+              )}{" "}
+              · {expenses.length} {expenses.length === 1 ? "entry" : "entries"}
             </div>
           </div>
 
