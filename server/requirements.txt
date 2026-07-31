@@ -4,3 +4,4 @@ anthropic[bedrock]
 python-dotenv
 python-multipart
 pydantic
+pytest
