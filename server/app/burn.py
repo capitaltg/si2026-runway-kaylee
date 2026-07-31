@@ -266,6 +266,7 @@ def _pill(status: str) -> str:
         "under": "Under pace",
         "funding": "Funding due",
         "paused": "Paused",
+        "unpriced": "Unpriced",
     }.get(status, "—")
 
 
@@ -312,6 +313,14 @@ def _compute_clin(
         wk = r.get("week_ending") or ""
         weekly_totals[wk] = weekly_totals.get(wk, 0.0) + amt
 
+    # Unpriced: rows were charged to this CLIN but none could be priced (no rate
+    # table and no est_hours → blended None → every row skipped above). This is a
+    # data-quality gap, NOT "no charges": the engine found spend it could not value,
+    # so reading it as `paused` and letting it pass `all_clear` shows the most
+    # reassuring state for a contract that could not be measured at all (#40). The
+    # unmatched LCATs name what to fix, via the supplemental rate import.
+    unpriced = bool(clin_rows) and spent == 0.0 and source == "none"
+
     # Forward weekly pace = mean weekly spend over the most recent PACE_WEEKS weeks
     # that actually have charges. Steadier than a single noisy week.
     recent_weeks = sorted(weekly_totals)[-_PACE_WEEKS:]
@@ -336,7 +345,7 @@ def _compute_clin(
 
     if weekly <= 0:
         weeks_left = _PAUSED_WEEKS_LEFT
-        status = "paused"
+        status = "unpriced" if unpriced else "paused"
         runway_days = None
     else:
         weeks_left = remaining / weekly
@@ -372,7 +381,7 @@ def _compute_clin(
     ceiling_breached = ceiling_exhaust is not None and ceiling_exhaust < total_weeks - 1
 
     if weekly <= 0:
-        status = "paused"
+        status = "unpriced" if unpriced else "paused"
     elif past_pop:
         # Past the finish line: there is no remaining PoP to project into, so a
         # forward exhaust week is meaningless. Read realized spend against the
@@ -442,13 +451,20 @@ def _compute_clin(
         # Dollars already spent past the binding budget, when there are any. The
         # honest expression of a negative balance, since runway now floors at 0.
         "overspent": round(-remaining, 2) if remaining < 0 else 0.0,
-        "weeks_left": None if status == "paused" else round(weeks_left, 2),
-        "exhaust_week": None if status == "paused" else round(exhaust_week, 2),
+        "weeks_left": (
+            None if status in ("paused", "unpriced") else round(weeks_left, 2)
+        ),
+        "exhaust_week": (
+            None if status in ("paused", "unpriced") else round(exhaust_week, 2)
+        ),
         "runway_days": runway_days,
         "status": status,
         "status_label": _pill(status),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
+        # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
+        # count the engine found but could not value — the "N rows, $0 priced" story.
+        "charged_rows": len(clin_rows),
         "unmatched_lcats": sorted(unmatched),
         "actuals": series,
     }
@@ -696,7 +712,11 @@ def compute(
             }
         )
 
-    active = [c for c in computed if c["status"] != "paused"] or computed
+    # An `unpriced` CLIN has no runway (its spend could not be valued), so it can't
+    # be the worst-runway hero any more than a `paused` one can — exclude both.
+    active = [
+        c for c in computed if c["status"] not in ("paused", "unpriced")
+    ] or computed
     worst = min(active, key=lambda c: c["exhaust_week"] or 1e9) if active else None
 
     labor_ceiling = sum(c["ceiling"] for c in computed)
@@ -767,6 +787,22 @@ def compute(
         }
         for c in computed
         if c["status"] == "funding"
+    ]
+
+    # Data-quality gaps (#40): CLINs with charged rows the engine could not price
+    # (no rate table, no est_hours). These must not read as "All clear" — the
+    # distinction is "we found no spend" vs "we could not price the spend we found."
+    # Each names the unmatched LCATs so the fix (supplemental rate import,
+    # POST /api/contracts/{id}/rates) is one click away.
+    data_quality = [
+        {
+            "code": c["code"],
+            "name": c["name"],
+            "charged_rows": c["charged_rows"],
+            "unmatched_lcats": c["unmatched_lcats"],
+        }
+        for c in computed
+        if c["status"] == "unpriced"
     ]
 
     return {
@@ -843,7 +879,15 @@ def compute(
         "tripwires": tripwires,
         "underburn": underburn,
         "funding": funding,
-        "all_clear": len(tripwires) == 0 and len(underburn) == 0 and len(funding) == 0,
+        "data_quality": data_quality,
+        # A contract the engine could not fully price is not "all clear" — an
+        # unpriced CLIN gates it just like a tripwire (#40).
+        "all_clear": (
+            len(tripwires) == 0
+            and len(underburn) == 0
+            and len(funding) == 0
+            and len(data_quality) == 0
+        ),
         "sync": {
             "rows": len(rows),
             "people": len({r.get("employee_id") for r in rows if r.get("employee_id")}),
@@ -866,6 +910,10 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
         # just as much a breach as a labor one.
         if any(x["status"] == "over" for x in b["clins"]):
             overall = "over"
+        elif any(x["status"] == "unpriced" for x in b["clins"]):
+            # A CLIN the engine could not price means the portfolio read can't be
+            # trusted for this contract — surface it rather than showing green (#40).
+            overall = "unpriced"
         elif any(x["status"] in ("watch", "funding") for x in b["clins"]):
             # Funding-due (#22) rolls up amber alongside watch — not a breach, but
             # not all-clear either; the contract needs its next funding action.
@@ -890,6 +938,9 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
                 "status_label": _pill(overall),
                 "on_pace": on_pace,
                 "lines": len(labor),
+                # Count of CLINs the engine could not price (#40) — lets the card
+                # badge a data-quality gap instead of implying a clean read.
+                "data_quality": len(b["data_quality"]),
             }
         )
 

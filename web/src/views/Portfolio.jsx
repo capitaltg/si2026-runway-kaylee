@@ -91,7 +91,7 @@ export default function Portfolio({ onOpen }) {
               key={c.id}
               onClick={() => onOpen(c.id)}
               style={{
-                border: `1px solid ${c.status === "over" ? "var(--bad)" : "var(--border)"}`,
+                border: `1px solid ${c.status === "over" || c.status === "unpriced" ? "var(--bad)" : "var(--border)"}`,
                 borderRadius: 16,
                 padding: "16px 17px",
                 background: "var(--panel)",
@@ -151,8 +151,10 @@ export default function Portfolio({ onOpen }) {
                 <div style={{ height: "100%", width: `${Math.min(100, Math.round(c.pct * 100))}%`, background: barColor, borderRadius: 5 }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: "var(--dim)" }}>
-                <span>
-                  {c.on_pace} of {c.lines} lines on pace
+                <span style={c.data_quality ? { color: "var(--bad)", fontWeight: 700 } : undefined}>
+                  {c.data_quality
+                    ? `${c.data_quality} CLIN${c.data_quality === 1 ? "" : "s"} can't be priced`
+                    : `${c.on_pace} of ${c.lines} lines on pace`}
                 </span>
                 <span>{money(c.weekly)}/wk</span>
               </div>
