@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import allocation, ask, burn, db, extract, sources
+from . import allocation, ask, burn, db, draft, extract, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -525,5 +525,32 @@ def ask_runway(body: AskIn):
             # failure inline in the answer text rather than as an HTTP error the
             # frontend can no longer catch.
             yield f"\n\n[Ask Runway hit an error: {e}]"
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+
+
+class DraftIn(BaseModel):
+    """One Runway Drafts request. `doc_type` is one of draft.DRAFT_DOC_TYPES;
+    `contract_id` is the contract the document is about."""
+
+    contract_id: Optional[int] = None
+    doc_type: str
+
+
+@app.post("/api/draft")
+def draft_document(body: DraftIn):
+    """Runway Drafts: stream the narrative PROSE for a generated GovCon document.
+    Numbers are filled client-side from the burn payload; this only writes words,
+    grounded in the same burn context as Ask Runway (see draft.py)."""
+    if body.doc_type not in draft.DRAFT_DOC_TYPES:
+        raise HTTPException(status_code=422, detail="Unknown document type.")
+
+    def gen():
+        try:
+            yield from draft.stream_draft(body.contract_id, body.doc_type)
+        except Exception as e:
+            # Stream already opened (200 sent) — surface inline; the client falls
+            # back to its deterministic heuristic prose on empty/errored streams.
+            yield f"\n\n[Draft generation hit an error: {e}]"
 
     return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")

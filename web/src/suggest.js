@@ -36,15 +36,23 @@ export function suggestFor(kind, item, contract) {
   }
 
   if (kind === "funding") {
-    return {
-      body:
-        `Draft the incremental-funding request. ${item.code} spends through its funded ` +
+    // Within 30 days of the funded slice running out, escalate from "line up the
+    // next mod" to a hard deadline: generate the funding request now.
+    const days = item.runway_days;
+    const urgent = days != null && days <= 30;
+    const body = urgent
+      ? `Funding deadline — only ${days} days until ${item.code} exhausts its funded ` +
+        `${moneyM(item.funded)} (${wk(item.exhaust_week)}). Generate an incremental-funding ` +
+        `request now so the mod can be obligated before the money runs out.`
+      : `Draft the incremental-funding request. ${item.code} spends through its funded ` +
         `${moneyM(item.funded)} in ${wk(item.exhaust_week)} — ` +
         (item.mod_in_progress
           ? `a mod is already outstanding, so confirm the obligation lands before then.`
-          : `line up the next mod before then to keep it funded.`),
-      result: null,
-      action: { kind: "funding" },
+          : `line up the next mod before then to keep it funded.`);
+    return {
+      body,
+      result: urgent ? "Creates a ready-to-send funding request." : null,
+      action: { kind: "funding", urgent },
     };
   }
 

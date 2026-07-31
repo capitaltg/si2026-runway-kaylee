@@ -8,6 +8,7 @@ import Expenses from "./views/Expenses.jsx";
 import FundingHistory from "./views/FundingHistory.jsx";
 import AskRunway from "./views/AskRunway.jsx";
 import AllocationMatrix from "./views/AllocationMatrix.jsx";
+import Drafts from "./views/Drafts.jsx";
 import { applyTheme } from "./theme.js";
 import { getBurn, renameContract } from "./api.js";
 
@@ -69,6 +70,9 @@ export default function App() {
   // Set when a Flight Deck suggestion routes to the Allocation Matrix so it
   // pre-applies the rebalanced plan; cleared once the Matrix consumes it.
   const [pendingBalance, setPendingBalance] = useState(false);
+  // A Flight Deck funding suggestion asked to draft a funding request; the Drafts
+  // view reads this once on arrival to auto-select the doc type and generate.
+  const [pendingDocType, setPendingDocType] = useState(null);
   // Burn summary for the active contract, used only to dress the global chrome
   // (sidebar health card + top-bar period bar + Export). Views still fetch
   // their own data; this refreshes whenever the active contract changes.
@@ -125,6 +129,13 @@ export default function App() {
     setView("allocate");
   }
 
+  // Deep-link from a suggestion into the Drafts view, pre-loaded for a contract.
+  function openDrafts(id, docType) {
+    if (id != null) setActiveId(id);
+    setPendingDocType(docType || null);
+    setView("drafts");
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar view={view} setView={setView} contract={chrome?.contract} hero={chrome?.hero} />
@@ -152,6 +163,7 @@ export default function App() {
               onOpenAllocation={() => setView("allocate")}
               onApplyFix={openAllocationBalanced}
               onOpenFunding={() => setView("funding")}
+              onOpenDrafts={openDrafts}
               onRename={onRename}
               aiEnabled={aiEnabled}
             />
@@ -165,6 +177,14 @@ export default function App() {
               setActiveId={setActiveId}
               autoBalance={pendingBalance}
               onAutoBalanced={() => setPendingBalance(false)}
+            />
+          ) : view === "drafts" ? (
+            <Drafts
+              contractId={activeId}
+              setActiveId={setActiveId}
+              aiEnabled={aiEnabled}
+              pendingDocType={pendingDocType}
+              onConsumedPending={() => setPendingDocType(null)}
             />
           ) : (
             <Placeholder name={view} note="Coming soon." />

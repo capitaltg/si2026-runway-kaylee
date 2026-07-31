@@ -42,6 +42,13 @@ const ICONS = {
       <path d="M6 12l5-5 5 8 3-6" strokeLinecap="round" strokeLinejoin="round" opacity=".55" />
     </svg>
   ),
+  drafts: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
+      <path d="M14 3v5h5" strokeLinejoin="round" />
+      <path d="M8 13h8M8 17h5" strokeLinecap="round" />
+    </svg>
+  ),
 };
 
 const PORTFOLIO = { key: "portfolio", label: "Portfolio", sub: "All contracts" };
@@ -50,6 +57,7 @@ const CONTRACT_NAV = [
   { key: "allocate", label: "Allocation Matrix", sub: "Staff → CLINs" },
   { key: "expenses", label: "Expenses", sub: "Non-labor CLINs" },
   { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
+  { key: "drafts", label: "Drafts", sub: "Memos · invoices · check-ins" },
   { key: "ingest", label: "Contract Ingest", sub: "PDF → data" },
 ];
 

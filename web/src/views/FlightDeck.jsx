@@ -44,8 +44,9 @@ const btnSecondary = {
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
 // stream fails (Bedrock down, etc.). The action button routes via onAction.
-function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction }) {
+function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts }) {
   const heuristic = suggestFor(kind, item, contract);
+  const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
 
@@ -119,6 +120,22 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction }) {
         >
           Runway suggests
         </span>
+        {urgent && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: ".04em",
+              color: "#fff",
+              background: "var(--warn)",
+              padding: "2px 8px",
+              borderRadius: 20,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ⚠ 30-DAY FUNDING DEADLINE
+          </span>
+        )}
         {aiEnabled && (
           <span style={{ fontSize: 10.5, color: "var(--faint)", marginLeft: "auto" }}>
             {aiActive ? "✨ thinking…" : "✨ AI"}
@@ -144,9 +161,17 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction }) {
                 </button>
               </>
             ) : (
-              <button onClick={() => onAction("funding")} style={btnPrimary}>
-                Open funding history
-              </button>
+              <>
+                <button onClick={() => onAction("funding")} style={btnSecondary}>
+                  Open funding history
+                </button>
+                <button
+                  onClick={() => onOpenDrafts?.(contractId, "funding")}
+                  style={btnPrimary}
+                >
+                  Draft funding request →
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -162,6 +187,7 @@ export default function FlightDeck({
   onOpenAllocation,
   onApplyFix,
   onOpenFunding,
+  onOpenDrafts,
   onRename,
   aiEnabled,
 }) {
@@ -416,6 +442,7 @@ export default function FlightDeck({
               aiEnabled={aiEnabled}
               contractId={contractId}
               onAction={onSuggestAction}
+              onOpenDrafts={onOpenDrafts}
             />
           </div>
         </div>
@@ -483,6 +510,7 @@ export default function FlightDeck({
               aiEnabled={aiEnabled}
               contractId={contractId}
               onAction={onSuggestAction}
+              onOpenDrafts={onOpenDrafts}
             />
           </div>
         </div>
@@ -552,6 +580,7 @@ export default function FlightDeck({
               aiEnabled={aiEnabled}
               contractId={contractId}
               onAction={onSuggestAction}
+              onOpenDrafts={onOpenDrafts}
             />
           </div>
         </div>

@@ -782,6 +782,9 @@ def compute(
             "nickname": contract.get("nickname"),
             "legal_name": header.get("contractor"),
             "agency": header.get("agency"),
+            # Addressees for generated correspondence (funding letters, etc.).
+            "contracting_officer": header.get("contracting_officer"),
+            "cor": header.get("cor"),
             "vehicle": header.get("contract_type"),
             "pop_start": clk["pop_start"],
             "pop_end": clk["pop_end"],
