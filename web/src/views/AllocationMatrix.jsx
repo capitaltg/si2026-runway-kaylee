@@ -66,7 +66,7 @@ const tierPill = (tier) => ({
   whiteSpace: "nowrap",
 });
 
-export default function AllocationMatrix({ contractId, setActiveId }) {
+export default function AllocationMatrix({ contractId, setActiveId, autoBalance, onAutoBalanced }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   // draft[empId][clinId] = hrs/wk. The editable overlay on the synced actuals.
@@ -412,6 +412,23 @@ export default function AllocationMatrix({ contractId, setActiveId }) {
     });
     setLoadedPlan(null);
   }
+
+  // Deep-link from a Flight Deck "Apply fix" suggestion: once the grid has
+  // loaded, fire applyBalance once, then tell App to clear the flag so a later
+  // manual visit isn't auto-rebalanced. balancedRef guards double-fires within a
+  // single mount while the flag-clear propagates.
+  const balancedRef = useRef(false);
+  useEffect(() => {
+    if (!autoBalance) {
+      balancedRef.current = false;
+      return;
+    }
+    if (!data || !draft || balancedRef.current) return;
+    balancedRef.current = true;
+    applyBalance();
+    onAutoBalanced?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoBalance, data, draft]);
 
   // The sim state behind a compare slot ("current" or a saved plan id).
   const planStateFor = (sel) =>

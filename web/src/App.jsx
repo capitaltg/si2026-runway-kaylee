@@ -66,6 +66,9 @@ export default function App() {
   const [askOpen, setAskOpen] = useState(false);
   // The non-labor CLIN a Flight Deck card asked the Expenses view to open on.
   const [expenseClin, setExpenseClin] = useState(null);
+  // Set when a Flight Deck suggestion routes to the Allocation Matrix so it
+  // pre-applies the rebalanced plan; cleared once the Matrix consumes it.
+  const [pendingBalance, setPendingBalance] = useState(false);
   // Burn summary for the active contract, used only to dress the global chrome
   // (sidebar health card + top-bar period bar + Export). Views still fetch
   // their own data; this refreshes whenever the active contract changes.
@@ -114,6 +117,14 @@ export default function App() {
     setView("expenses");
   }
 
+  // A trim/boost suggestion jumped us to the Allocation Matrix — flag it to
+  // pre-apply the rebalanced plan on arrival. AllocationMatrix clears the flag
+  // (onAutoBalanced) once it fires, so a later manual visit stays untouched.
+  function openAllocationBalanced() {
+    setPendingBalance(true);
+    setView("allocate");
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar view={view} setView={setView} contract={chrome?.contract} hero={chrome?.hero} />
@@ -139,6 +150,7 @@ export default function App() {
               setActiveId={setActiveId}
               onOpenExpenses={openExpenses}
               onOpenAllocation={() => setView("allocate")}
+              onApplyFix={openAllocationBalanced}
               onOpenFunding={() => setView("funding")}
               onRename={onRename}
               aiEnabled={aiEnabled}
@@ -148,7 +160,12 @@ export default function App() {
           ) : view === "funding" ? (
             <FundingHistory contractId={activeId} />
           ) : view === "allocate" ? (
-            <AllocationMatrix contractId={activeId} setActiveId={setActiveId} />
+            <AllocationMatrix
+              contractId={activeId}
+              setActiveId={setActiveId}
+              autoBalance={pendingBalance}
+              onAutoBalanced={() => setPendingBalance(false)}
+            />
           ) : (
             <Placeholder name={view} note="Coming soon." />
           )}
