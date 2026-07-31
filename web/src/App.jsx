@@ -134,7 +134,15 @@ export default function App() {
           ) : view === "portfolio" ? (
             <Portfolio onOpen={openContract} />
           ) : view === "flightdeck" ? (
-            <FlightDeck contractId={activeId} setActiveId={setActiveId} onOpenExpenses={openExpenses} onRename={onRename} />
+            <FlightDeck
+              contractId={activeId}
+              setActiveId={setActiveId}
+              onOpenExpenses={openExpenses}
+              onOpenAllocation={() => setView("allocate")}
+              onOpenFunding={() => setView("funding")}
+              onRename={onRename}
+              aiEnabled={aiEnabled}
+            />
           ) : view === "expenses" ? (
             <Expenses contractId={activeId} initialClin={expenseClin} setActiveId={setActiveId} />
           ) : view === "funding" ? (

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getBurn, getSources, syncTimesheets, listContracts } from "../api.js";
+import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
+import { suggestFor } from "../suggest.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -13,7 +14,151 @@ const tileLabel = {
 };
 const tileNum = { fontFamily: grotesk, fontWeight: 700, fontSize: 30, color: "var(--text)", marginTop: 8 };
 
-export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, onRename }) {
+// Suggestion action buttons, matched to the design (Runway.dc.html): a primary
+// accent button and a secondary "Open simulator".
+const btnPrimary = {
+  height: 34,
+  padding: "0 16px",
+  borderRadius: 9,
+  border: "none",
+  background: "var(--accent)",
+  color: "#fff",
+  fontSize: 12.5,
+  fontWeight: 600,
+  cursor: "pointer",
+  boxShadow: "0 4px 12px rgba(67,97,238,.28)",
+};
+const btnSecondary = {
+  height: 34,
+  padding: "0 14px",
+  borderRadius: 9,
+  border: "1px solid var(--border)",
+  background: "var(--panel2)",
+  color: "var(--text)",
+  fontSize: 12.5,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+// "Runway suggests" strip that hangs under an alert card. Renders the
+// deterministic heuristic copy immediately; when AI is on it streams a phrased
+// version over the top of it, and silently keeps the heuristic text if the
+// stream fails (Bedrock down, etc.). The action button routes via onAction.
+function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction }) {
+  const heuristic = suggestFor(kind, item, contract);
+  const [body, setBody] = useState(heuristic.body);
+  const [aiActive, setAiActive] = useState(false);
+
+  useEffect(() => {
+    // AI off: show the deterministic copy, nothing to fetch.
+    if (!aiEnabled || !contractId) {
+      setBody(heuristic.body);
+      setAiActive(false);
+      return;
+    }
+    let cancelled = false;
+    let streamed = "";
+    setBody(heuristic.body); // instant fallback while the model warms up
+    setAiActive(true);
+    const q =
+      `Advise the PM on CLIN ${item.code} (${item.name}). In 1–2 short, directive ` +
+      `sentences, recommend the concrete next action. Grounding: ${heuristic.body} ` +
+      `Phrase it as advice — don't repeat the numbers as a list.`;
+    askRunway({ question: q, history: [], contractId }, (chunk) => {
+      if (cancelled) return;
+      streamed += chunk;
+      setBody(streamed);
+    })
+      .catch(() => {
+        if (!cancelled && !streamed) setBody(heuristic.body);
+      })
+      .finally(() => {
+        if (!cancelled) setAiActive(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiEnabled, kind, item.code, contractId]);
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        background: "var(--panel)",
+        border: "1px solid var(--border)",
+        borderRadius: 14,
+        padding: "14px 16px",
+        boxShadow: "0 1px 2px rgba(26,34,51,.04),0 6px 18px rgba(26,34,51,.05)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ display: "flex", color: "var(--accent)" }}>
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0012 2z" />
+          </svg>
+        </span>
+        <span
+          style={{
+            fontFamily: grotesk,
+            fontWeight: 700,
+            fontSize: 11.5,
+            letterSpacing: ".06em",
+            textTransform: "uppercase",
+            color: "var(--accent)",
+          }}
+        >
+          Runway suggests
+        </span>
+        {aiEnabled && (
+          <span style={{ fontSize: 10.5, color: "var(--faint)", marginLeft: "auto" }}>
+            {aiActive ? "✨ thinking…" : "✨ AI"}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55 }}>{body}</div>
+      {heuristic.action && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+          {heuristic.result && (
+            <span style={{ fontSize: 12.5, color: "var(--good)", fontWeight: 600 }}>
+              {heuristic.result}
+            </span>
+          )}
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            {heuristic.action.kind === "balance" ? (
+              <button onClick={() => onAction("simulator")} style={btnSecondary}>
+                Open simulator
+              </button>
+            ) : (
+              <button onClick={() => onAction("funding")} style={btnPrimary}>
+                Open funding history
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FlightDeck({
+  contractId,
+  setActiveId,
+  onOpenExpenses,
+  onOpenAllocation,
+  onOpenFunding,
+  onRename,
+  aiEnabled,
+}) {
   const [burn, setBurn] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -126,6 +271,13 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, on
       await onRename(next);
       load(contractId);
     }
+  }
+
+  // Route a suggestion's action button: "simulator" opens the Allocation Matrix,
+  // "funding" opens the Funding History.
+  function onSuggestAction(kind) {
+    if (kind === "simulator") onOpenAllocation?.();
+    else if (kind === "funding") onOpenFunding?.();
   }
 
   return (
@@ -249,6 +401,14 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, on
               — {tw.weeks_early} weeks before the PoP ends. Only {tw.runway_days} days of runway
               remain{tw.limited_by === "funding" ? " unless more funding is obligated" : ""}.
             </div>
+            <Suggestion
+              kind="over"
+              item={tw}
+              contract={contract}
+              aiEnabled={aiEnabled}
+              contractId={contractId}
+              onAction={onSuggestAction}
+            />
           </div>
         </div>
       ))}
@@ -308,6 +468,14 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, on
               after the PoP ends. Under-staffing or slipping delivery can leave money unspent and
               jeopardize option-year exercise.
             </div>
+            <Suggestion
+              kind="underburn"
+              item={ub}
+              contract={contract}
+              aiEnabled={aiEnabled}
+              contractId={contractId}
+              onAction={onSuggestAction}
+            />
           </div>
         </div>
       ))}
@@ -369,6 +537,14 @@ export default function FlightDeck({ contractId, setActiveId, onOpenExpenses, on
               of the PoP elapsed), so it needs its next funding mod, not a course correction.
               {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
             </div>
+            <Suggestion
+              kind="funding"
+              item={fw}
+              contract={contract}
+              aiEnabled={aiEnabled}
+              contractId={contractId}
+              onAction={onSuggestAction}
+            />
           </div>
         </div>
       ))}
