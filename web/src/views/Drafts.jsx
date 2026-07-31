@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, listContracts, draftProse } from "../api.js";
-import { buildDraft, renderDraftText, DOC_TYPES } from "../drafts.js";
+import { buildDraft, renderDraftText, stripMd, DOC_TYPES } from "../drafts.js";
 import { panelStyle } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
@@ -109,7 +109,7 @@ function docToHtml(doc) {
       }
       return (
         heading +
-        `<p style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px">${esc(s.text)}</p>`
+        `<p style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px">${esc(stripMd(s.text))}</p>`
       );
     })
     .join("");
@@ -163,7 +163,8 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
       return;
     }
     // Deterministic scaffold + heuristic prose first — this is the AI-off result.
-    const doc = buildDraft(nextType, burn, {});
+    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const doc = buildDraft(nextType, burn, { today });
     paint(doc);
     if (pageRef.current) pageRef.current.contentEditable = "false";
 

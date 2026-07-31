@@ -5,9 +5,13 @@ import { money, moneyM, pct } from "./format.js";
 // figures. Prose sections carry deterministic "heuristic" copy so the whole
 // document is usable with AI off; when AI is on the Drafts view replaces the
 // single prose section's text with a streamed, phrased version.
+//
+// Structures follow the authoritative forms: the SF-1034 public voucher (GSA),
+// the FAR 52.232-22 Limitation of Funds notification, and the DI-MGMT-80368A
+// monthly Contractor's Progress, Status and Management Report.
 
 export const DOC_TYPES = [
-  { key: "funding", label: "Funding request", blurb: "Incremental-funding memo to the CO" },
+  { key: "funding", label: "Funding request", blurb: "FAR 52.232-22 Limitation of Funds letter" },
   { key: "invoice", label: "Invoice (SF-1034)", blurb: "Public voucher for costs incurred" },
   { key: "cdrl", label: "Status check-in", blurb: "Monthly CDRL progress report" },
 ];
@@ -27,11 +31,24 @@ function moneyV(n) {
   return typeof n === "number" && Number.isFinite(n) ? moneyM(n) : "[verify]";
 }
 
+// Strip markdown syntax a model may emit despite instructions, so headings and
+// bold/bullet markers never render literally in the finished document.
+export function stripMd(s) {
+  return String(s)
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .trim();
+}
+
 const pop = (c) => `${vf(c.pop_start)} to ${vf(c.pop_end)}`;
 const contractorOf = (c) => vf(c.legal_name || c.name);
 
-// Pick the CLIN a funding memo is about: the deep-linked one, else the first
-// funding-status line, else the worst labor line.
+// Pick the CLIN a funding letter is about: the deep-linked one, else the first
+// funding-status line.
 function fundingFocus(burn, opts) {
   const funding = burn.funding || [];
   if (opts.focusClin) {
@@ -41,107 +58,124 @@ function fundingFocus(burn, opts) {
   return funding[0] || null;
 }
 
+// ── Incremental funding — FAR 52.232-22 Limitation of Funds notification ──────
 function buildFunding(burn, opts) {
   const c = burn.contract || {};
   const item = fundingFocus(burn, opts) || {};
   const code = vf(item.code);
-  // Requested increment = the still-unfunded slice of the line's ceiling. A
-  // concrete number from data, not a projection.
+  const today = vf(opts.today);
+  // Additional funds requested = the still-unfunded slice of the line's ceiling.
   const increment =
     typeof item.budget === "number" && typeof item.funded === "number"
       ? item.budget - item.funded
       : null;
+  const exhaustWk = item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : "[verify]";
 
+  // The heuristic tracks the clause's required 75% / next-60-days language.
   const heuristic =
-    `This letter requests incremental funding for ${code} under contract ` +
-    `${vf(c.piid)}. At the current burn rate the line spends through its funded ` +
-    `${moneyV(item.funded)} in week ${item.exhaust_week != null ? Math.round(item.exhaust_week) : "[verify]"}, ` +
-    `roughly ${item.weeks_early != null ? item.weeks_early : "[verify]"} weeks before the period of ` +
-    `performance ends. To keep the effort funded through completion we request an ` +
-    `additional ${moneyV(increment)} be obligated to this line.`;
+    `In accordance with FAR 52.232-22 (Limitation of Funds), this letter provides ` +
+    `notice that the costs we expect to incur under the referenced contract within ` +
+    `the next 60 days, added to all costs previously incurred, will exceed 75 percent ` +
+    `of the total amount presently allotted to ${code}. At the current rate of ` +
+    `performance the funds allotted to this line are projected to be exhausted in ` +
+    `${exhaustWk}. To avoid a lapse in performance we respectfully request that an ` +
+    `additional ${moneyV(increment)} be obligated to the contract to cover continued ` +
+    `performance through ${vf(c.pop_end)}.`;
 
   return {
     docType: "funding",
-    title: "Incremental Funding Request",
+    title: "Limitation of Funds — Notification & Request for Additional Funding",
     draftLabel: DRAFT_LABEL,
     meta: [
+      { label: "Date", value: today },
       { label: "To", value: "[verify] (Contracting Officer)" },
       { label: "From", value: contractorOf(c) },
-      { label: "Contract (PIID)", value: vf(c.piid) },
-      { label: "Agency", value: vf(c.agency) },
-      { label: "Period of performance", value: pop(c) },
-      { label: "Currently obligated", value: moneyV(c.obligated) },
-      { label: "Total ceiling", value: moneyV(c.contract_ceiling) },
+      { label: "Contract No.", value: vf(c.piid) },
+      { label: "Reference", value: "FAR 52.232-22, Limitation of Funds" },
+      { label: "Subject", value: `Funds limitation notice — ${code}` },
     ],
     sections: [
-      { id: "justification", heading: "Justification", kind: "prose", text: heuristic },
+      { id: "notice", heading: "Notification", kind: "prose", text: heuristic },
       {
         id: "summary",
-        heading: "Funding summary",
+        heading: "Funding status",
         kind: "table",
-        columns: ["Line", "Funded", "Ceiling", "Runs out", "Requested increment"],
-        rows: [[
-          code,
-          moneyV(item.funded),
-          moneyV(item.budget),
-          item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : "[verify]",
-          moneyV(increment),
-        ]],
+        columns: ["Item", "Amount"],
+        rows: [
+          ["Total obligated to contract", moneyV(c.obligated)],
+          ["Funds allotted to line", moneyV(item.funded)],
+          ["Line ceiling (fully funded)", moneyV(item.budget)],
+          ["Projected exhaustion", exhaustWk],
+          ["Additional funds requested", moneyV(increment)],
+          ["Period covered", `through ${vf(c.pop_end)}`],
+        ],
       },
     ],
   };
 }
 
-function buildInvoice(burn, _opts) {
+// ── SF-1034 Public Voucher for Purchases and Services Other Than Personal ─────
+function buildInvoice(burn, opts) {
   const c = burn.contract || {};
   const clins = burn.clins || [];
-  const rows = clins.map((x) => [
-    vf(x.code),
-    vf(x.name),
-    moneyV(x.spent),                 // cost incurred to date (labor + expenses)
-    moneyV(x.ceiling),
-    moneyV(x.remaining),
-  ]);
+  const rows = clins.map((x) => [vf(x.code), vf(x.name), moneyV(x.spent)]);
   const totalSpent = clins.every((x) => typeof x.spent === "number")
     ? clins.reduce((s, x) => s + x.spent, 0)
     : null;
 
   return {
     docType: "invoice",
-    title: "Public Voucher for Purchases and Services (SF-1034, draft)",
+    title: "Public Voucher for Purchases and Services Other Than Personal (SF-1034)",
     draftLabel: DRAFT_LABEL,
     meta: [
-      { label: "Voucher for", value: vf(c.agency) },
-      { label: "Contractor", value: contractorOf(c) },
-      { label: "Contract (PIID)", value: vf(c.piid) },
+      { label: "U.S. Department / Establishment", value: vf(c.agency) },
+      { label: "Date voucher prepared", value: vf(opts.today) },
+      { label: "Contract number and date", value: vf(c.piid) },
+      { label: "Voucher No.", value: "[verify] (sequential)" },
+      { label: "Payee's name and address", value: contractorOf(c) },
       { label: "Period of performance", value: pop(c) },
       { label: "Billing period", value: `through ${vf(burn.sync && burn.sync.latest_week)}` },
-      { label: "Total amount claimed", value: moneyV(totalSpent) },
     ],
     sections: [
       {
+        id: "basis",
+        heading: null,
+        kind: "text",
+        text: "COST REIMBURSABLE — PROVISIONAL PAYMENT. Provisional payment subject to later audit.",
+      },
+      {
         id: "lines",
-        heading: "Cost incurred by CLIN",
+        heading: "Articles or services",
         kind: "table",
-        columns: ["CLIN", "Description", "Amount claimed", "Ceiling", "Remaining"],
-        rows,
+        columns: ["CLIN", "Articles or services", "Amount claimed"],
+        rows: [...rows, ["", "Total", moneyV(totalSpent)]],
+      },
+      {
+        id: "costsummary",
+        heading: "Analysis of claimed costs",
+        kind: "table",
+        columns: ["", "Amount"],
+        rows: [
+          ["Previously claimed", "[verify]"],
+          ["This voucher", moneyV(totalSpent)],
+          ["Cumulative to date", "[verify]"],
+        ],
       },
       {
         id: "certification",
         heading: "Certification",
         kind: "text",
         text:
-          "I certify that the above amounts are correct and represent costs " +
-          "incurred in performance of the contract, that payment has not been " +
-          "received, and that the amounts claimed conform to the contract terms. " +
-          "This is a draft generated from burn data and must be reconciled to the " +
-          "accounting system of record before submission.",
+          "Pursuant to authority vested in me, I certify that this voucher is correct " +
+          "and proper for payment. This is a draft generated from burn data and must be " +
+          "reconciled to the accounting system of record before submission.",
       },
     ],
   };
 }
 
-function buildCdrl(burn, _opts) {
+// ── DI-MGMT-80368A Contractor's Progress, Status and Management Report ────────
+function buildCdrl(burn, opts) {
   const c = burn.contract || {};
   const t = burn.totals || {};
   const clins = burn.clins || [];
@@ -150,6 +184,9 @@ function buildCdrl(burn, _opts) {
     ...(burn.funding || []).map((x) => `${x.code} needs its next funding mod`),
     ...(burn.underburn || []).map((x) => `${x.code} is under-burning`),
   ];
+  const actions = (burn.funding || []).length
+    ? `Obligation of incremental funding for ${(burn.funding || []).map((x) => x.code).join(", ")}.`
+    : "None at this time.";
 
   const heuristic =
     `During this reporting period the team continued performance across ` +
@@ -162,18 +199,21 @@ function buildCdrl(burn, _opts) {
 
   return {
     docType: "cdrl",
-    title: "Monthly Status Report",
+    title: "Contractor's Progress, Status and Management Report",
     draftLabel: DRAFT_LABEL,
     meta: [
-      { label: "Contract (PIID)", value: vf(c.piid) },
       { label: "Contractor", value: contractorOf(c) },
+      { label: "Contract No.", value: vf(c.piid) },
+      { label: "CDRL / Data item", value: "[verify] (e.g. A001, DI-MGMT-80368A)" },
       { label: "Reporting period", value: `through week ${vf(c.current_week)} of ${vf(c.total_weeks)}` },
-      { label: "Overall status", value: vf(burn.hero && burn.hero.status) },
+      { label: "Date of report", value: vf(opts.today) },
+      { label: "Classification", value: "Unclassified" },
     ],
     sections: [
+      { id: "exec", heading: "1. Executive summary", kind: "prose", text: heuristic },
       {
-        id: "burn",
-        heading: "Burn summary by CLIN",
+        id: "status",
+        heading: "2. Contract & funding status",
         kind: "table",
         columns: ["CLIN", "Description", "Spent", "Ceiling", "% burned", "Status"],
         rows: clins.map((x) => [
@@ -186,16 +226,16 @@ function buildCdrl(burn, _opts) {
         ]),
       },
       {
-        id: "flags",
-        heading: "Flags",
+        id: "schedule",
+        heading: "3. Schedule & risk status",
         kind: "text",
-        text: flags.length ? flags.join("\n") : "No flags this period.",
+        text: flags.length ? flags.join("\n") : "No schedule or funding risks this period.",
       },
       {
-        id: "narrative",
-        heading: "Accomplishments & next-period plan",
-        kind: "prose",
-        text: heuristic,
+        id: "actions",
+        heading: "4. Government actions requested",
+        kind: "text",
+        text: actions,
       },
     ],
   };
@@ -220,7 +260,7 @@ export function renderDraftText(doc) {
       lines.push(s.columns.join("  |  "));
       for (const r of s.rows) lines.push(r.join("  |  "));
     } else {
-      lines.push(s.text);
+      lines.push(stripMd(s.text));
     }
   }
   return lines.join("\n");
