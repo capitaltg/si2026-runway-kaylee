@@ -57,6 +57,10 @@ function exportCsv(burn) {
 export default function App() {
   const [view, setView] = useState("portfolio");
   const [theme, setTheme] = useState("light");
+  // App-wide AI preference (off by default). When on, Runway may use AI to
+  // phrase things like Flight Deck suggestions; when off it uses built-in
+  // deterministic copy. Read by any feature that wants an AI path.
+  const [aiEnabled, setAiEnabled] = useState(() => localStorage.getItem("runway.ai") === "on");
   const [activeId, setActiveId] = useState(null);
   // Ask Runway is a slide-out drawer overlaid on any view, not a view itself.
   const [askOpen, setAskOpen] = useState(false);
@@ -70,6 +74,11 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Persist the AI preference so it sticks across sessions and stays app-wide.
+  useEffect(() => {
+    localStorage.setItem("runway.ai", aiEnabled ? "on" : "off");
+  }, [aiEnabled]);
 
   useEffect(() => {
     if (activeId == null) {
@@ -114,6 +123,8 @@ export default function App() {
           contract={chrome?.contract}
           theme={theme}
           toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          aiEnabled={aiEnabled}
+          toggleAi={() => setAiEnabled((v) => !v)}
           onExport={() => exportCsv(chrome)}
           onAskRunway={() => setAskOpen(true)}
         />
