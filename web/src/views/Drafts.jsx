@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, listContracts, draftProse } from "../api.js";
-import { buildDraft, renderDraftText, stripMd, DOC_TYPES } from "../drafts.js";
+import { buildDraft, renderDraftText, stripMd, weekToDate, DOC_TYPES } from "../drafts.js";
 import { panelStyle } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
@@ -164,7 +164,13 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
       return;
     }
     // Deterministic scaffold + heuristic prose first — this is the AI-off result.
-    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    // Date the document on the burn engine's timeline (anchored to the latest
+    // synced timesheet), not the real wall clock — otherwise "today" can fall
+    // after the projected funds-exhaustion date, which is derived the same way.
+    const cc = burn.contract || {};
+    const today =
+      weekToDate(cc.pop_start, cc.current_week) ||
+      new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const doc = buildDraft(nextType, burn, { today });
     paint(doc);
     // Editable immediately — the whole document (numbers, tables, prose) can be
