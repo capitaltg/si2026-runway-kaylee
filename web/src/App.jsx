@@ -7,8 +7,9 @@ import FlightDeck from "./views/FlightDeck.jsx";
 import Expenses from "./views/Expenses.jsx";
 import FundingHistory from "./views/FundingHistory.jsx";
 import AskRunway from "./views/AskRunway.jsx";
+import AllocationMatrix from "./views/AllocationMatrix.jsx";
 import { applyTheme } from "./theme.js";
-import { getBurn } from "./api.js";
+import { getBurn, renameContract } from "./api.js";
 
 function Placeholder({ name, note }) {
   return (
@@ -89,6 +90,16 @@ export default function App() {
     setView("flightdeck");
   }
 
+  // Save a user-chosen nickname for the active contract, then refresh the chrome
+  // so the new name lands in the sidebar card and top bar immediately.
+  async function onRename(name) {
+    if (activeId == null) return;
+    await renameContract(activeId, name);
+    getBurn(activeId)
+      .then(setChrome)
+      .catch(() => {});
+  }
+
   function openExpenses(clin) {
     setExpenseClin(clin);
     setView("expenses");
@@ -112,13 +123,13 @@ export default function App() {
           ) : view === "portfolio" ? (
             <Portfolio onOpen={openContract} />
           ) : view === "flightdeck" ? (
-            <FlightDeck contractId={activeId} setActiveId={setActiveId} onOpenExpenses={openExpenses} />
+            <FlightDeck contractId={activeId} setActiveId={setActiveId} onOpenExpenses={openExpenses} onRename={onRename} />
           ) : view === "expenses" ? (
             <Expenses contractId={activeId} initialClin={expenseClin} setActiveId={setActiveId} />
           ) : view === "funding" ? (
             <FundingHistory contractId={activeId} />
           ) : view === "allocate" ? (
-            <Placeholder name="Allocation Matrix" note="Staff → CLINs allocation is coming soon (issue #21)." />
+            <AllocationMatrix contractId={activeId} setActiveId={setActiveId} />
           ) : (
             <Placeholder name={view} note="Coming soon." />
           )}
