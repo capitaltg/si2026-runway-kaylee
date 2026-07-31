@@ -5,9 +5,23 @@ import { panelStyle } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 
+// Per-doc-type flavor: a kicker label above the title and the header band's lead
+// colour, so a funding memo, an invoice, and a status report read as distinct
+// documents at a glance.
+const DOC_LOOK = {
+  funding: { kicker: "MEMORANDUM", lead: "var(--accent)" },
+  invoice: { kicker: "PUBLIC VOUCHER", lead: "var(--good)" },
+  cdrl: { kicker: "STATUS REPORT", lead: "var(--accent2)" },
+};
+
+// Friendly contract label — never the PIID, which is unreadable when cycling
+// through contracts in the picker.
+const contractLabel = (c) =>
+  c.nickname || c.name || c.legal_name || `Contract #${c.id}`;
+
 const controlBtn = {
   height: 36,
-  padding: "0 16px",
+  padding: "0 18px",
   borderRadius: 9,
   border: "none",
   background: "var(--accent)",
@@ -15,48 +29,70 @@ const controlBtn = {
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
+  boxShadow: "0 4px 12px rgba(67,97,238,.28)",
 };
 const ghostBtn = {
   height: 36,
   padding: "0 14px",
   borderRadius: 9,
   border: "1px solid var(--border)",
-  background: "var(--panel2)",
+  background: "var(--panel)",
   color: "var(--text)",
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
 };
+const divider = { width: 1, height: 30, background: "var(--border)", margin: "0 2px" };
 
-// Render a Doc (from buildDraft) to HTML for the editable page. Prose text can be
-// swapped by the AI stream before this runs; after generation the whole page is
-// contentEditable so the PM can tweak both numbers and prose.
+// Render a Doc (from buildDraft) as a formatted, letterhead-style page. The prose
+// text may have been swapped by the AI stream before this runs; afterward the
+// whole page is contentEditable so the PM can tweak numbers and prose alike.
 function docToHtml(doc) {
   const esc = (s) =>
     String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const parts = [
-    `<h1 style="font-family:${grotesk};font-size:22px;margin:0 0 4px">${esc(doc.title)}</h1>`,
-    `<div style="color:var(--bad);font-weight:700;font-size:12px;letter-spacing:.08em;margin-bottom:16px">${esc(doc.draftLabel)}</div>`,
-    `<table style="border-collapse:collapse;margin-bottom:18px">${doc.meta
+  const look = DOC_LOOK[doc.docType] || { kicker: "DOCUMENT", lead: "var(--accent)" };
+  const lead = look.lead;
+
+  // Accent gradient header band. print-color-adjust keeps it on the page even
+  // when the browser's "background graphics" print option is off.
+  const header =
+    `<div style="background:linear-gradient(135deg,${lead},var(--accent2));color:#fff;` +
+    `padding:22px 30px;-webkit-print-color-adjust:exact;print-color-adjust:exact">` +
+    `<div style="font-size:11px;letter-spacing:.18em;font-weight:700;opacity:.85;margin-bottom:6px">${esc(look.kicker)}</div>` +
+    `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px">` +
+    `<h1 style="font-family:${grotesk};font-size:23px;font-weight:700;margin:0;line-height:1.2">${esc(doc.title)}</h1>` +
+    `<span style="border:1px solid rgba(255,255,255,.65);border-radius:20px;padding:4px 12px;font-size:10.5px;` +
+    `font-weight:700;letter-spacing:.06em;white-space:nowrap;flex:0 0 auto">${esc(doc.draftLabel)}</span>` +
+    `</div></div>`;
+
+  // Meta as a clean two-column definition block.
+  const meta =
+    `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:12px;` +
+    `padding:15px 18px;margin-bottom:22px;display:grid;grid-template-columns:auto 1fr;gap:7px 20px;font-size:12.5px">` +
+    doc.meta
       .map(
         (m) =>
-          `<tr><td style="padding:2px 16px 2px 0;color:var(--dim);font-size:12.5px;vertical-align:top">${esc(m.label)}</td>` +
-          `<td style="padding:2px 0;font-size:12.5px;color:var(--text)">${esc(m.value)}</td></tr>`
+          `<div style="color:var(--dim);font-weight:600">${esc(m.label)}</div>` +
+          `<div style="color:var(--text)">${esc(m.value)}</div>`
       )
-      .join("")}</table>`,
-  ];
-  for (const s of doc.sections) {
-    if (s.heading)
-      parts.push(
-        `<h2 style="font-family:${grotesk};font-size:15px;margin:18px 0 8px;color:var(--text)">${esc(s.heading)}</h2>`
-      );
-    if (s.kind === "table") {
-      parts.push(
-        `<table style="border-collapse:collapse;width:100%;font-size:12.5px;margin-bottom:8px">` +
+      .join("") +
+    `</div>`;
+
+  const body = doc.sections
+    .map((s) => {
+      const heading = s.heading
+        ? `<h2 style="font-family:${grotesk};font-size:13px;text-transform:uppercase;letter-spacing:.07em;` +
+          `color:${lead};border-left:3px solid ${lead};padding-left:10px;margin:24px 0 11px">${esc(s.heading)}</h2>`
+        : "";
+      if (s.kind === "table") {
+        return (
+          heading +
+          `<table style="border-collapse:collapse;width:100%;font-size:12.5px;margin-bottom:8px">` +
           `<thead><tr>${s.columns
             .map(
               (c) =>
-                `<th style="text-align:left;border-bottom:1px solid var(--border);padding:6px 8px;color:var(--dim);font-weight:600">${esc(c)}</th>`
+                `<th style="text-align:left;background:var(--panel2);border-bottom:2px solid ${lead};` +
+                `padding:8px 10px;color:var(--dim);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em">${esc(c)}</th>`
             )
             .join("")}</tr></thead><tbody>${s.rows
             .map(
@@ -64,19 +100,30 @@ function docToHtml(doc) {
                 `<tr>${r
                   .map(
                     (cell) =>
-                      `<td style="border-bottom:1px solid var(--border);padding:6px 8px;color:var(--text)">${esc(cell)}</td>`
+                      `<td style="border-bottom:1px solid var(--border);padding:8px 10px;color:var(--text)">${esc(cell)}</td>`
                   )
                   .join("")}</tr>`
             )
             .join("")}</tbody></table>`
+        );
+      }
+      return (
+        heading +
+        `<p style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px">${esc(s.text)}</p>`
       );
-    } else {
-      parts.push(
-        `<p style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;margin:0 0 10px">${esc(s.text)}</p>`
-      );
-    }
-  }
-  return parts.join("");
+    })
+    .join("");
+
+  // Signature block — letters and reports get signed; the invoice already carries
+  // its own certification section.
+  const signature =
+    doc.docType === "invoice"
+      ? ""
+      : `<div style="margin-top:34px;font-size:12.5px;color:var(--text)">Respectfully,` +
+        `<div style="margin-top:40px;border-top:1px solid var(--text);width:250px;padding-top:5px;color:var(--dim);font-size:12px">` +
+        `Authorized Representative · [verify]</div></div>`;
+
+  return header + `<div style="padding:24px 30px 32px">` + meta + body + signature + `</div>`;
 }
 
 export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocType, onConsumedPending }) {
@@ -165,6 +212,9 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
     navigator.clipboard?.writeText(text);
   }
 
+  const busy = status === "building" || status === "streaming";
+  const ready = status === "ready";
+
   return (
     <div style={{ padding: "24px 26px 60px", maxWidth: 900 }}>
       <div className="no-print" style={{ marginBottom: 18 }}>
@@ -177,42 +227,74 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
         </div>
       </div>
 
-      {/* controls */}
-      <div className="no-print" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+      {/* control bar — three distinct zones: contract · what to generate · operations */}
+      <div
+        className="no-print"
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginBottom: 16,
+          padding: 10,
+          background: "var(--panel)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+        }}
+      >
+        {/* zone 1: contract picker (by name, never PIID) */}
         <select
           value={contractId ?? ""}
           onChange={(e) => setActiveId(Number(e.target.value))}
-          style={{ ...ghostBtn, cursor: "pointer" }}
+          style={{ ...ghostBtn, cursor: "pointer", maxWidth: 220 }}
         >
           {contracts.map((c) => (
-            <option key={c.id} value={c.id}>{c.name || c.piid}</option>
+            <option key={c.id} value={c.id}>{contractLabel(c)}</option>
           ))}
         </select>
-        <div style={{ display: "flex", gap: 6 }}>
-          {DOC_TYPES.map((d) => (
-            <button
-              key={d.key}
-              title={d.blurb}
-              onClick={() => setDocType(d.key)}
-              style={{
-                ...ghostBtn,
-                borderColor: docType === d.key ? "var(--accent)" : "var(--border)",
-                color: docType === d.key ? "var(--accent)" : "var(--text)",
-              }}
-            >
-              {d.label}
-            </button>
-          ))}
+
+        <div style={divider} />
+
+        {/* zone 2: what to generate — a segmented control */}
+        <div style={{ display: "flex", background: "var(--panel2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, gap: 3 }}>
+          {DOC_TYPES.map((d) => {
+            const on = docType === d.key;
+            return (
+              <button
+                key={d.key}
+                title={d.blurb}
+                onClick={() => setDocType(d.key)}
+                style={{
+                  height: 30,
+                  padding: "0 13px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  background: on ? "var(--accent)" : "transparent",
+                  color: on ? "#fff" : "var(--dim)",
+                  boxShadow: on ? "0 2px 8px rgba(67,97,238,.28)" : "none",
+                }}
+              >
+                {d.label}
+              </button>
+            );
+          })}
         </div>
-        <button onClick={() => generate()} disabled={contractId == null || status === "streaming"} style={controlBtn}>
-          {status === "streaming" ? "✨ tailoring…" : "Generate"}
-        </button>
-        {docRef.current && status === "ready" && (
-          <>
-            <button onClick={onCopy} style={ghostBtn}>Copy</button>
-            <button onClick={() => window.print()} style={ghostBtn}>Export to PDF</button>
-          </>
-        )}
+
+        {/* zone 3: operations — always present, greyed until a draft is ready */}
+        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+          <button onClick={() => generate()} disabled={contractId == null || busy} style={{ ...controlBtn, opacity: contractId == null || busy ? 0.55 : 1 }}>
+            {status === "streaming" ? "✨ tailoring…" : status === "building" ? "Generating…" : "Generate"}
+          </button>
+          <button onClick={onCopy} disabled={!ready} style={{ ...ghostBtn, opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "default" }}>
+            Copy
+          </button>
+          <button onClick={() => window.print()} disabled={!ready} style={{ ...ghostBtn, opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "default" }}>
+            Export to PDF
+          </button>
+        </div>
       </div>
 
       {aiNote && (
@@ -228,7 +310,7 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
         <div
           ref={pageRef}
           className="draft-page"
-          style={{ ...panelStyle, minHeight: 300, padding: 28, outline: "none" }}
+          style={{ ...panelStyle, minHeight: 300, padding: 0, overflow: "hidden", outline: "none" }}
           suppressContentEditableWarning
         />
       )}
