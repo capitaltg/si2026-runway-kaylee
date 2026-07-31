@@ -107,9 +107,10 @@ function docToHtml(doc) {
             .join("")}</tbody></table>`
         );
       }
+      const proseAttr = s.kind === "prose" ? ' data-prose="1"' : "";
       return (
         heading +
-        `<p style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px">${esc(stripMd(s.text))}</p>`
+        `<p${proseAttr} style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px">${esc(stripMd(s.text))}</p>`
       );
     })
     .join("");
@@ -166,34 +167,31 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
     const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     const doc = buildDraft(nextType, burn, { today });
     paint(doc);
-    if (pageRef.current) pageRef.current.contentEditable = "false";
+    // Editable immediately — the whole document (numbers, tables, prose) can be
+    // tweaked right away, even while AI phrasing streams into the prose section.
+    if (pageRef.current) pageRef.current.contentEditable = "true";
 
     const proseSection = doc.sections.find((s) => s.kind === "prose");
     if (!aiEnabled || !proseSection) {
-      finishEditable();
+      setStatus("ready");
       return;
     }
-    // AI on: stream a phrased version of the single prose section over the top.
+    // AI on: stream a phrased version of the prose section over the top, writing
+    // ONLY into that paragraph node so edits elsewhere in the doc aren't clobbered.
     setStatus("streaming");
+    const proseEl = pageRef.current && pageRef.current.querySelector("[data-prose]");
     let streamed = "";
     try {
       await draftProse({ contractId, docType: nextType }, (chunk) => {
         streamed += chunk;
-        proseSection.text = streamed;
-        paint(doc);
+        if (proseEl) proseEl.textContent = stripMd(streamed);
       });
       if (!streamed.trim()) setAiNote("AI unavailable — using standard wording.");
     } catch {
-      proseSection.text = buildDraft(nextType, burn, {}).sections.find((s) => s.kind === "prose").text;
-      paint(doc);
+      // The heuristic prose is already in place from the initial paint; keep it.
       setAiNote("AI unavailable — using standard wording.");
     }
-    finishEditable();
-  }
-
-  function finishEditable() {
     setStatus("ready");
-    if (pageRef.current) pageRef.current.contentEditable = "true";
   }
 
   // Consume a funding deep-link once: select the doc type and auto-generate.
@@ -284,9 +282,15 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
           })}
         </div>
 
-        {/* zone 3: operations — always present, greyed until a draft is ready */}
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-          <button onClick={() => generate()} disabled={contractId == null || busy} style={{ ...controlBtn, opacity: contractId == null || busy ? 0.55 : 1 }}>
+        {/* zone 3: operations — always present, greyed until a draft is ready.
+            Generate has a fixed width so its label changing (Generate →
+            Generating… → ✨ tailoring…) never reflows the toolbar. */}
+        <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
+          <button
+            onClick={() => generate()}
+            disabled={contractId == null || busy}
+            style={{ ...controlBtn, minWidth: 130, whiteSpace: "nowrap", opacity: contractId == null || busy ? 0.55 : 1 }}
+          >
             {status === "streaming" ? "✨ tailoring…" : status === "building" ? "Generating…" : "Generate"}
           </button>
           <button onClick={onCopy} disabled={!ready} style={{ ...ghostBtn, opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "default" }}>
