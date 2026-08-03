@@ -171,7 +171,6 @@ export default function BurnChart({ clin, contract }) {
       label: "With a funding mod",
       value: `ceiling ~wk ${Math.round(ghost.week)}`,
     },
-    { vline: true, color: "var(--dim)", label: "Today", value: `wk ${cw}` },
     {
       dash: "dashed",
       color: "var(--bad)",
@@ -322,7 +321,9 @@ export default function BurnChart({ clin, contract }) {
           />
         )}
 
-        {/* today marker */}
+        {/* today marker — the one caption that stays in the plot: it names a
+            position on the x axis, which a legend row can't do, and the top of
+            the plot is otherwise empty now so it has nothing to collide with. */}
         <line
           x1={xc}
           y1="28"
@@ -333,6 +334,15 @@ export default function BurnChart({ clin, contract }) {
           strokeDasharray="3 3"
           opacity=".55"
         />
+        <text
+          x={xc}
+          y="44"
+          textAnchor="middle"
+          fontSize="11.5"
+          fill="var(--dim)"
+        >
+          today · wk {cw}
+        </text>
 
         {/* pace / actual / projected. The pace line rises at the ceiling slope and
             stops at the funding horizon when incrementally funded (see above). */}
@@ -426,15 +436,7 @@ export default function BurnChart({ clin, contract }) {
             key={it.label}
             style={{ display: "flex", alignItems: "center", gap: 6 }}
           >
-            {it.vline ? (
-              <span
-                style={{
-                  width: 0,
-                  height: 12,
-                  borderLeft: `1px dashed ${it.color}`,
-                }}
-              />
-            ) : it.dash === "solid" ? (
+            {it.dash === "solid" ? (
               <span
                 style={{
                   width: 16,
