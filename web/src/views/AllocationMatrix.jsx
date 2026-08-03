@@ -23,16 +23,21 @@ function initials(name) {
 // lagging with no mod flagged; routine incremental funding is an amber "funding
 // due", the same as every other funding state. Skipping it meant these cards
 // scored a CLIN red that the Flight Deck was showing amber for.
+// Does projected spend blow the real ceiling, not just the funded slice? Decides
+// whether trouble is a ceiling problem or a funding one — and on a CLIN that
+// isn't incrementally funded the budget *is* the ceiling, so any shortfall lands
+// here and keeps the ceiling wording.
+function ceilingBreachedFor(c, weekly, cw, totalWeeks) {
+  if (!(weekly > 0) || !c.ceiling) return false;
+  return cw + (c.ceiling - c.spent) / weekly < totalWeeks - 1;
+}
+
 function simStatus(exhaustWeek, totalWeeks, c, weekly, cw) {
   if (exhaustWeek == null) return "paused";
   if (exhaustWeek < totalWeeks - 1) {
-    const ceilingExhaust =
-      weekly > 0 && c.ceiling ? cw + (c.ceiling - c.spent) / weekly : null;
-    const ceilingBreached =
-      ceilingExhaust != null && ceilingExhaust < totalWeeks - 1;
     if (
       c.incrementally_funded &&
-      !ceilingBreached &&
+      !ceilingBreachedFor(c, weekly, cw, totalWeeks) &&
       (c.mod_in_progress || c.funding_keeps_pace)
     )
       return "funding";
@@ -202,6 +207,7 @@ export default function AllocationMatrix({
         runwayDays,
         status:
           weekly > 0 ? simStatus(exhaustWeek, tw, c, weekly, cw) : "paused",
+        ceilingBreached: ceilingBreachedFor(c, weekly, cw, tw),
       };
       totalWeekly += weekly;
     }
@@ -1586,7 +1592,7 @@ export default function AllocationMatrix({
           >
             {clins.map((c, i) => {
               const s = sim[c.id] || {};
-              const p = pill(s.status);
+              const p = pill(s.status, s.ceilingBreached);
               const rc = statusColor(s.status);
               const baseWeek = c.base_exhaust_week;
               const delta =

@@ -258,12 +258,21 @@ def _rate_resolver(clin: dict):
     return rate_for, blended, source
 
 
-def _pill(status: str) -> str:
+def _pill(status: str, ceiling_breached: bool = True) -> str:
+    """Status → pill label. `over` names whichever limit is actually in jeopardy.
+
+    A red `over` is reached two different ways, and one label can't cover both.
+    When projected spend blows the real ceiling it's a ceiling problem. When the
+    ceiling still holds it's the funded slice that ran short with funding lagging
+    — calling that "Over ceiling" pointed at a limit the CLIN was nowhere near.
+    A CLIN that isn't incrementally funded has budget == ceiling, so `over` always
+    implies a breach there and it keeps the ceiling wording without asking.
+
+    Defaults to the ceiling wording for callers with no funded-slice notion.
+    """
+    if status == "over":
+        return "Over ceiling" if ceiling_breached else "Funds short"
     return {
-        # Set from the projected exhaust week beating PoP end, against `budget` —
-        # the funded slice when incrementally funded, not the ceiling. Neither a
-        # ceiling nor an event that has already happened, so it isn't "over" one.
-        "over": "Funds short",
         "watch": "Watch",
         "ok": "On pace",
         "under": "Under pace",
@@ -462,7 +471,10 @@ def _compute_clin(
         ),
         "runway_days": runway_days,
         "status": status,
-        "status_label": _pill(status),
+        "status_label": _pill(status, ceiling_breached),
+        # Which limit is in jeopardy, so the frontend can label a red `over` the
+        # same way this does (and its simulator can too).
+        "ceiling_breached": bool(ceiling_breached),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
@@ -766,7 +778,14 @@ def compute(
                 "overspent": round(spent - budget, 2) if remaining < 0 else 0.0,
                 "entries": exp_count.get(num, 0),
                 "status": status,
-                "status_label": "Tracked" if status == "tracked" else _pill(status),
+                # No forward pace on a non-labor line, so the breach is realized:
+                # spend is past the ceiling, not just past the funded slice.
+                "status_label": (
+                    "Tracked"
+                    if status == "tracked"
+                    else _pill(status, spent >= ceiling)
+                ),
+                "ceiling_breached": spent >= ceiling,
                 "rate_source": "n/a",
                 # No timesheet series → no forward pace. Realized read only; the
                 # None runway fields let the tripwire lists (below) treat these
