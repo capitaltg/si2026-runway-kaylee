@@ -7,6 +7,33 @@ export const money = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
 export const moneyM = (n) => "$" + ((n || 0) / 1e6).toFixed(2) + "M";
 export const pct = (frac) => Math.round((frac || 0) * 100) + "%";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// "2026-03-14" → "14 Mar 26", matching the date format the top bar already uses.
+// Regex-parsed rather than through `new Date()` on purpose: `new Date("2026-03-14")`
+// is parsed as UTC midnight and then rendered in local time, so west of Greenwich
+// every date in the app would render one day early. The year is kept because a
+// hard stop (#23) can land in the next calendar year, where a bare "14 Mar" is
+// ambiguous. Falls back to the raw string if it won't parse.
+export function shortDate(s) {
+  if (!s) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return s;
+  return `${m[3]} ${MONTHS[+m[2] - 1] || m[2]} ${m[1].slice(2)}`;
+}
+
+// The hard-stop forecast (#23) as a phrase. `passed` means the binding money is
+// already gone, so the date is behind us and the honest reading is that charging
+// should stop now — naming a past date as though it were a deadline reads as though
+// there were still time. `reason` names which limit produces the date, matching the
+// engine's `stop_reason` / `limited_by`.
+export function stopPhrase(stopDate, reason, passed) {
+  if (!stopDate) return null;
+  if (passed) return `Charging stops today (funds out ${shortDate(stopDate)})`;
+  return reason === "funding"
+    ? `Charging stops ~${shortDate(stopDate)} without a mod`
+    : `Charging stops ~${shortDate(stopDate)} at ceiling`;
+}
+
 // Per-CLIN accent hues, assigned by index (design's avPal).
 const HUES = ["#4361ee", "#06b6d4", "#7c5cff", "#ef8f2a", "#10b981", "#f05252"];
 export const hueFor = (i) => HUES[i % HUES.length];
