@@ -321,7 +321,8 @@ const emptyContract = () => ({
 });
 const emptyClin = (period) => ({
   clin: "", period: period || "Base", title: "", type: "", is_labor: false,
-  ceiling: null, est_hours: null, labor_rates: null, confidence: null,
+  ceiling: null, obligated: null, acrn: null, est_hours: null,
+  labor_rates: null, confidence: null,
 });
 const emptyRate = () => ({
   lcat: "", loaded_rate: null, est_hours: null,
@@ -661,6 +662,14 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
           .map((cl, idx) => ({ cl, idx }))
           .filter(({ cl }) => (cl.period || "Base") === name);
         const sum = items.reduce((s, { cl }) => s + (Number(cl.ceiling) || 0), 0);
+        // Per-CLIN obligation is all-or-nothing per period: the burn engine only
+        // takes the funded total from these lines when every CLIN in the period
+        // carries one. A partial set (a hand-added CLIN, a page the extractor
+        // missed) silently drops the whole period back to the pro-rata split, so
+        // the review screen has to say which state the period is in.
+        const attributed = items.filter(({ cl }) => cl.obligated != null);
+        const fundedSum = attributed.reduce((s, { cl }) => s + (Number(cl.obligated) || 0), 0);
+        const partiallyFunded = attributed.length > 0 && attributed.length < items.length;
         const exercised = p ? p.exercised : true;
         return (
           <div key={name} style={{ ...panelStyle, padding: 0, overflow: "hidden", marginBottom: 12 }}>
@@ -721,10 +730,29 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
                 }}
               >
                 {money(sum)}
+                {attributed.length > 0 && (
+                  <span style={{ color: "var(--good)" }}> · {money(fundedSum)} funded</span>
+                )}
               </span>
             </div>
 
+            {partiallyFunded && (
+              <div
+                style={{
+                  padding: "8px 16px", fontSize: 12, lineHeight: 1.5,
+                  color: "var(--dim)", background: "var(--panel2)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                {attributed.length} of {items.length} CLINs in {name} carry per-CLIN funding. The
+                engine uses a real obligation only when every CLIN in the period has one — as it
+                stands, this period falls back to splitting the obligated total pro-rata by
+                ceiling. Fill in the missing amounts to keep the award's own split.
+              </div>
+            )}
+
             <div style={{ padding: "6px 0" }}>
+              {items.length > 0 && <ClinHeader editing={editing} />}
               {items.length === 0 && (
                 <div style={{ padding: "10px 16px", fontSize: 12.5, color: "var(--faint)" }}>
                   No CLINs in this period.
@@ -818,6 +846,39 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
   );
 }
 
+// Column widths for one CLIN line, shared by the header strip and the rows so
+// the two can't drift apart. Editing splits funding into two fields (amount and
+// ACRN); reading shows the ACRN as a badge beside the amount.
+const clinGrid = (editing) =>
+  editing ? "110px 1fr 70px 118px 118px 76px 34px" : "150px 1fr 70px 130px 150px";
+
+// Column labels for the CLIN rows. Without these the Funded column reads as a
+// second unexplained money figure next to the ceiling — and the two are exactly
+// what a reviewer must not confuse (not-to-exceed vs. dollars actually
+// obligated).
+function ClinHeader({ editing }) {
+  const th = {
+    fontSize: 9.5, fontWeight: 700, textTransform: "uppercase",
+    letterSpacing: 0.4, color: "var(--faint)",
+  };
+  return (
+    <div
+      style={{
+        display: "grid", gridTemplateColumns: clinGrid(editing),
+        gap: 10, alignItems: "end", padding: "2px 16px 6px",
+      }}
+    >
+      <div style={th}>CLIN</div>
+      <div style={th}>Description</div>
+      <div style={th}>Type</div>
+      <div style={{ ...th, textAlign: editing ? "left" : "right" }}>Ceiling (NTE)</div>
+      <div style={{ ...th, textAlign: editing ? "left" : "right" }}>Funded (obligated)</div>
+      {editing && <div style={th}>ACRN</div>}
+      {editing && <div />}
+    </div>
+  );
+}
+
 // One CLIN line, with an expandable fully-burdened labor-rate table (the rates
 // the burn engine will price hours against). Read-only or editable.
 function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate, addRate, removeRate }) {
@@ -829,7 +890,7 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: editing ? "120px 1fr 80px 130px 34px" : "150px 1fr 70px 130px",
+          gridTemplateColumns: clinGrid(editing),
           // One size for the whole row: without this, cells with no explicit
           // fontSize (CLIN #, type, ceiling) fall back to the 16px browser
           // default and dwarf the 13px title beside them — the "different sizes"
@@ -877,6 +938,47 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
             money(cl.ceiling)
           )}
         </div>
+        {/* Dollars obligated to this line per the award's Accounting and
+            Appropriation Data block. Distinct from the ceiling: this is the
+            money the burn engine measures runway against when it's present,
+            and a blank here means the line falls back to a pro-rata share of
+            the header total. */}
+        <div style={{ textAlign: editing ? "left" : "right", ...mono }}>
+          {editing ? (
+            <NumberField
+              value={cl.obligated}
+              onChange={(v) => setClin(idx, "obligated", v)}
+              placeholder="none"
+            />
+          ) : cl.obligated != null ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {money(cl.obligated)}
+              {cl.acrn && (
+                <span
+                  style={{
+                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 20,
+                    background: "var(--goodBg)", color: "var(--good)",
+                    fontFamily: "'Manrope',sans-serif",
+                  }}
+                  title="Accounting Classification Reference Number funding this CLIN"
+                >
+                  ACRN {cl.acrn}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span style={{ color: "var(--faint)" }} title="No per-CLIN funding on the award — this line gets a pro-rata share of the obligated total">
+              pro-rata
+            </span>
+          )}
+        </div>
+        {editing && (
+          <TextField
+            value={cl.acrn}
+            onChange={(v) => setClin(idx, "acrn", v || null)}
+            placeholder="AA"
+          />
+        )}
         {editing && (
           <button
             onClick={() => removeClin(idx)}
