@@ -84,7 +84,11 @@ export default function Portfolio({ onOpen }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(370px,1fr))", gap: 16 }}>
         {data.contracts.map((c, i) => {
           const hue = hueFor(i);
+          // Styling from the status, wording from the server: it rolls the card's
+          // label up from the CLINs behind it, so a contract whose only red line is
+          // a funding problem stops claiming the ceiling was breached.
           const p = pill(c.status);
+          const pillLabel = c.status_label || p.label;
           const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
           return (
             <div
@@ -124,7 +128,7 @@ export default function Portfolio({ onOpen }) {
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>{c.agency || c.piid}</div>
                 </div>
-                <span style={p.style}>{p.label}</span>
+                <span style={p.style}>{pillLabel}</span>
               </div>
 
               <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginTop: 16 }}>

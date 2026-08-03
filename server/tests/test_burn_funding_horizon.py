@@ -24,7 +24,24 @@ def test_forward_band_bands_against_the_finish_line():
 # ---- _funded_shortfall_status ----------------------------------------------
 #
 # Args: (runway_days, ceiling_exhaust, total_weeks, incrementally_funded,
-#        ceiling_breached, mod_in_progress, funding_keeps_pace)
+#        ceiling_breached, mod_in_progress, funding_keeps_pace, funds_exceeded)
+
+
+def test_funds_already_spent_through_is_red_not_amber():
+    # runway_days floors at 0 once spend passes the funded slice, so this used to
+    # satisfy `0 <= 60` and read amber "Funding due" — the same pill as a CLIN with
+    # two months of runway left. The softening is forward-looking; once the money is
+    # gone the notice under FAR 52.232-22(c) is already overdue and the cost is at
+    # risk under (d)/(f), so it stays red however well funding is tracking.
+    assert (
+        burn._funded_shortfall_status(0, 56.0, 52, True, False, True, True, True)
+        == "over"
+    )
+    # Same CLIN a dollar short of the slice: still the amber heads-up.
+    assert (
+        burn._funded_shortfall_status(0, 56.0, 52, True, False, True, True, False)
+        == "funding"
+    )
 
 
 def test_not_incrementally_funded_is_plain_red():
@@ -104,10 +121,23 @@ def test_outside_the_horizon_reports_the_ceiling_instead():
     assert (
         burn._funded_shortfall_status(92, 51.8, 52, True, False, False, True) == "watch"
     )
-    # And an under-burn outside the horizon reads as an under-burn.
+
+
+def test_ceiling_reband_never_reports_an_under_burn():
+    # Reaching this function means the funded slice runs dry before PoP end, so a
+    # ceiling projection way past the finish line must not become "spend faster" —
+    # the CLIN runs out of money first. It used to, and the under-burn card is built
+    # from the *funded* slice while the label came from the ceiling, so the seed-19
+    # demo contract rendered "projected to under-spend its funded $2.7M by $0.0M …
+    # ~-5 weeks after the PoP ends" and advised staffing up on a CLIN 74 days from
+    # dry. Clamped to "ok": nothing is due inside the FAR window, nothing to do.
     assert (
-        burn._funded_shortfall_status(200, 70.0, 52, True, False, False, True)
-        == "under"
+        burn._funded_shortfall_status(200, 70.0, 52, True, False, False, True) == "ok"
+    )
+    # The other bands still pass through untouched — only `under` is invalid here.
+    assert (
+        burn._funded_shortfall_status(200, 51.8, 52, True, False, False, True)
+        == "watch"
     )
 
 
@@ -137,3 +167,30 @@ def test_pill_names_the_limit():
     assert burn._pill("over", ceiling_breached=False) == "Funds short"
     assert burn._pill("over") == "Over ceiling"  # default for callers with no slice
     assert burn._pill("funding") == "Funding due"
+
+
+def test_pill_distinguishes_spent_funding_from_a_forecast_shortfall():
+    # "Funds short" is a forecast; "Funds exceeded" already happened. Both are red
+    # and both are about the funded slice, so one label for the pair loses the only
+    # thing a PM acts on differently.
+    assert (
+        burn._pill("over", ceiling_breached=False, funds_exceeded=True)
+        == "Funds exceeded"
+    )
+    assert (
+        burn._pill("over", ceiling_breached=True, funds_exceeded=False)
+        == "Over ceiling"
+    )
+    # Both at once is real — a CLIN can be past its obligated funding today *and*
+    # projected to blow the ceiling later (live: contract 5 CLIN 2001). Realized
+    # beats forecast, so the funding wording wins. A *realized* ceiling breach
+    # still outranks it, but _funds_exceeded returns False in that case so the
+    # ordering never has to be re-decided here.
+    assert (
+        burn._pill("over", ceiling_breached=True, funds_exceeded=True)
+        == "Funds exceeded"
+    )
+    # Only `over` is ambiguous; the amber states are unaffected.
+    assert burn._pill("funding", ceiling_breached=False, funds_exceeded=True) == (
+        "Funding due"
+    )
