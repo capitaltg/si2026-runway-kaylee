@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
-import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
+import {
+  getBurn,
+  getSources,
+  syncTimesheets,
+  listContracts,
+  askRunway,
+} from "../api.js";
+import {
+  money,
+  moneyM,
+  pct,
+  pill,
+  hueFor,
+  statusColor,
+  panelStyle,
+} from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import { suggestFor } from "../suggest.js";
 
@@ -12,7 +26,13 @@ const tileLabel = {
   fontWeight: 700,
   color: "var(--faint)",
 };
-const tileNum = { fontFamily: grotesk, fontWeight: 700, fontSize: 30, color: "var(--text)", marginTop: 8 };
+const tileNum = {
+  fontFamily: grotesk,
+  fontWeight: 700,
+  fontSize: 30,
+  color: "var(--text)",
+  marginTop: 8,
+};
 
 // Suggestion action buttons, matched to the design (Runway.dc.html): a primary
 // accent button and a secondary "Open simulator".
@@ -44,7 +64,15 @@ const btnSecondary = {
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
 // stream fails (Bedrock down, etc.). The action button routes via onAction.
-function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts }) {
+function Suggestion({
+  kind,
+  item,
+  contract,
+  aiEnabled,
+  contractId,
+  onAction,
+  onOpenDrafts,
+}) {
   const heuristic = suggestFor(kind, item, contract);
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
@@ -93,7 +121,14 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
         boxShadow: "0 1px 2px rgba(26,34,51,.04),0 6px 18px rgba(26,34,51,.05)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
         <span style={{ display: "flex", color: "var(--accent)" }}>
           <svg
             width="15"
@@ -137,32 +172,59 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
           </span>
         )}
         {aiEnabled && (
-          <span style={{ fontSize: 10.5, color: "var(--faint)", marginLeft: "auto" }}>
+          <span
+            style={{
+              fontSize: 10.5,
+              color: "var(--faint)",
+              marginLeft: "auto",
+            }}
+          >
             {aiActive ? "✨ thinking…" : "✨ AI"}
           </span>
         )}
       </div>
-      <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55 }}>{body}</div>
+      <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55 }}>
+        {body}
+      </div>
       {heuristic.action && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 12,
+            flexWrap: "wrap",
+          }}
+        >
           {heuristic.result && (
-            <span style={{ fontSize: 12.5, color: "var(--good)", fontWeight: 600 }}>
+            <span
+              style={{ fontSize: 12.5, color: "var(--good)", fontWeight: 600 }}
+            >
               {heuristic.result}
             </span>
           )}
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
             {heuristic.action.kind === "balance" ? (
               <>
-                <button onClick={() => onAction("simulator")} style={btnSecondary}>
+                <button
+                  onClick={() => onAction("simulator")}
+                  style={btnSecondary}
+                >
                   Open simulator
                 </button>
-                <button onClick={() => onAction("apply-fix")} style={btnPrimary}>
+                <button
+                  onClick={() => onAction("apply-fix")}
+                  style={btnPrimary}
+                >
                   Apply fix
                 </button>
               </>
             ) : (
               <>
-                <button onClick={() => onAction("funding")} style={btnSecondary}>
+                <button
+                  onClick={() => onAction("funding")}
+                  style={btnSecondary}
+                >
                   Open funding history
                 </button>
                 <button
@@ -216,7 +278,9 @@ export default function FlightDeck({
       const b = await getBurn(id);
       setBurn(b);
       const labor = b.clins.filter((c) => c.is_labor);
-      setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
+      setSelected((s) =>
+        labor.some((c) => c.id === s) ? s : (labor[0]?.id ?? null),
+      );
       // First visit with no hours synced yet: pull them once automatically so
       // the Flight Deck shows real burn instead of an empty "sync timesheets".
       if ((b?.sync?.rows ?? 0) === 0 && !autoSyncedRef.current.has(id)) {
@@ -260,10 +324,24 @@ export default function FlightDeck({
     );
   }
   if (!burn) {
-    return <div style={{ padding: "40px", color: "var(--dim)" }}>Loading flight deck…</div>;
+    return (
+      <div style={{ padding: "40px", color: "var(--dim)" }}>
+        Loading flight deck…
+      </div>
+    );
   }
 
-  const { contract, totals, hero, tripwires, underburn = [], funding = [], data_quality = [], all_clear, sync } = burn;
+  const {
+    contract,
+    totals,
+    hero,
+    tripwires,
+    underburn = [],
+    funding = [],
+    data_quality = [],
+    all_clear,
+    sync,
+  } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
@@ -274,7 +352,9 @@ export default function FlightDeck({
         ? "#c26e12"
         : "#0b8f65";
   // Live-data strip shows only sources actually feeding this project.
-  const liveSources = sources.filter((s) => s.status === "live" || s.status === "synced");
+  const liveSources = sources.filter(
+    (s) => s.status === "live" || s.status === "synced",
+  );
   const stripSources = liveSources.length ? liveSources : sources;
   const heroSub =
     hero?.status === "over"
@@ -349,7 +429,15 @@ export default function FlightDeck({
             />
           ) : (
             <>
-              <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
+              <h2
+                style={{
+                  margin: 0,
+                  fontFamily: grotesk,
+                  fontSize: 22,
+                  fontWeight: 600,
+                  color: "var(--text)",
+                }}
+              >
                 {contract.name || contract.piid}
               </h2>
               <button
@@ -371,7 +459,9 @@ export default function FlightDeck({
           )}
         </div>
         <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 5 }}>
-          {contract.nickname && contract.legal_name ? `${contract.legal_name} · ` : ""}
+          {contract.nickname && contract.legal_name
+            ? `${contract.legal_name} · `
+            : ""}
           {contract.agency || "—"} · {contract.piid}
         </div>
       </div>
@@ -407,8 +497,22 @@ export default function FlightDeck({
             !
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--bad)" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: grotesk,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: "var(--bad)",
+                }}
+              >
                 Tripwire — {tw.code} {tw.name}
               </span>
               <span
@@ -424,7 +528,14 @@ export default function FlightDeck({
                 {pct(tw.pct)} burned
               </span>
             </div>
-            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+            <div
+              style={{
+                fontSize: 13.5,
+                color: "var(--text)",
+                marginTop: 6,
+                lineHeight: 1.5,
+              }}
+            >
               At the current burn rate, {tw.code}{" "}
               {tw.limited_by === "funding" ? (
                 <>
@@ -432,10 +543,17 @@ export default function FlightDeck({
                   {Math.round(tw.exhaust_week)}
                 </>
               ) : (
-                <>blows its {moneyM(tw.budget)} ceiling in week {Math.round(tw.exhaust_week)}</>
+                <>
+                  blows its {moneyM(tw.budget)} ceiling in week{" "}
+                  {Math.round(tw.exhaust_week)}
+                </>
               )}{" "}
-              — {tw.weeks_early} weeks before the PoP ends. Only {tw.runway_days} days of runway
-              remain{tw.limited_by === "funding" ? " unless more funding is obligated" : ""}.
+              — {tw.weeks_early} weeks before the PoP ends. Only{" "}
+              {tw.runway_days} days of runway remain
+              {tw.limited_by === "funding"
+                ? " unless more funding is obligated"
+                : ""}
+              .
             </div>
             <Suggestion
               kind="over"
@@ -481,8 +599,22 @@ export default function FlightDeck({
             ↓
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--warn)" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: grotesk,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: "var(--warn)",
+                }}
+              >
                 Under-burning — {ub.code} {ub.name}
               </span>
               <span
@@ -498,11 +630,19 @@ export default function FlightDeck({
                 {pct(ub.pct)} burned
               </span>
             </div>
-            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-              At the current burn rate, {ub.code} is projected to under-spend its{" "}
-              {ub.limited_by === "funding" ? "funded" : "budgeted"} {moneyM(ub.budget)} by{" "}
-              <b>{moneyM(ub.projected_unspent)}</b> — not consuming it until ~{ub.weeks_slack} weeks
-              after the PoP ends. Under-staffing or slipping delivery can leave money unspent and
+            <div
+              style={{
+                fontSize: 13.5,
+                color: "var(--text)",
+                marginTop: 6,
+                lineHeight: 1.5,
+              }}
+            >
+              At the current burn rate, {ub.code} is projected to under-spend
+              its {ub.limited_by === "funding" ? "funded" : "budgeted"}{" "}
+              {moneyM(ub.budget)} by <b>{moneyM(ub.projected_unspent)}</b> — not
+              consuming it until ~{ub.weeks_slack} weeks after the PoP ends.
+              Under-staffing or slipping delivery can leave money unspent and
               jeopardize option-year exercise.
             </div>
             <Suggestion
@@ -550,10 +690,26 @@ export default function FlightDeck({
             $
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--warn)" }}>
-                {fw.mod_in_progress ? "Funding request outstanding" : "Funding due"} — {fw.code}{" "}
-                {fw.name}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: grotesk,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: "var(--warn)",
+                }}
+              >
+                {fw.mod_in_progress
+                  ? "Funding request outstanding"
+                  : "Funding due"}{" "}
+                — {fw.code} {fw.name}
               </span>
               <span
                 style={{
@@ -568,12 +724,23 @@ export default function FlightDeck({
                 {pct(fw.funded_frac)} funded
               </span>
             </div>
-            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-              At the current burn rate, {fw.code} spends through its funded {moneyM(fw.funded)} in
-              week {Math.round(fw.exhaust_week)} — {fw.weeks_early} weeks before the PoP ends. This is
-              routine incremental funding ({pct(fw.funded_frac)} obligated at {pct(fw.elapsed_frac)}{" "}
-              of the PoP elapsed), so it needs its next funding mod, not a course correction.
-              {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
+            <div
+              style={{
+                fontSize: 13.5,
+                color: "var(--text)",
+                marginTop: 6,
+                lineHeight: 1.5,
+              }}
+            >
+              At the current burn rate, {fw.code} spends through its funded{" "}
+              {moneyM(fw.funded)} in week {Math.round(fw.exhaust_week)} —{" "}
+              {fw.weeks_early} weeks before the PoP ends. This is routine
+              incremental funding ({pct(fw.funded_frac)} obligated at{" "}
+              {pct(fw.elapsed_frac)} of the PoP elapsed), so it needs its next
+              funding mod, not a course correction.
+              {fw.mod_in_progress
+                ? " A funding modification is already outstanding."
+                : ""}
             </div>
             <Suggestion
               kind="funding"
@@ -622,8 +789,22 @@ export default function FlightDeck({
             ?
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--bad)" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: grotesk,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: "var(--bad)",
+                }}
+              >
                 Can't price {dq.code} {dq.name}
               </span>
               <span
@@ -639,18 +820,28 @@ export default function FlightDeck({
                 {dq.charged_rows} rows · $0 priced
               </span>
             </div>
-            <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-              {dq.code} has {dq.charged_rows} charged timesheet{dq.charged_rows === 1 ? "" : "s"} but no
-              labor rate to value them — so its burn reads $0 and would otherwise show as clear. This is a
-              data gap, not a clean line.
+            <div
+              style={{
+                fontSize: 13.5,
+                color: "var(--text)",
+                marginTop: 6,
+                lineHeight: 1.5,
+              }}
+            >
+              {dq.code} has {dq.charged_rows} charged timesheet
+              {dq.charged_rows === 1 ? "" : "s"} but no labor rate to value them
+              — so its burn reads $0 and would otherwise show as clear. This is
+              a data gap, not a clean line.
               {dq.unmatched_lcats.length > 0 && (
                 <>
-                  {" "}Unpriced labor categor{dq.unmatched_lcats.length === 1 ? "y" : "ies"}:{" "}
+                  {" "}
+                  Unpriced labor categor
+                  {dq.unmatched_lcats.length === 1 ? "y" : "ies"}:{" "}
                   <b>{dq.unmatched_lcats.join(", ")}</b>.
                 </>
-              )}
-              {" "}Import a labor-rate schedule for this contract (supplemental rates) so the engine can
-              price these hours.
+              )}{" "}
+              Import a labor-rate schedule for this contract (supplemental
+              rates) so the engine can price these hours.
             </div>
           </div>
         </div>
@@ -670,11 +861,19 @@ export default function FlightDeck({
           }}
         >
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--good)", fontFamily: grotesk }}>
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 14,
+                color: "var(--good)",
+                fontFamily: grotesk,
+              }}
+            >
               All CLINs clear the ceiling
             </div>
             <div style={{ fontSize: 12.5, color: "var(--text)", marginTop: 2 }}>
-              Every funding line is projected to land under budget through the period of performance.
+              Every funding line is projected to land under budget through the
+              period of performance.
             </div>
           </div>
         </div>
@@ -692,7 +891,9 @@ export default function FlightDeck({
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>Live data</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>
+          Live data
+        </span>
         <div style={{ width: 1, height: 26, background: "var(--border)" }} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: 1 }}>
           {stripSources.map((ig) => {
@@ -727,8 +928,18 @@ export default function FlightDeck({
                   {ig.code}
                 </div>
                 <div style={{ lineHeight: 1.2 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text)" }}>{ig.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--dim)" }}>{ig.kind}</div>
+                  <div
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {ig.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--dim)" }}>
+                    {ig.kind}
+                  </div>
                 </div>
                 <span
                   style={{
@@ -784,20 +995,59 @@ export default function FlightDeck({
             overflow: "hidden",
           }}
         >
-          <div style={{ position: "absolute", right: -18, top: -18, opacity: 0.16 }}>
-            <svg width="130" height="130" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1">
+          <div
+            style={{
+              position: "absolute",
+              right: -18,
+              top: -18,
+              opacity: 0.16,
+            }}
+          >
+            <svg
+              width="130"
+              height="130"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fff"
+              strokeWidth="1"
+            >
               <circle cx="12" cy="12" r="10" />
               <path d="M12 2v20M2 12h20M12 12l6-4" />
             </svg>
           </div>
-          <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, opacity: 0.9 }}>
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: ".12em",
+              textTransform: "uppercase",
+              fontWeight: 700,
+              opacity: 0.9,
+            }}
+          >
             Days of runway
           </div>
-          <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 52, lineHeight: 1, marginTop: 8 }}>
+          <div
+            style={{
+              fontFamily: grotesk,
+              fontWeight: 700,
+              fontSize: 52,
+              lineHeight: 1,
+              marginTop: 8,
+            }}
+          >
             {hero && hero.days != null ? hero.days : "—"}
           </div>
-          <div style={{ fontSize: 12.5, opacity: 0.92, marginTop: 8, lineHeight: 1.4 }}>
-            {hero ? `Limited by ${hero.clin} · ${heroSub}` : "No burn logged yet — sync timesheets"}
+          <div
+            style={{
+              fontSize: 12.5,
+              opacity: 0.92,
+              marginTop: 8,
+              lineHeight: 1.4,
+            }}
+          >
+            {hero
+              ? `Limited by ${hero.clin} · ${heroSub}`
+              : "No burn logged yet — sync timesheets"}
           </div>
         </div>
         <div style={panelStyle}>
@@ -811,7 +1061,9 @@ export default function FlightDeck({
           <div style={tileLabel}>Time elapsed</div>
           <div style={tileNum}>
             wk {contract.current_week}
-            <span style={{ fontSize: 16, color: "var(--dim)" }}>/{contract.total_weeks}</span>
+            <span style={{ fontSize: 16, color: "var(--dim)" }}>
+              /{contract.total_weeks}
+            </span>
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>
             {contract.weeks_remaining} weeks remaining
@@ -829,36 +1081,35 @@ export default function FlightDeck({
       {/* burn chart */}
       {selectedClin && (
         <div style={{ ...panelStyle, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 10,
+            }}
+          >
             <div>
-              <div style={{ fontFamily: grotesk, fontWeight: 600, fontSize: 17, color: "var(--text)" }}>
+              <div
+                style={{
+                  fontFamily: grotesk,
+                  fontWeight: 600,
+                  fontSize: 17,
+                  color: "var(--text)",
+                }}
+              >
                 Burn vs. pace — {selectedClin.code}
               </div>
-              <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}>
+              <div
+                style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}
+              >
                 {selectedClin.name} · updates live as timesheets sync
               </div>
             </div>
-            <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: "var(--dim)" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 16, height: 0, borderTop: "2px dashed var(--faint)" }} />
-                {selectedClin.incrementally_funded ? "Pace to stay funded" : "Target pace"}
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 16, height: 3, borderRadius: 2, background: "var(--accent)" }} />
-                Actual
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span
-                  style={{
-                    width: 16,
-                    height: 3,
-                    borderRadius: 2,
-                    background: statusColor(selectedClin.status),
-                  }}
-                />
-                Projected
-              </span>
-            </div>
+            {/* The legend lives under the chart now — it carries each line's
+                actual numbers, so duplicating the bare labels here read as two
+                competing keys for one chart. */}
           </div>
           <BurnChart clin={selectedClin} contract={contract} />
           <div
@@ -897,14 +1148,29 @@ export default function FlightDeck({
       )}
 
       {/* CLIN health cards */}
-      <div style={{ fontFamily: grotesk, fontWeight: 600, fontSize: 15, color: "var(--text)", margin: "4px 0 12px" }}>
+      <div
+        style={{
+          fontFamily: grotesk,
+          fontWeight: 600,
+          fontSize: 15,
+          color: "var(--text)",
+          margin: "4px 0 12px",
+        }}
+      >
         CLIN health
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))",
+          gap: 14,
+        }}
+      >
         {burn.clins.map((c, i) => {
           const hue = hueFor(i);
           const p = pill(c.status);
-          const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
+          const barColor =
+            c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
           // Non-labor CLINs have no timesheet burn — their card routes into the
           // expense log to add/see actuals; labor cards select the burn chart.
           const runwayLabel = !c.is_labor
@@ -933,8 +1199,22 @@ export default function FlightDeck({
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 9, height: 9, borderRadius: 3, background: hue }} />
-                <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11.5, fontWeight: 600, color: "var(--dim)" }}>
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: 3,
+                    background: hue,
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: "'IBM Plex Mono',monospace",
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: "var(--dim)",
+                  }}
+                >
                   {c.code}
                 </span>
                 <span
@@ -969,12 +1249,22 @@ export default function FlightDeck({
                   }}
                 />
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: "var(--dim)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 8,
+                  fontSize: 11.5,
+                  color: "var(--dim)",
+                }}
+              >
                 <span>
                   {moneyM(c.spent)} / {moneyM(c.ceiling)} ·{" "}
                   <b style={{ color: "var(--text)" }}>{pct(c.pct)}</b>
                 </span>
-                <span style={{ color: runwayColor, fontWeight: 600 }}>{runwayLabel}</span>
+                <span style={{ color: runwayColor, fontWeight: 600 }}>
+                  {runwayLabel}
+                </span>
               </div>
             </div>
           );
