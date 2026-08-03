@@ -297,8 +297,12 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                       color: status === "over" ? "var(--bad)" : "var(--warn)",
                     }}
                   >
+                    {/* `funds_exceeded` names the limit actually passed; limited_by
+                        only names which one binds. They differ on an incrementally
+                        funded CLIN that has spent through its ceiling too — that read
+                        "Over the funded allocation" while the ceiling was also gone. */}
                     {status === "over"
-                      ? `Over ${card.limited_by === "funding" ? "the funded allocation" : "ceiling"}${
+                      ? `Over ${card.funds_exceeded ? "the funded allocation" : "ceiling"}${
                           card.overspent ? ` by ${money(card.overspent)}` : ""
                         }`
                       : "Over its funded allocation — awaiting the next funding action"}

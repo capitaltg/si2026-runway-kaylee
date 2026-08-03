@@ -31,6 +31,14 @@ function ceilingBreachedFor(c, weekly, cw, totalWeeks) {
   return cw + (c.ceiling - c.spent) / weekly < totalWeeks - 1;
 }
 
+// burn.py's _funds_exceeded: the allotted funding is already spent through while
+// the ceiling holds. Realized, so simulating a different staffing mix can't undo
+// it — `spent` is history. That's why it doesn't take the funding softening below.
+function fundsExceededFor(c) {
+  if (!c.incrementally_funded || !c.budget || c.spent < c.budget) return false;
+  return !(c.ceiling && c.spent >= c.ceiling);
+}
+
 // Bands a projected exhaustion week against the finish line — burn.py's
 // _forward_band. Shared so the funded slice and the ceiling are judged alike.
 function forwardBand(exhaust, totalWeeks) {
@@ -49,6 +57,8 @@ function simStatus(exhaustWeek, totalWeeks, c, weekly, cw) {
   if (exhaustWeek == null) return "paused";
   const band = forwardBand(exhaustWeek, totalWeeks);
   if (band !== "over") return band;
+  // Money already out the door stays red — the softening below is forward-looking.
+  if (fundsExceededFor(c)) return "over";
   if (
     c.incrementally_funded &&
     !ceilingBreachedFor(c, weekly, cw, totalWeeks) &&
@@ -215,6 +225,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
         runwayDays,
         status: weekly > 0 ? simStatus(exhaustWeek, tw, c, weekly, cw) : "paused",
         ceilingBreached: ceilingBreachedFor(c, weekly, cw, tw),
+        fundsExceeded: fundsExceededFor(c),
       };
       totalWeekly += weekly;
     }
@@ -1093,7 +1104,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
             {clins.map((c, i) => {
               const s = sim[c.id] || {};
-              const p = pill(s.status, s.ceilingBreached);
+              const p = pill(s.status, s.ceilingBreached, s.fundsExceeded);
               const rc = statusColor(s.status);
               const baseWeek = c.base_exhaust_week;
               const delta =

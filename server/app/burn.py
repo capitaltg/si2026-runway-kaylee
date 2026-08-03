@@ -291,6 +291,21 @@ def _forward_band(exhaust: Optional[float], total_weeks: int) -> str:
     return "ok"
 
 
+def _funds_exceeded(
+    spent: float, budget: float, ceiling: float, incrementally_funded: bool
+) -> bool:
+    """Realized: spend has *already* passed the obligated funding, ceiling intact.
+
+    Distinct from every projection in this module — this has happened, in dollars
+    (`overspent` carries the amount). Only meaningful for an incrementally funded
+    CLIN: when budget == ceiling, passing it is a ceiling breach and says so.
+    Spend past the actual ceiling is likewise a ceiling story, so it yields here.
+    """
+    if not incrementally_funded or not budget or spent < budget:
+        return False
+    return not (ceiling and spent >= ceiling)
+
+
 def _funded_shortfall_status(
     runway_days: Optional[int],
     ceiling_exhaust: Optional[float],
@@ -299,6 +314,7 @@ def _funded_shortfall_status(
     ceiling_breached: bool,
     mod_in_progress: bool,
     funding_keeps_pace: bool,
+    funds_exceeded: bool = False,
 ) -> str:
     """The binding budget runs out before the finish line — how bad is that?
 
@@ -308,13 +324,23 @@ def _funded_shortfall_status(
     (`_FUNDING_DUE_DAYS`); until then the CLIN is judged on its ceiling projection,
     because that's the long-run truth for a CLIN that keeps getting funded.
 
-    Deliberately not triggered by how far projected spend overruns the current
+    The softening is forward-looking only. Once spend is already past the allotted
+    funding (`funds_exceeded`) there is nothing left to warn about: FAR 52.232-22's
+    60-day notice under (c) is a duty owed *before* the money runs out, and past it
+    (d)/(f) apply — the Government isn't obliged to reimburse and the contractor
+    isn't obliged to continue. That cost is at risk today, so it stays red however
+    well funding is tracking. It was previously amber "Funding due", identical to a
+    CLIN with two months of runway and nothing overspent.
+
+    Deliberately not triggered by how far *projected* spend overruns the current
     funded slice. Outrunning the current slice is what incremental funding *is*:
     a CLIN 64% obligated at 40% elapsed projects to ~1.5x its funded slice while
     landing dead on its ceiling. Treating that as trouble put a permanent amber
     "Funding due" on ideally-executing contracts. Burn genuinely outpacing the
     obligations is caught by funding_keeps_pace, which lands here as red.
     """
+    if funds_exceeded:
+        return "over"
     if (
         incrementally_funded
         and not ceiling_breached
@@ -326,19 +352,31 @@ def _funded_shortfall_status(
     return "over"
 
 
-def _pill(status: str, ceiling_breached: bool = True) -> str:
+def _pill(
+    status: str, ceiling_breached: bool = True, funds_exceeded: bool = False
+) -> str:
     """Status → pill label. `over` names whichever limit is actually in jeopardy.
 
-    A red `over` is reached two different ways, and one label can't cover both.
+    A red `over` is reached three different ways, and one label can't cover them.
     When projected spend blows the real ceiling it's a ceiling problem. When the
-    ceiling still holds it's the funded slice that ran short with funding lagging
-    — calling that "Over ceiling" pointed at a limit the CLIN was nowhere near.
+    ceiling still holds it's the funded slice that will run short with funding
+    lagging — calling that "Over ceiling" pointed at a limit the CLIN was nowhere
+    near. And when the funding is already spent through, both of those are still
+    forecasts while this one is a fact, so it gets the past tense.
+
+    Precedence is realized-over-forecast: `funds_exceeded` wins even against a
+    projected ceiling breach, because a CLIN can be past its obligated funding
+    today *and* headed for the ceiling later, and only one of those has happened.
+    A *realized* ceiling breach is the worse fact and does outrank it —
+    `_funds_exceeded` returns False in that case, so the order is settled there.
     A CLIN that isn't incrementally funded has budget == ceiling, so `over` always
     implies a breach there and it keeps the ceiling wording without asking.
 
     Defaults to the ceiling wording for callers with no funded-slice notion.
     """
     if status == "over":
+        if funds_exceeded:
+            return "Funds exceeded"
         return "Over ceiling" if ceiling_breached else "Funds short"
     return {
         "watch": "Watch",
@@ -459,6 +497,9 @@ def _compute_clin(
         pace_source = "proxy"
     ceiling_exhaust = current_week + (ceiling - spent) / weekly if weekly > 0 else None
     ceiling_breached = ceiling_exhaust is not None and ceiling_exhaust < total_weeks - 1
+    # Realized, not projected: the allotted funding is already spent through. Both
+    # branches below stay red on it and the pill says so in the past tense.
+    funds_exceeded = _funds_exceeded(spent, budget, ceiling, incrementally_funded)
 
     if weekly <= 0:
         status = "unpriced" if unpriced else "paused"
@@ -488,6 +529,7 @@ def _compute_clin(
                 ceiling_breached,
                 mod_in_progress,
                 funding_keeps_pace,
+                funds_exceeded,
             )
         )
 
@@ -533,10 +575,12 @@ def _compute_clin(
         ),
         "runway_days": runway_days,
         "status": status,
-        "status_label": _pill(status, ceiling_breached),
+        "status_label": _pill(status, ceiling_breached, funds_exceeded),
         # Which limit is in jeopardy, so the frontend can label a red `over` the
-        # same way this does (and its simulator can too).
+        # same way this does (and its simulator can too). `ceiling_breached` is a
+        # projection; `funds_exceeded` already happened, and outranks it.
         "ceiling_breached": bool(ceiling_breached),
+        "funds_exceeded": bool(funds_exceeded),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
@@ -591,9 +635,6 @@ def _nl_status(
     budget: float,
     ceiling: float,
     incrementally_funded: bool,
-    past_pop: bool,
-    funding_keeps_pace: bool,
-    mod_in_progress: bool,
 ) -> str:
     """Status for a non-labor CLIN from its logged actuals. No timesheet pace to
     project, so it's a realized spent-vs-*budget* read, where `budget` is the
@@ -603,19 +644,19 @@ def _nl_status(
     problem even while it sits under the ceiling.
 
     Nothing logged reads `tracked`. A realized breach of the actual ceiling is
-    always red `over`. Between the funded slice and the ceiling, mirror the labor
-    softening (#22): still-live with funding keeping pace (or a mod flagged) reads
-    amber `funding` — the next obligation tranche just isn't posted yet — while a
-    finished period, or funding genuinely lagging with no mod, stays red `over`.
-    Below the binding budget, the same 80% `watch` band the labor cards use, on
-    the binding denominator."""
+    always red `over`. Passing the funded slice while under the ceiling is red too,
+    and does *not* take the labor softening (#22): there is no forward projection
+    here, so reaching the slice means the money is already spent — the at-risk-cost
+    side of FAR 52.232-22, not a heads-up that a tranche is due. It used to read
+    amber `funding` on a pace/mod check, which said "next tranche isn't posted yet"
+    about dollars that were already out the door. `_pill` labels it "Funds exceeded"
+    so it isn't confused with the ceiling. Below the binding budget, the same 80%
+    `watch` band the labor cards use, on the binding denominator."""
     if spent <= 0:
         return "tracked"
     if ceiling and spent >= ceiling:
         return "over"
     if incrementally_funded and budget and spent >= budget:
-        if not past_pop and (mod_in_progress or funding_keeps_pace):
-            return "funding"
         return "over"
     pct = (spent / budget) if budget else 0.0
     if pct >= 0.8:
@@ -844,14 +885,9 @@ def compute(
             funding_keeps_pace = pace_override
         else:
             funding_keeps_pace = clin_funded_frac >= elapsed_frac - _FUND_LAG_SLACK
-        status = _nl_status(
-            spent,
-            budget,
-            ceiling,
-            incrementally_funded,
-            past_pop,
-            funding_keeps_pace,
-            mod_in_progress,
+        status = _nl_status(spent, budget, ceiling, incrementally_funded)
+        nl_funds_exceeded = _funds_exceeded(
+            spent, budget, ceiling, incrementally_funded
         )
         remaining = budget - spent
         nl_cards.append(
@@ -879,9 +915,10 @@ def compute(
                 "status_label": (
                     "Tracked"
                     if status == "tracked"
-                    else _pill(status, spent >= ceiling)
+                    else _pill(status, spent >= ceiling, nl_funds_exceeded)
                 ),
                 "ceiling_breached": spent >= ceiling,
+                "funds_exceeded": nl_funds_exceeded,
                 "rate_source": "n/a",
                 # No timesheet series → no forward pace. Realized read only; the
                 # None runway fields let the tripwire lists (below) treat these
@@ -1101,7 +1138,11 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
         labor = [x for x in b["clins"] if x.get("is_labor")]
         # Overall health watches every CLIN — a non-labor CLIN over its ceiling is
         # just as much a breach as a labor one.
-        if any(x["status"] == "over" for x in b["clins"]):
+        # The red CLINs behind an `over` rollup, so the card can name the same limit
+        # its own Flight Deck does. Left to _pill's default this always said "Over
+        # ceiling", including for a contract whose only red line was funds-short.
+        red = [x for x in b["clins"] if x["status"] == "over"]
+        if red:
             overall = "over"
         elif any(x["status"] == "unpriced" for x in b["clins"]):
             # A CLIN the engine could not price means the portfolio read can't be
@@ -1128,7 +1169,15 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
                 "weekly": t["weekly"],
                 "runway_days": b["hero"]["days"] if b["hero"] else None,
                 "status": overall,
-                "status_label": _pill(overall),
+                # Both flags handed over as-is so _pill applies its own precedence.
+                # Deciding it here instead would let the card contradict the very
+                # Flight Deck it links to — contract 5's CLIN 2001 is both projected
+                # past its ceiling and already past its funding.
+                "status_label": _pill(
+                    overall,
+                    any(x["ceiling_breached"] for x in red),
+                    any(x.get("funds_exceeded") for x in red),
+                ),
                 "on_pace": on_pace,
                 "lines": len(labor),
                 # Count of CLINs the engine could not price (#40) — lets the card

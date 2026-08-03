@@ -10,67 +10,57 @@ from app import burn
 
 # ---- _nl_status: the banding logic, as a pure function ---------------------
 #
-# Args: (spent, budget, ceiling, incrementally_funded, past_pop,
-#        funding_keeps_pace, mod_in_progress). `budget` is the funded slice when
-# incrementally funded, else the ceiling.
+# Args: (spent, budget, ceiling, incrementally_funded). `budget` is the funded
+# slice when incrementally funded, else the ceiling. No pace/mod/past_pop args:
+# there is no forward projection on a non-labor line, so passing the funded slice
+# means the money is already spent and the #22 softening does not apply.
 
 
 def test_nl_status_nothing_logged_is_tracked():
-    assert burn._nl_status(0, 150_000, 232_000, True, False, True, False) == "tracked"
+    assert burn._nl_status(0, 150_000, 232_000, True) == "tracked"
 
 
 def test_nl_status_full_funding_keeps_old_ceiling_bands():
     # Not incrementally funded → budget == ceiling → old behavior byte-for-byte.
-    assert burn._nl_status(100_000, 232_000, 232_000, False, False, True, False) == "ok"
-    assert (
-        burn._nl_status(200_000, 232_000, 232_000, False, False, True, False) == "watch"
-    )
-    assert (
-        burn._nl_status(232_000, 232_000, 232_000, False, False, True, False) == "over"
-    )
+    assert burn._nl_status(100_000, 232_000, 232_000, False) == "ok"
+    assert burn._nl_status(200_000, 232_000, 232_000, False) == "watch"
+    assert burn._nl_status(232_000, 232_000, 232_000, False) == "over"
 
 
-def test_nl_status_over_funded_slice_softens_when_live_and_on_pace():
-    # Past the $150k funded slice, under the $232k ceiling, still live, funding
-    # keeping pace → amber "funding", not red.
-    assert (
-        burn._nl_status(200_000, 150_000, 232_000, True, False, True, False)
-        == "funding"
-    )
-
-
-def test_nl_status_over_funded_slice_softens_when_mod_flagged():
-    # Funding lagging, but a mod is flagged outstanding → still amber.
-    assert (
-        burn._nl_status(200_000, 150_000, 232_000, True, False, False, True)
-        == "funding"
-    )
-
-
-def test_nl_status_over_funded_slice_is_red_when_lagging_no_mod():
-    # Past the funded slice, funding genuinely lagging, no mod → red over.
-    assert (
-        burn._nl_status(200_000, 150_000, 232_000, True, False, False, False) == "over"
-    )
-
-
-def test_nl_status_past_pop_does_not_soften():
-    # Period is over — no next tranche is coming, so past the funded slice is red
-    # even if the pace proxy still reads "keeping pace".
-    assert burn._nl_status(200_000, 150_000, 232_000, True, True, True, False) == "over"
+def test_nl_status_over_funded_slice_is_red_however_funding_is_tracking():
+    # Past the $150k funded slice, under the $232k ceiling. This is realized spend,
+    # not a forecast: FAR 52.232-22's 60-day notice is owed *before* the money runs
+    # out, and past it the cost is at risk. Red regardless of pace or an outstanding
+    # mod — it used to read amber "Funding due", the same pill as a CLIN with two
+    # months of runway and nothing overspent.
+    assert burn._nl_status(200_000, 150_000, 232_000, True) == "over"
 
 
 def test_nl_status_over_ceiling_is_always_red():
-    # A realized breach of the actual ceiling is red regardless of funding state.
-    assert burn._nl_status(240_000, 150_000, 232_000, True, False, True, True) == "over"
+    # A realized breach of the actual ceiling is red too — see _funds_exceeded for
+    # which of the two the pill ends up naming.
+    assert burn._nl_status(240_000, 150_000, 232_000, True) == "over"
 
 
 def test_nl_status_watch_band_is_on_the_binding_budget():
     # 0.8 * funded slice ($120k) trips watch even though it's only ~56% of ceiling.
-    assert (
-        burn._nl_status(130_000, 150_000, 232_000, True, False, True, False) == "watch"
-    )
-    assert burn._nl_status(100_000, 150_000, 232_000, True, False, True, False) == "ok"
+    assert burn._nl_status(130_000, 150_000, 232_000, True) == "watch"
+    assert burn._nl_status(100_000, 150_000, 232_000, True) == "ok"
+
+
+# ---- _funds_exceeded: which limit a red `over` is actually about ------------
+
+
+def test_funds_exceeded_only_when_past_funding_with_ceiling_intact():
+    # Past the funded slice, ceiling holding → the funding story.
+    assert burn._funds_exceeded(200_000, 150_000, 232_000, True) is True
+    # Past the ceiling too → the ceiling is the worse breach and wins the label.
+    assert burn._funds_exceeded(240_000, 150_000, 232_000, True) is False
+    # Not incrementally funded: budget *is* the ceiling, so this is never a
+    # funding problem no matter how far past it spend has gone.
+    assert burn._funds_exceeded(240_000, 232_000, 232_000, False) is False
+    # Still inside the funded slice → nothing realized yet.
+    assert burn._funds_exceeded(100_000, 150_000, 232_000, True) is False
 
 
 # ---- compute(): the fields and tripwire rollup -----------------------------
@@ -108,9 +98,9 @@ def _nl(payload):
     return next(c for c in payload["clins"] if c["id"] == "0004")
 
 
-def test_incrementally_funded_over_slice_reads_funding_and_rolls_up():
+def test_incrementally_funded_over_slice_is_red_and_names_the_funding():
     # Obligated $150k of a $232k ceiling; $200k logged → past the funded slice,
-    # under the ceiling. Mod flagged so the amber softening is deterministic.
+    # under the ceiling. Mod flagged, which used to buy the amber softening.
     p = burn.compute(_contract(150_000, mod=True), [], _expenses(200_000))
     clin = _nl(p)
 
@@ -118,7 +108,12 @@ def test_incrementally_funded_over_slice_reads_funding_and_rolls_up():
     assert clin["funded"] == 150_000.0
     assert clin["budget"] == 150_000.0
     assert clin["limited_by"] == "funding"
-    assert clin["status"] == "funding"
+    # Red, because the money is already spent — but labelled for the funded slice,
+    # not the ceiling it is nowhere near.
+    assert clin["status"] == "over"
+    assert clin["funds_exceeded"] is True
+    assert clin["ceiling_breached"] is False
+    assert clin["status_label"] == "Funds exceeded"
     # remaining/overspent are on the binding budget, not the ceiling.
     assert clin["remaining"] == -50_000.0
     assert clin["overspent"] == 50_000.0
@@ -126,22 +121,41 @@ def test_incrementally_funded_over_slice_reads_funding_and_rolls_up():
     assert clin["exhaust_week"] is None
     assert clin["runway_days"] is None
 
-    # Rolls into the amber funding list, not the red tripwire list.
-    assert [f["code"] for f in p["funding"]] == ["CLIN 0004"]
-    assert p["tripwires"] == []
+    # Rolls into the red tripwire list now, not the amber funding list.
+    assert [t["code"] for t in p["tripwires"]] == ["CLIN 0004"]
+    assert p["funding"] == []
     assert p["all_clear"] is False
 
 
 def test_over_ceiling_rolls_into_red_tripwires():
-    # $250k logged is past the $232k ceiling → red, regardless of funding.
+    # $250k logged is past the $232k ceiling → red, and the ceiling outranks the
+    # funded slice for the label even though both have been passed.
     p = burn.compute(_contract(150_000, mod=True), [], _expenses(250_000))
     clin = _nl(p)
 
     assert clin["status"] == "over"
+    assert clin["funds_exceeded"] is False
+    assert clin["status_label"] == "Over ceiling"
     assert [t["code"] for t in p["tripwires"]] == ["CLIN 0004"]
     # A realized read has no runway to report on the tripwire.
     assert p["tripwires"][0]["exhaust_week"] is None
     assert p["funding"] == []
+
+
+def test_portfolio_card_names_the_same_limit_the_flight_deck_does():
+    # The card's label used to come from _pill's default, so a contract whose only
+    # red CLIN was a funding overrun announced "Over ceiling" on the portfolio while
+    # its own Flight Deck said otherwise. It rolls up from the CLINs now.
+    contract = _contract(150_000, mod=True)
+    pf = burn.portfolio([(contract, [], _expenses(200_000))])
+    card = pf["contracts"][0]
+
+    assert card["status"] == "over"
+    assert card["status_label"] == "Funds exceeded"
+
+    # A real ceiling breach still outranks it and keeps the ceiling wording.
+    pf = burn.portfolio([(_contract(150_000, mod=True), [], _expenses(250_000))])
+    assert pf["contracts"][0]["status_label"] == "Over ceiling"
 
 
 def test_fully_funded_non_labor_keeps_ceiling_behavior():

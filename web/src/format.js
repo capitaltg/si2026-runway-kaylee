@@ -33,13 +33,20 @@ const PILL = {
 // `ceilingBreached` names the limit a red `over` is about, matching burn.py's
 // _pill: projected spend blowing the real ceiling is a ceiling problem, while the
 // ceiling holding means the funded slice ran short with funding lagging behind.
+// `fundsExceeded` outranks both — those are forecasts, this one already happened,
+// so it takes the past tense.
 // Defaults to the ceiling wording, which is always right for a CLIN that isn't
 // incrementally funded (its budget *is* the ceiling) and is what callers with no
-// funded-slice notion — the portfolio, expenses — should keep saying.
-export function pill(status, ceilingBreached = true) {
+// funded-slice notion — expenses — should keep saying.
+export function pill(status, ceilingBreached = true, fundsExceeded = false) {
   const p = PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
+  const overLabel = fundsExceeded
+    ? "Funds exceeded"
+    : ceilingBreached
+      ? p.label
+      : "Funds short";
   return {
-    label: status === "over" && !ceilingBreached ? "Funds short" : p.label,
+    label: status === "over" ? overLabel : p.label,
     color: `var(${p.color})`,
     style: {
       fontSize: 10.5,
