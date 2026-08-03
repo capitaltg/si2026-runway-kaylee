@@ -121,14 +121,34 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
   const card = nonLabor.find((c) => c.id === clin);
   const ceiling = card?.ceiling || 0;
   const logged = expenses.reduce((s, e) => s + (+e.amount || 0), 0);
-  const remaining = ceiling - logged;
+  // The binding limit is the funded (obligated) slice when the CLIN is
+  // incrementally funded — that's what you should stay under (#41) — otherwise
+  // the full ceiling. `remaining` is measured against it, so it goes negative
+  // once you're over the funded limit even with ceiling room to spare.
+  const incrFunded = !!card?.incrementally_funded;
+  const funded = card?.funded ?? null;
+  const bindingLimit = incrFunded ? funded : ceiling;
+  const remaining = bindingLimit - logged;
   const usedPct = ceiling ? logged / ceiling : 0;
-  const status = nlStatus(logged, ceiling);
+  const fundedPct = incrFunded && ceiling ? funded / ceiling : null;
+  // Prefer the engine's funding-aware status (#41) — it bands on the funded
+  // slice, not just the ceiling — and fall back to the local ceiling read only
+  // until the burn payload loads.
+  const status = card?.status || nlStatus(logged, ceiling);
   const p = pill(status);
+  const alarm = status === "over" || status === "funding";
   const remainingColor =
-    status === "over" ? "var(--bad)" : status === "watch" ? "var(--warn)" : "var(--text)";
+    status === "over"
+      ? "var(--bad)"
+      : status === "funding" || status === "watch"
+        ? "var(--warn)"
+        : "var(--text)";
   const barColor =
-    status === "over" ? "var(--bad)" : status === "watch" ? "var(--warn)" : "var(--good)";
+    status === "over"
+      ? "var(--bad)"
+      : status === "funding" || status === "watch"
+        ? "var(--warn)"
+        : "var(--good)";
 
   function onDraft(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -255,6 +275,49 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
             </div>
           )}
 
+          {/* funding warning — this CLIN is past its obligated (funded) slice,
+              even if the ceiling still has room (#41). Mirrors the Flight Deck
+              funding banner so the drill-down doesn't read "all fine". */}
+          {alarm && card && (
+            <div
+              style={{
+                ...panelStyle,
+                marginBottom: 16,
+                borderLeft: `3px solid ${status === "over" ? "var(--bad)" : "var(--warn)"}`,
+              }}
+            >
+              <div style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 17, lineHeight: 1.3 }}>⚠️</span>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: grotesk,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      color: status === "over" ? "var(--bad)" : "var(--warn)",
+                    }}
+                  >
+                    {status === "over"
+                      ? `Over ${card.limited_by === "funding" ? "the funded allocation" : "ceiling"}${
+                          card.overspent ? ` by ${money(card.overspent)}` : ""
+                        }`
+                      : "Over its funded allocation — awaiting the next funding action"}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 5, lineHeight: 1.5 }}>
+                    {money(card.spent)} logged against{" "}
+                    {money(card.funded != null ? card.funded : card.budget)} obligated
+                    {card.ceiling ? ` of a ${money(card.ceiling)} ceiling` : ""}.{" "}
+                    {status === "over"
+                      ? "Charging past obligated funding is a Limitation of Funds risk (FAR 52.232-22)."
+                      : card.mod_in_progress
+                        ? "A funding modification is already outstanding."
+                        : "Funding is keeping pace with the clock, so it needs its next funding mod — not a course correction."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ceiling tracker */}
           <div style={{ ...panelStyle, marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -274,16 +337,24 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                 <div style={tileLabel}>Logged to date</div>
                 <div style={tileNum}>{money(logged)}</div>
               </div>
+              {incrFunded && (
+                <div>
+                  <div style={{ ...tileLabel, color: "var(--warn)" }}>Funded — stay under</div>
+                  <div style={{ ...tileNum, color: "var(--warn)" }}>{money(funded)}</div>
+                </div>
+              )}
               <div>
                 <div style={tileLabel}>Ceiling</div>
                 <div style={tileNum}>{money(ceiling)}</div>
               </div>
               <div>
-                <div style={tileLabel}>Remaining</div>
+                <div style={tileLabel}>
+                  {incrFunded ? "Left before funded" : "Remaining"}
+                </div>
                 <div style={{ ...tileNum, color: remainingColor }}>{money(remaining)}</div>
               </div>
             </div>
-            <div style={{ height: 10, borderRadius: 6, background: "var(--border)", marginTop: 16, overflow: "hidden" }}>
+            <div style={{ position: "relative", height: 10, borderRadius: 6, background: "var(--border)", marginTop: 16 }}>
               <div
                 style={{
                   height: "100%",
@@ -292,10 +363,33 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                   borderRadius: 6,
                 }}
               />
+              {/* funded-limit marker: the line you should stay under (#41). */}
+              {fundedPct != null && (
+                <div
+                  title={`Funded limit ${money(funded)}`}
+                  style={{
+                    position: "absolute",
+                    left: `${Math.min(100, fundedPct * 100)}%`,
+                    top: -3,
+                    bottom: -3,
+                    width: 2,
+                    background: "var(--warn)",
+                  }}
+                />
+              )}
             </div>
             <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 8 }}>
-              {pct(usedPct)} of ceiling used · {expenses.length}{" "}
-              {expenses.length === 1 ? "entry" : "entries"}
+              {incrFunded ? (
+                <>
+                  <b style={{ color: "var(--text)" }}>{pct(funded ? logged / funded : 0)}</b> of
+                  funded used ·{" "}
+                  <span style={{ color: "var(--warn)" }}>▏</span> funded limit {money(funded)} ·{" "}
+                  {pct(usedPct)} of ceiling
+                </>
+              ) : (
+                <>{pct(usedPct)} of ceiling used</>
+              )}{" "}
+              · {expenses.length} {expenses.length === 1 ? "entry" : "entries"}
             </div>
           </div>
 
