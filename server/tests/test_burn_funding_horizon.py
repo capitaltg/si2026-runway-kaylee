@@ -121,10 +121,23 @@ def test_outside_the_horizon_reports_the_ceiling_instead():
     assert (
         burn._funded_shortfall_status(92, 51.8, 52, True, False, False, True) == "watch"
     )
-    # And an under-burn outside the horizon reads as an under-burn.
+
+
+def test_ceiling_reband_never_reports_an_under_burn():
+    # Reaching this function means the funded slice runs dry before PoP end, so a
+    # ceiling projection way past the finish line must not become "spend faster" —
+    # the CLIN runs out of money first. It used to, and the under-burn card is built
+    # from the *funded* slice while the label came from the ceiling, so the seed-19
+    # demo contract rendered "projected to under-spend its funded $2.7M by $0.0M …
+    # ~-5 weeks after the PoP ends" and advised staffing up on a CLIN 74 days from
+    # dry. Clamped to "ok": nothing is due inside the FAR window, nothing to do.
     assert (
-        burn._funded_shortfall_status(200, 70.0, 52, True, False, False, True)
-        == "under"
+        burn._funded_shortfall_status(200, 70.0, 52, True, False, False, True) == "ok"
+    )
+    # The other bands still pass through untouched — only `under` is invalid here.
+    assert (
+        burn._funded_shortfall_status(200, 51.8, 52, True, False, False, True)
+        == "watch"
     )
 
 

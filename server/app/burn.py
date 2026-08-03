@@ -348,7 +348,16 @@ def _funded_shortfall_status(
     ):
         if runway_days is not None and runway_days <= _FUNDING_DUE_DAYS:
             return "funding"
-        return _forward_band(ceiling_exhaust, total_weeks)
+        # Re-band on the ceiling, but never as an under-burn. Reaching this function
+        # means the funded slice runs dry before PoP end, so "spend faster" is advice
+        # the CLIN cannot take — it runs out of money first. The ceiling projection
+        # is the right instrument for how much *scope* trouble there is, not for
+        # whether to staff up, and the two disagree here by construction: the
+        # under-burn card is built from the funded slice, so it rendered "projected to
+        # under-spend its funded $2.7M by $0.0M ... ~-5 weeks after the PoP ends" —
+        # self-contradictory numbers under a label taken from the other denominator.
+        band = _forward_band(ceiling_exhaust, total_weeks)
+        return "ok" if band == "under" else band
     return "over"
 
 
