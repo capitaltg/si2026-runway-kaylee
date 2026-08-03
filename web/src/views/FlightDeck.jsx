@@ -885,7 +885,7 @@ export default function FlightDeck({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
         {burn.clins.map((c, i) => {
           const hue = hueFor(i);
-          const p = pill(c.status);
+          const p = pill(c.status, c.ceiling_breached !== false);
           const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
           // Non-labor CLINs have no timesheet burn — their card routes into the
           // expense log to add/see actuals; labor cards select the burn chart.

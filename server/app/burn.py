@@ -31,6 +31,21 @@ _UNDER_SLACK_FRAC = 0.15
 # and the tripwire stays red. Honest read from data we already have (obligated,
 # ceiling, PoP clock) — no obligation time-series required.
 _FUND_LAG_SLACK = 0.15
+# How close the funded money has to be to running out before a CLIN says anything
+# about funding at all. Outrunning the current funded slice is the *definition* of
+# incremental funding, so a shortfall projected months away is not news — before
+# this gate every partially-obligated CLIN carried an amber "Funding due" for its
+# whole life, including ones landing dead on their ceiling. Inside this horizon
+# it's a mod that has to be moving; outside it the CLIN is judged on its ceiling
+# projection instead.
+#
+# 60 days is FAR 52.232-22(c)'s own lookahead: under Limitation of Funds the
+# contractor must notify the CO in writing when the costs it expects to incur *in
+# the next 60 days*, added to costs already incurred, will exceed 75% of the funds
+# allotted. So this is the window in which a PM is already obliged to be doing
+# something about funding — flagging earlier is noise, flagging later is late.
+# #24 adds the 75%-of-funded half of the same clause as its own state.
+_FUNDING_DUE_DAYS = 60
 # Minimum weeks elapsed in the active period before an obligation *rate* can be
 # read off the mod history. Below this, a single early tranche divided by one or
 # two weeks produces an enormous weekly figure that says nothing about funding
@@ -258,9 +273,74 @@ def _rate_resolver(clin: dict):
     return rate_for, blended, source
 
 
-def _pill(status: str) -> str:
+def _forward_band(exhaust: Optional[float], total_weeks: int) -> str:
+    """Bands a projected exhaustion week against the finish line.
+
+    Shared so the funded slice and the ceiling are judged on identical rules —
+    when a funded-slice shortfall isn't actionable yet, the status is re-derived
+    from the ceiling's projection through this same function.
+    """
+    if exhaust is None:
+        return "ok"
+    if exhaust < total_weeks - 1:
+        return "over"
+    if exhaust < total_weeks + 2:
+        return "watch"
+    if exhaust > total_weeks * (1 + _UNDER_SLACK_FRAC):
+        return "under"
+    return "ok"
+
+
+def _funded_shortfall_status(
+    runway_days: Optional[int],
+    ceiling_exhaust: Optional[float],
+    total_weeks: int,
+    incrementally_funded: bool,
+    ceiling_breached: bool,
+    mod_in_progress: bool,
+    funding_keeps_pace: bool,
+) -> str:
+    """The binding budget runs out before the finish line — how bad is that?
+
+    Red unless this is routine incremental funding: the ceiling still holds and
+    funding is either keeping pace or has a mod outstanding. In that case it only
+    says anything about *funding* once the money is close to gone
+    (`_FUNDING_DUE_DAYS`); until then the CLIN is judged on its ceiling projection,
+    because that's the long-run truth for a CLIN that keeps getting funded.
+
+    Deliberately not triggered by how far projected spend overruns the current
+    funded slice. Outrunning the current slice is what incremental funding *is*:
+    a CLIN 64% obligated at 40% elapsed projects to ~1.5x its funded slice while
+    landing dead on its ceiling. Treating that as trouble put a permanent amber
+    "Funding due" on ideally-executing contracts. Burn genuinely outpacing the
+    obligations is caught by funding_keeps_pace, which lands here as red.
+    """
+    if (
+        incrementally_funded
+        and not ceiling_breached
+        and (mod_in_progress or funding_keeps_pace)
+    ):
+        if runway_days is not None and runway_days <= _FUNDING_DUE_DAYS:
+            return "funding"
+        return _forward_band(ceiling_exhaust, total_weeks)
+    return "over"
+
+
+def _pill(status: str, ceiling_breached: bool = True) -> str:
+    """Status → pill label. `over` names whichever limit is actually in jeopardy.
+
+    A red `over` is reached two different ways, and one label can't cover both.
+    When projected spend blows the real ceiling it's a ceiling problem. When the
+    ceiling still holds it's the funded slice that ran short with funding lagging
+    — calling that "Over ceiling" pointed at a limit the CLIN was nowhere near.
+    A CLIN that isn't incrementally funded has budget == ceiling, so `over` always
+    implies a breach there and it keeps the ceiling wording without asking.
+
+    Defaults to the ceiling wording for callers with no funded-slice notion.
+    """
+    if status == "over":
+        return "Over ceiling" if ceiling_breached else "Funds short"
     return {
-        "over": "Over ceiling",
         "watch": "Watch",
         "ok": "On pace",
         "under": "Under pace",
@@ -395,27 +475,21 @@ def _compute_clin(
             status = "watch"
         else:
             status = "under"
-    elif exhaust_week < total_weeks - 1:
-        # Binding budget runs out before the finish line. If that budget is the
-        # funded slice and the ceiling still holds, don't cry wolf on routine
-        # incremental funding: an outstanding mod or funding keeping pace with
-        # the elapsed clock downgrades it to an amber "funding due". Only a real
-        # ceiling breach, or funding genuinely lagging with no mod flagged, stays
-        # red.
-        if (
-            incrementally_funded
-            and not ceiling_breached
-            and (mod_in_progress or funding_keeps_pace)
-        ):
-            status = "funding"
-        else:
-            status = "over"
-    elif exhaust_week < total_weeks + 2:
-        status = "watch"
-    elif exhaust_week > total_weeks * (1 + _UNDER_SLACK_FRAC):
-        status = "under"
     else:
-        status = "ok"
+        band = _forward_band(exhaust_week, total_weeks)
+        status = (
+            band
+            if band != "over"
+            else _funded_shortfall_status(
+                runway_days,
+                ceiling_exhaust,
+                total_weeks,
+                incrementally_funded,
+                ceiling_breached,
+                mod_in_progress,
+                funding_keeps_pace,
+            )
+        )
 
     # Cumulative actuals by week index (0-based over the weeks that have charges),
     # for the Flight Deck chart. Frontend maps these onto the SVG.
@@ -459,7 +533,10 @@ def _compute_clin(
         ),
         "runway_days": runway_days,
         "status": status,
-        "status_label": _pill(status),
+        "status_label": _pill(status, ceiling_breached),
+        # Which limit is in jeopardy, so the frontend can label a red `over` the
+        # same way this does (and its simulator can too).
+        "ceiling_breached": bool(ceiling_breached),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
@@ -797,7 +874,14 @@ def compute(
                 "overspent": round(spent - budget, 2) if remaining < 0 else 0.0,
                 "entries": exp_count.get(num, 0),
                 "status": status,
-                "status_label": "Tracked" if status == "tracked" else _pill(status),
+                # No forward pace on a non-labor line, so the breach is realized:
+                # spend is past the ceiling, not just past the funded slice.
+                "status_label": (
+                    "Tracked"
+                    if status == "tracked"
+                    else _pill(status, spent >= ceiling)
+                ),
+                "ceiling_breached": spent >= ceiling,
                 "rate_source": "n/a",
                 # No timesheet series → no forward pace. Realized read only; the
                 # None runway fields let the tripwire lists (below) treat these

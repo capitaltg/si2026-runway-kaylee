@@ -17,14 +17,53 @@ function initials(name) {
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase() || "—";
 }
 
-// Forward status from a projected exhaustion week, mirroring burn.py's bands
-// (minus the funding nuance — the simulator is a straight hrs→runway what-if).
-function simStatus(exhaustWeek, totalWeeks) {
-  if (exhaustWeek == null) return "paused";
-  if (exhaustWeek < totalWeeks - 1) return "over";
-  if (exhaustWeek < totalWeeks + 2) return "watch";
-  if (exhaustWeek > totalWeeks * 1.15) return "under";
+// Mirrors burn.py's _FUNDING_DUE_DAYS — how close the funded money has to be to
+// running out before a CLIN mentions funding at all. 60 days is FAR 52.232-22(c)'s
+// own notification lookahead; see burn.py for the reasoning.
+const FUNDING_DUE_DAYS = 60;
+
+// Does projected spend blow the real ceiling, not just the funded slice? Decides
+// whether trouble is a ceiling problem or a funding one — and on a CLIN that isn't
+// incrementally funded the budget *is* the ceiling, so any shortfall lands here
+// and keeps the ceiling wording.
+function ceilingBreachedFor(c, weekly, cw, totalWeeks) {
+  if (!(weekly > 0) || !c.ceiling) return false;
+  return cw + (c.ceiling - c.spent) / weekly < totalWeeks - 1;
+}
+
+// Bands a projected exhaustion week against the finish line — burn.py's
+// _forward_band. Shared so the funded slice and the ceiling are judged alike.
+function forwardBand(exhaust, totalWeeks) {
+  if (exhaust == null) return "ok";
+  if (exhaust < totalWeeks - 1) return "over";
+  if (exhaust < totalWeeks + 2) return "watch";
+  if (exhaust > totalWeeks * 1.15) return "under";
   return "ok";
+}
+
+// Forward status from a projected exhaustion week, mirroring burn.py's bands —
+// including the #22 funding downgrade and its horizon, which this used to skip
+// entirely ("minus the funding nuance"), so these cards scored a CLIN red that
+// the Flight Deck was showing amber for.
+function simStatus(exhaustWeek, totalWeeks, c, weekly, cw) {
+  if (exhaustWeek == null) return "paused";
+  const band = forwardBand(exhaustWeek, totalWeeks);
+  if (band !== "over") return band;
+  if (
+    c.incrementally_funded &&
+    !ceilingBreachedFor(c, weekly, cw, totalWeeks) &&
+    (c.mod_in_progress || c.funding_keeps_pace)
+  ) {
+    // Routine incremental funding — only says "funding due" once the money is
+    // actually close to gone. Otherwise the CLIN is judged on its ceiling, same
+    // as burn.py. See _FUNDING_DUE_DAYS there for why outrunning the funded
+    // slice can't be the trigger on its own.
+    if ((exhaustWeek - cw) * 7 <= FUNDING_DUE_DAYS) return "funding";
+    const ceilingExhaust =
+      weekly > 0 && c.ceiling ? cw + (c.ceiling - c.spent) / weekly : null;
+    return forwardBand(ceilingExhaust, totalWeeks);
+  }
+  return "over";
 }
 
 // A seniority tier inferred from the LCAT name, for the colored tier chip —
@@ -174,7 +213,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
         weekly,
         exhaustWeek,
         runwayDays,
-        status: weekly > 0 ? simStatus(exhaustWeek, tw) : "paused",
+        status: weekly > 0 ? simStatus(exhaustWeek, tw, c, weekly, cw) : "paused",
+        ceilingBreached: ceilingBreachedFor(c, weekly, cw, tw),
       };
       totalWeekly += weekly;
     }
@@ -1053,7 +1093,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
             {clins.map((c, i) => {
               const s = sim[c.id] || {};
-              const p = pill(s.status);
+              const p = pill(s.status, s.ceilingBreached);
               const rc = statusColor(s.status);
               const baseWeek = c.base_exhaust_week;
               const delta =
@@ -1087,7 +1127,10 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   </div>
                   <div style={{ fontSize: 12.5, color: "var(--text)", fontWeight: 600, marginTop: 8 }}>{c.name}</div>
                   <div style={row}>
-                    <span>Projected exhaustion</span>
+                    {/* Against c.remaining (budget − spent), and budget is the
+                        funded slice on an incrementally funded CLIN — so name the
+                        funds, not the ceiling. */}
+                    <span>Projected funds exhaustion</span>
                     <span style={{ fontWeight: 600, color: rc }}>
                       {s.exhaustWeek == null ? "—" : `Week ${Math.round(s.exhaustWeek)} / ${tw}`}
                     </span>

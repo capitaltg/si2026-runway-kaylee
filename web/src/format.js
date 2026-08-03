@@ -13,7 +13,13 @@ export const hueFor = (i) => HUES[i % HUES.length];
 
 // status → { label, color var, background var }. Mirrors design's pill().
 const PILL = {
+  // Label picked per-call by pill()'s ceilingBreached — see there.
   over: { label: "Over ceiling", color: "--bad", bg: "--badBg" },
+  // The funded slice runs short but the ceiling holds and funding is either
+  // keeping pace or has a mod outstanding (burn.py's #22 downgrade). Routine
+  // incremental funding, so it's amber with the rest of the funding states — the
+  // backend has emitted this since #22 but PILL had no entry, so it rendered "—".
+  funding: { label: "Funding due", color: "--warn", bg: "--warnBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
   under: { label: "Under pace", color: "--warn", bg: "--warnBg" },
@@ -24,10 +30,16 @@ const PILL = {
   tracked: { label: "Tracked", color: "--dim", bg: "--panel2" },
 };
 
-export function pill(status) {
+// `ceilingBreached` names the limit a red `over` is about, matching burn.py's
+// _pill: projected spend blowing the real ceiling is a ceiling problem, while the
+// ceiling holding means the funded slice ran short with funding lagging behind.
+// Defaults to the ceiling wording, which is always right for a CLIN that isn't
+// incrementally funded (its budget *is* the ceiling) and is what callers with no
+// funded-slice notion — the portfolio, expenses — should keep saying.
+export function pill(status, ceilingBreached = true) {
   const p = PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
   return {
-    label: p.label,
+    label: status === "over" && !ceilingBreached ? "Funds short" : p.label,
     color: `var(${p.color})`,
     style: {
       fontSize: 10.5,
