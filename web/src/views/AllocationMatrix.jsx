@@ -23,6 +23,10 @@ function initials(name) {
 // lagging with no mod flagged; routine incremental funding is an amber "funding
 // due", the same as every other funding state. Skipping it meant these cards
 // scored a CLIN red that the Flight Deck was showing amber for.
+// Mirrors burn.py's _FUNDING_DUE_DAYS — how close the funded money has to be to
+// running out before a CLIN mentions funding at all.
+const FUNDING_DUE_DAYS = 30;
+
 // Does projected spend blow the real ceiling, not just the funded slice? Decides
 // whether trouble is a ceiling problem or a funding one — and on a CLIN that
 // isn't incrementally funded the budget *is* the ceiling, so any shortfall lands
@@ -32,20 +36,36 @@ function ceilingBreachedFor(c, weekly, cw, totalWeeks) {
   return cw + (c.ceiling - c.spent) / weekly < totalWeeks - 1;
 }
 
+// Bands a projected exhaustion week against the finish line — burn.py's
+// _forward_band. Shared so the funded slice and the ceiling are judged alike.
+function forwardBand(exhaust, totalWeeks) {
+  if (exhaust == null) return "ok";
+  if (exhaust < totalWeeks - 1) return "over";
+  if (exhaust < totalWeeks + 2) return "watch";
+  if (exhaust > totalWeeks * 1.15) return "under";
+  return "ok";
+}
+
 function simStatus(exhaustWeek, totalWeeks, c, weekly, cw) {
   if (exhaustWeek == null) return "paused";
-  if (exhaustWeek < totalWeeks - 1) {
-    if (
-      c.incrementally_funded &&
-      !ceilingBreachedFor(c, weekly, cw, totalWeeks) &&
-      (c.mod_in_progress || c.funding_keeps_pace)
-    )
-      return "funding";
-    return "over";
+  const band = forwardBand(exhaustWeek, totalWeeks);
+  if (band !== "over") return band;
+  if (
+    c.incrementally_funded &&
+    !ceilingBreachedFor(c, weekly, cw, totalWeeks) &&
+    (c.mod_in_progress || c.funding_keeps_pace)
+  ) {
+    // Routine incremental funding — only says "funding due" once the money is
+    // actually close to gone. Otherwise the CLIN is judged on its ceiling, same
+    // as burn.py. See _FUNDING_DUE_DAYS there for why the slice alone can't be
+    // the trigger.
+    const runwayDays = (exhaustWeek - cw) * 7;
+    if (runwayDays <= FUNDING_DUE_DAYS) return "funding";
+    const ceilingExhaust =
+      weekly > 0 && c.ceiling ? cw + (c.ceiling - c.spent) / weekly : null;
+    return forwardBand(ceilingExhaust, totalWeeks);
   }
-  if (exhaustWeek < totalWeeks + 2) return "watch";
-  if (exhaustWeek > totalWeeks * 1.15) return "under";
-  return "ok";
+  return "over";
 }
 
 // A seniority tier inferred from the LCAT name, for the colored tier chip —
