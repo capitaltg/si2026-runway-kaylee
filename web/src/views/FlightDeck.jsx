@@ -838,27 +838,9 @@ export default function FlightDeck({
                 {selectedClin.name} · updates live as timesheets sync
               </div>
             </div>
-            <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: "var(--dim)" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 16, height: 0, borderTop: "2px dashed var(--faint)" }} />
-                {selectedClin.incrementally_funded ? "Pace to stay funded" : "Target pace"}
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 16, height: 3, borderRadius: 2, background: "var(--accent)" }} />
-                Actual
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span
-                  style={{
-                    width: 16,
-                    height: 3,
-                    borderRadius: 2,
-                    background: statusColor(selectedClin.status),
-                  }}
-                />
-                Projected
-              </span>
-            </div>
+            {/* The legend lives under the chart now — it carries each line's
+                actual numbers, so duplicating the bare labels here read as two
+                competing keys for one chart. */}
           </div>
           <BurnChart clin={selectedClin} contract={contract} />
           <div
