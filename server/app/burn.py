@@ -37,9 +37,15 @@ _FUND_LAG_SLACK = 0.15
 # this gate every partially-obligated CLIN carried an amber "Funding due" for its
 # whole life, including ones landing dead on their ceiling. Inside this horizon
 # it's a mod that has to be moving; outside it the CLIN is judged on its ceiling
-# projection instead. In the same family as the FAR 52.232-22 notification
-# horizons (#24), though not yet the 75/80%-of-funded thresholds themselves.
-_FUNDING_DUE_DAYS = 30
+# projection instead.
+#
+# 60 days is FAR 52.232-22(c)'s own lookahead: under Limitation of Funds the
+# contractor must notify the CO in writing when the costs it expects to incur *in
+# the next 60 days*, added to costs already incurred, will exceed 75% of the funds
+# allotted. So this is the window in which a PM is already obliged to be doing
+# something about funding — flagging earlier is noise, flagging later is late.
+# #24 adds the 75%-of-funded half of the same clause as its own state.
+_FUNDING_DUE_DAYS = 60
 # Minimum weeks elapsed in the active period before an obligation *rate* can be
 # read off the mod history. Below this, a single early tranche divided by one or
 # two weeks produces an enormous weekly figure that says nothing about funding

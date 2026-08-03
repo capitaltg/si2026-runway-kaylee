@@ -68,6 +68,33 @@ def test_amber_funding_exactly_on_the_horizon():
     )
 
 
+def test_horizon_is_the_far_60_day_lookahead():
+    # FAR 52.232-22(c) obliges written notice to the CO about costs expected in
+    # the next 60 days. Inside that window the PM already owes someone an action,
+    # so that's where the pill starts talking.
+    assert burn._FUNDING_DUE_DAYS == 60
+    assert (
+        burn._funded_shortfall_status(60, 56.0, 52, True, False, False, True)
+        == "funding"
+    )
+    assert burn._funded_shortfall_status(61, 56.0, 52, True, False, False, True) == "ok"
+
+
+def test_two_months_of_funded_runway_is_a_funding_matter():
+    # Real shape from contract 9: ~50-56 days of funded runway on a CLIN that is
+    # otherwise projected to land essentially on its ceiling. Under a 30-day gate
+    # this read purely as a ceiling story; at 60 days it's close enough to the
+    # money running out that funding is the more useful thing to say.
+    assert (
+        burn._funded_shortfall_status(56, 55.7, 52, True, False, False, True)
+        == "funding"
+    )
+    assert (
+        burn._funded_shortfall_status(50, 51.2, 52, True, False, False, True)
+        == "funding"
+    )
+
+
 def test_outside_the_horizon_reports_the_ceiling_instead():
     # The regression this test file exists for. 97 days of funded runway, ceiling
     # projected to land comfortably → "ok", not a permanent amber "Funding due".
