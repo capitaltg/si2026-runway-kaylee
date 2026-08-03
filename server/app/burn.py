@@ -641,27 +641,53 @@ def compute(
     #    funding tripwire becomes unreachable on exactly the contracts that need
     #    it. Capped at the period ceiling, and floored at zero (an option can be
     #    exercised before its funding lands, which is a real, reportable state).
-    # 2. An award carries no per-CLIN funding split, so spread the period's funded
-    #    dollars across its CLINs pro-rata by ceiling. That's what lets the engine
-    #    warn when *funded* dollars run out early rather than the full ceiling —
-    #    the incremental-funding case (FAR 52.232-22, Limitation of Funds).
+    # 2. How much of that lands on each CLIN. An award that prints an Accounting
+    #    and Appropriation Data / ACRN block funds each CLIN by name (#21), so
+    #    those figures are used as-is — no split, no netting. Awards that print
+    #    only a header total carry no per-CLIN attribution, so the period's funded
+    #    dollars are spread across its CLINs pro-rata by ceiling instead. Either
+    #    way this is what lets the engine warn when *funded* dollars run out early
+    #    rather than the full ceiling — the incremental-funding case (FAR
+    #    52.232-22, Limitation of Funds). Real obligation makes that warning
+    #    accurate per line (labor funded near-full while travel/ODC starves)
+    #    instead of a uniform blend.
     #
     # When nothing is obligated, or the obligation already covers this period's
     # whole ceiling, funded is None and every CLIN falls back to ceiling runway.
     active_ceiling = sum(float(c.get("ceiling") or 0) for c in clins)
     obligated = header.get("total_obligated")
     prior_consumed = _prior_consumed(contract, period)
-    period_funded = None
-    if obligated is not None and active_ceiling:
-        available = max(0.0, float(obligated) - prior_consumed)
-        if available < active_ceiling:
-            period_funded = available
-    funded_frac = (
-        (period_funded / active_ceiling) if period_funded is not None else None
-    )
-    funded_for = lambda c: (
-        funded_frac * float(c.get("ceiling") or 0) if funded_frac is not None else None
-    )
+    # Only when *every* active CLIN carries its own obligation is their sum
+    # comparable to the period ceiling — that sum is then the period's funded
+    # total, already period-scoped, so it needs none of the header netting below.
+    # A partial set (mixed or legacy extractions) falls back to the header path;
+    # `funded_for` still prefers whatever real per-CLIN figures it does have.
+    attributed = [c for c in clins if c.get("obligated") is not None]
+    if clins and len(attributed) == len(clins):
+        real_funded = sum(float(c["obligated"]) for c in attributed)
+        period_funded = real_funded if real_funded < active_ceiling else None
+        funded_frac = None  # every CLIN has an exact figure; nothing to pro-rate
+    else:
+        period_funded = None
+        if obligated is not None and active_ceiling:
+            available = max(0.0, float(obligated) - prior_consumed)
+            if available < active_ceiling:
+                period_funded = available
+        funded_frac = (
+            (period_funded / active_ceiling) if period_funded is not None else None
+        )
+
+    def funded_for(c):
+        """Funded dollars for one CLIN: the award's own obligation to it when
+        present, else its pro-rata slice of the period's funded total."""
+        if c.get("obligated") is not None:
+            return float(c["obligated"])
+        return (
+            funded_frac * float(c.get("ceiling") or 0)
+            if funded_frac is not None
+            else None
+        )
+
     # Outstanding funding mod (a set flag, or a future SF-30 ingest, #18) softens
     # the funding tripwire to "request outstanding" rather than an alarm (#22).
     mod_in_progress = bool(header.get("mod_in_progress"))
@@ -715,8 +741,11 @@ def compute(
     # Non-labor CLINs carry the same funded/budget fields the labor cards do, so
     # they're measured against the binding budget (funded slice when incrementally
     # funded, else the ceiling) rather than the raw ceiling (#41). The funded slice
-    # comes from the same pro-rata `funded_for` allocation labor uses; per-CLIN
-    # real-obligation splits are #21. The funding-pace read is contract-level: the
+    # comes from the same `funded_for` allocation labor uses — real per-CLIN
+    # obligation when the award printed it (#21), else pro-rata by ceiling. Non-labor
+    # is where that distinction bites hardest: a real ACRN block typically starves
+    # travel/ODC to fund labor, which pro-rata hides. The funding-pace read is
+    # contract-level: the
     # SF-30 obligation-history override when present, else the funded-vs-elapsed
     # proxy — the same signal `_compute_clin` applies to labor.
     elapsed_frac = min(1.0, cw / tw) if tw else 0.0
@@ -728,11 +757,16 @@ def compute(
         funded = funded_for(c)
         incrementally_funded = funded is not None and funded < ceiling
         budget = funded if incrementally_funded else ceiling
-        funded_frac = (funded / ceiling) if (funded is not None and ceiling) else 1.0
+        # Named apart from the period-level `funded_frac` on purpose: `funded_for`
+        # reads that one at call time, so reusing the name here would feed one
+        # CLIN's ratio into the next CLIN's pro-rata slice.
+        clin_funded_frac = (
+            (funded / ceiling) if (funded is not None and ceiling) else 1.0
+        )
         if pace_override is not None:
             funding_keeps_pace = pace_override
         else:
-            funding_keeps_pace = funded_frac >= elapsed_frac - _FUND_LAG_SLACK
+            funding_keeps_pace = clin_funded_frac >= elapsed_frac - _FUND_LAG_SLACK
         status = _nl_status(
             spent,
             budget,
@@ -771,7 +805,7 @@ def compute(
                 "exhaust_week": None,
                 "runway_days": None,
                 "weeks_left": None,
-                "funded_frac": round(funded_frac, 4),
+                "funded_frac": round(clin_funded_frac, 4),
                 "elapsed_frac": round(elapsed_frac, 4),
                 "funding_keeps_pace": funding_keeps_pace,
                 "mod_in_progress": bool(mod_in_progress),
@@ -903,7 +937,9 @@ def compute(
             # The active period, and the funding arithmetic that scopes a
             # contract-to-date obligation down to it. Reported rather than
             # implied so the numbers on screen can be reconciled to the award:
-            #   period_funded = min(period_ceiling, obligated - prior_consumed)
+            #   period_funded = sum of the period's per-CLIN obligations, when the
+            #                   award attributed every one of them (#21), else
+            #                   min(period_ceiling, obligated - prior_consumed)
             "period": period.get("name"),
             "period_ceiling": round(active_ceiling, 2),
             "contract_ceiling": header.get("total_ceiling"),

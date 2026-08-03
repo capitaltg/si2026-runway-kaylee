@@ -41,6 +41,15 @@ class CLIN(BaseModel):
     ceiling: Optional[float] = Field(
         default=None, description="Not-to-exceed ceiling amount in dollars"
     )
+    obligated: Optional[float] = Field(
+        default=None,
+        description="Dollars obligated/funded to this CLIN per the Accounting and "
+        "Appropriation Data (ACRN) block. Null if the award prints no per-CLIN funding.",
+    )
+    acrn: Optional[str] = Field(
+        default=None,
+        description="Accounting Classification Reference Number funding this CLIN, e.g. 'AA'.",
+    )
     est_hours: Optional[int] = Field(
         default=None, description="Estimated labor hours, if a labor CLIN"
     )
