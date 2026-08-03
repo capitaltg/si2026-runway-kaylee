@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
-import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
+import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import { suggestFor } from "../suggest.js";
 
@@ -425,17 +425,67 @@ export default function FlightDeck({
               </span>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-              At the current burn rate, {tw.code}{" "}
-              {tw.limited_by === "funding" ? (
+              {/* Non-labor CLINs land in this red list too (#41) but have no timesheet
+                  pace, so `exhaust_week` / `runway_days` / `stop_date` are all null on
+                  them. They need the realized wording: the forward branch below was
+                  rendering "in week 0 — 52 weeks before the PoP ends. Only  days of
+                  runway remain" for contract 6's CLIN 0004, because Math.round(null)
+                  is 0 and React prints null as nothing. */}
+              {tw.exhaust_week == null ? (
                 <>
-                  exhausts its <b>funded</b> {moneyM(tw.funded)} in week{" "}
-                  {Math.round(tw.exhaust_week)}
+                  {tw.code} has already spent {pct(tw.pct)} of its ceiling, past its{" "}
+                  {tw.limited_by === "funding" ? (
+                    <>
+                      obligated <b>{moneyM(tw.funded)}</b>
+                    </>
+                  ) : (
+                    <>
+                      <b>{moneyM(tw.budget)}</b> ceiling
+                    </>
+                  )}
+                  . That's a realized breach, not a forecast — the cost is at risk
+                  today
+                  {tw.limited_by === "funding" ? " until more funding is obligated" : ""}.
                 </>
               ) : (
-                <>blows its {moneyM(tw.budget)} ceiling in week {Math.round(tw.exhaust_week)}</>
-              )}{" "}
-              — {tw.weeks_early} weeks before the PoP ends. Only {tw.runway_days} days of runway
-              remain{tw.limited_by === "funding" ? " unless more funding is obligated" : ""}.
+                <>
+                  At the current burn rate, {tw.code}{" "}
+                  {tw.limited_by === "funding" ? (
+                    <>
+                      exhausts its <b>funded</b> {moneyM(tw.funded)} in week{" "}
+                      {Math.round(tw.exhaust_week)}
+                    </>
+                  ) : (
+                    <>
+                      blows its {moneyM(tw.budget)} ceiling in week{" "}
+                      {Math.round(tw.exhaust_week)}
+                    </>
+                  )}{" "}
+                  — {tw.weeks_early} weeks before the PoP ends.{" "}
+                  {/* Hard-stop forecast (#23): the week index as a date a PM can act
+                      against. Past dates get the present tense — naming a deadline
+                      that has been and gone reads as though there were time left. */}
+                  {tw.stop_date_passed ? (
+                    <>
+                      That money is already spent through — it ran out around{" "}
+                      {shortDate(tw.stop_date)}, so charging should stop <b>today</b>
+                      {tw.limited_by === "funding"
+                        ? " until more funding is obligated"
+                        : ""}
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Only {tw.runway_days} days of runway remain, so charging stops
+                      around <b>{shortDate(tw.stop_date)}</b>
+                      {tw.limited_by === "funding"
+                        ? " unless more funding is obligated"
+                        : ""}
+                      .
+                    </>
+                  )}
+                </>
+              )}
             </div>
             <Suggestion
               kind="over"
@@ -570,7 +620,11 @@ export default function FlightDeck({
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
               At the current burn rate, {fw.code} spends through its funded {moneyM(fw.funded)} in
-              week {Math.round(fw.exhaust_week)} — {fw.weeks_early} weeks before the PoP ends. This is
+              week {Math.round(fw.exhaust_week)}
+              {/* Hard-stop forecast (#23) — the week index as the date a PM can act
+                  against. Null on the non-labor rows that share this amber list. */}
+              {fw.stop_date ? <> (around <b>{shortDate(fw.stop_date)}</b>)</> : null} —{" "}
+              {fw.weeks_early} weeks before the PoP ends. This is
               routine incremental funding ({pct(fw.funded_frac)} obligated at {pct(fw.elapsed_frac)}{" "}
               of the PoP elapsed), so it needs its next funding mod, not a course correction.
               {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
@@ -897,6 +951,7 @@ export default function FlightDeck({
           const runwayColor = !c.is_labor
             ? "var(--accent)"
             : statusColor(c.status);
+          const stopLabel = stopPhrase(c.stop_date, c.stop_reason, c.stop_date_passed);
           const sel = c.is_labor && selectedClin && c.id === selectedClin.id;
           const onCardClick = c.is_labor
             ? () => setSelected(c.id)
@@ -958,6 +1013,15 @@ export default function FlightDeck({
                 </span>
                 <span style={{ color: runwayColor, fontWeight: 600 }}>{runwayLabel}</span>
               </div>
+              {/* Hard-stop forecast (#23): the runway figure above as a calendar
+                  date, which is the form the question actually gets asked in
+                  ("what day do we have to stop charging?"). Null on non-labor and
+                  paused CLINs, which have no pace to project from. */}
+              {stopLabel && (
+                <div style={{ marginTop: 5, fontSize: 11, color: c.stop_date_passed ? "var(--bad)" : "var(--faint)" }}>
+                  {stopLabel}
+                </div>
+              )}
             </div>
           );
         })}

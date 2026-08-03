@@ -55,7 +55,20 @@ SYSTEM_ASK = (
     "`focused_contract_id` is the contract the user currently has open; resolve "
     "'this contract' / 'here' to it. Status meanings: over=projected to blow its "
     "budget before PoP end; watch=close; funding=incremental funding due, not a "
-    "breach; under=burning too slowly; ok=on pace; paused=no recent charges."
+    "breach; under=burning too slowly; ok=on pace; paused=no recent charges.\n\n"
+    "Answering 'when does charging stop / when do we run out': each CLIN carries "
+    "`stop_date`, the projected calendar date its spend reaches the binding budget "
+    "at the current pace — use it directly rather than adding `runway_days` to "
+    "today, since the clock is anchored to the latest synced timesheet week, not to "
+    "today. `stop_reason` says which limit produces it: funding=the obligated money "
+    "runs out (a mod is needed) or ceiling=the contract's own ceiling. If "
+    "`stop_date_passed` is true that date is already today or behind us, so the "
+    "money is gone now — say charging should stop today and cite the date it ran "
+    "out, never as though it were still ahead. Both are null on a paused/unpriced "
+    "CLIN and on non-labor CLINs (no pace to project). Hedge the date ('around "
+    "Mar 14') — it's a projection off a 4-week trailing pace. Runway never blocks a "
+    "charge; that hard stop lives in the accounting system, so this is the date to "
+    "act before, not an enforcement action."
 )
 
 

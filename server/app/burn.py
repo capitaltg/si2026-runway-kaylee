@@ -13,7 +13,7 @@ Every CLIN reports which source it used and any timesheet LCATs that didn't matc
 a rate line, so nothing is silently invented.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 
 # Status thresholds, ported verbatim from the design's computeClinFor.
@@ -407,6 +407,7 @@ def _compute_clin(
     funding_keeps_pace_override: Optional[bool] = None,
     window=(None, None),
     past_pop: bool = False,
+    anchor: Optional[date] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -420,7 +421,11 @@ def _compute_clin(
 
     `window` scopes the charges to the active PoP; `past_pop` says the anchor date
     is already beyond the finish line, in which case a forward projection has
-    nothing left to project into and status is read off realized spend."""
+    nothing left to project into and status is read off realized spend.
+
+    `anchor` is the "now" the week clock is read against (`_anchor_date`) — the
+    calendar date `current_week` corresponds to. It's what turns the week-indexed
+    projection into the dated hard-stop forecast (#23)."""
     rate_for, blended, source = _rate_resolver(clin)
     clin_rows = _rows_for_clin(clin, rows, window)
 
@@ -542,6 +547,44 @@ def _compute_clin(
             )
         )
 
+    # Hard-stop forecast (#23): the calendar date charging on this CLIN gets
+    # blocked — when cumulative spend reaches the *binding* budget at the current
+    # pace. This is the date the accounting system's own hard stop (Costpoint /
+    # Unanet, which owns the charge codes) is set against; Runway is the
+    # early-warning layer upstream of it and never enforces anything.
+    #
+    # Derived from `anchor + round(weeks_left * 7)` days, which is `runway_days`
+    # measured from the same "now" the week clock uses. Deriving it that way rather
+    # than from `exhaust_week` is what keeps the date and the day count from ever
+    # disagreeing on the same card — they're now the same arithmetic.
+    #
+    # `stop_days` is deliberately *not* floored at zero, so a CLIN whose funding is
+    # already spent through keeps the true past date and can say when the money
+    # actually ran out. That's the same split `runway_days` (floors at 0) and
+    # `exhaust_week` (keeps the true crossing) already make. `stop_date_passed`
+    # flags it so the UI can say "charging stops today" instead of naming a date
+    # that has been and gone.
+    #
+    # Nulled only for `paused` / `unpriced`, exactly like `exhaust_week` and
+    # `weeks_left` — there is no pace to project from, and `_PAUSED_WEEKS_LEFT`
+    # would otherwise put the wall 19 years out.
+    stop_date = None
+    stop_reason = None
+    stop_date_passed = False
+    if status not in ("paused", "unpriced") and anchor is not None:
+        stop_days = round(weeks_left * 7)
+        stop_date = (anchor + timedelta(days=stop_days)).isoformat()
+        # Which limit produces that date. No precedence rule is needed and none is
+        # applied: the funded slice can never exceed the ceiling, so whenever a CLIN
+        # is incrementally funded the funded money is what runs out first — which is
+        # already exactly what `budget` is. So "the earlier of the two dates" and
+        # `_pill`'s realized-over-forecast precedence agree here by construction.
+        # Mirrors the `limited_by` on the tripwire lists so the copy can match.
+        stop_reason = "funding" if incrementally_funded else "ceiling"
+        # Zero counts as passed: the wall is today, and "stops today" is the honest
+        # copy for both that and a date already behind us.
+        stop_date_passed = stop_days <= 0
+
     # Cumulative actuals by week index (0-based over the weeks that have charges),
     # for the Flight Deck chart. Frontend maps these onto the SVG.
     cum = 0.0
@@ -583,6 +626,11 @@ def _compute_clin(
             None if status in ("paused", "unpriced") else round(exhaust_week, 2)
         ),
         "runway_days": runway_days,
+        # Hard-stop forecast (#23): the date charging gets blocked, which limit
+        # produces it, and whether that date is already today or behind us.
+        "stop_date": stop_date,
+        "stop_reason": stop_reason,
+        "stop_date_passed": stop_date_passed,
         "status": status,
         "status_label": _pill(status, ceiling_breached, funds_exceeded),
         # Which limit is in jeopardy, so the frontend can label a red `over` the
@@ -743,6 +791,10 @@ def compute(
     cw, tw = clk["current_week"], clk["total_weeks"]
     window, window_applied = _effective_window(period, rows)
     past_pop = clk["past_pop"]
+    # The calendar date `cw` corresponds to — the same "now" `_active_period` and
+    # `_clock` are read against. Passed down so each CLIN's hard-stop forecast (#23)
+    # is dated off the identical clock the week math uses.
+    anchor = _anchor_date(rows)
 
     # Only the active period's CLINs — never the whole award's option years.
     # See _period_clins for why (over-counting ceiling breaks every downstream
@@ -833,6 +885,7 @@ def compute(
             mod_in_progress=mod_in_progress,
             window=window,
             past_pop=past_pop,
+            anchor=anchor,
         )
         for c in labor
     ]
@@ -854,6 +907,7 @@ def compute(
                 funding_keeps_pace_override=pace_override,
                 window=window,
                 past_pop=past_pop,
+                anchor=anchor,
             )
             for c in labor
         ]
@@ -935,6 +989,13 @@ def compute(
                 "exhaust_week": None,
                 "runway_days": None,
                 "weeks_left": None,
+                # No pace → no dated hard stop either (#23). Present-but-null for
+                # the same reason the runway fields are: the tripwire lists below
+                # mix labor and non-labor rows and read these keys off both.
+                # Non-labor gets a real date once #20 / #7 give it actuals.
+                "stop_date": None,
+                "stop_reason": None,
+                "stop_date_passed": False,
                 "funded_frac": round(clin_funded_frac, 4),
                 "elapsed_frac": round(elapsed_frac, 4),
                 "funding_keeps_pace": funding_keeps_pace,
@@ -968,6 +1029,11 @@ def compute(
             # funding) or the full ceiling. Drives whether the UI says "funding
             # runs out" vs "blows the ceiling".
             "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+            # The dated hard stop behind this tripwire (#23), so the banner can say
+            # *when* rather than only how many weeks early. `limited_by` above is
+            # already the same value `stop_reason` carries, so it isn't repeated.
+            "stop_date": c["stop_date"],
+            "stop_date_passed": c["stop_date_passed"],
             "funded": c["funded"],
             "budget": c["budget"],
         }
@@ -1013,6 +1079,10 @@ def compute(
             "exhaust_week": c["exhaust_week"],
             "weeks_early": round(tw - (c["exhaust_week"] or tw)),
             "runway_days": c["runway_days"],
+            # When the funded money actually runs out (#23). An amber funding row is
+            # by definition funding-limited, so `stop_reason` isn't repeated here.
+            "stop_date": c["stop_date"],
+            "stop_date_passed": c["stop_date_passed"],
             "funded": c["funded"],
             "budget": c["budget"],
             "funded_frac": c["funded_frac"],
@@ -1110,6 +1180,10 @@ def compute(
                 "limited_by": (
                     "funding" if worst["incrementally_funded"] else "ceiling"
                 ),
+                # The hero tile's day count as a date (#23) — same arithmetic, so
+                # the two can't disagree. Passed means the wall is today or behind.
+                "stop_date": worst["stop_date"],
+                "stop_date_passed": worst["stop_date_passed"],
             }
             if worst
             else None
