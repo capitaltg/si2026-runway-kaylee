@@ -260,7 +260,10 @@ def _rate_resolver(clin: dict):
 
 def _pill(status: str) -> str:
     return {
-        "over": "Over ceiling",
+        # Set from the projected exhaust week beating PoP end, against `budget` —
+        # the funded slice when incrementally funded, not the ceiling. Neither a
+        # ceiling nor an event that has already happened, so it isn't "over" one.
+        "over": "Funds short",
         "watch": "Watch",
         "ok": "On pace",
         "under": "Under pace",

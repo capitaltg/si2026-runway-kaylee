@@ -66,7 +66,12 @@ const tierPill = (tier) => ({
   whiteSpace: "nowrap",
 });
 
-export default function AllocationMatrix({ contractId, setActiveId, autoBalance, onAutoBalanced }) {
+export default function AllocationMatrix({
+  contractId,
+  setActiveId,
+  autoBalance,
+  onAutoBalanced,
+}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   // draft[empId][clinId] = hrs/wk. The editable overlay on the synced actuals.
@@ -117,7 +122,10 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   }, [contractId]);
 
   const refreshPlans = () => {
-    if (contractId) listPlans(contractId).then(setPlans).catch(() => setPlans([]));
+    if (contractId)
+      listPlans(contractId)
+        .then(setPlans)
+        .catch(() => setPlans([]));
   };
   useEffect(refreshPlans, [contractId]);
 
@@ -129,7 +137,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   // plus any planned adds.
   const roster = useMemo(
     () => [...employees.filter((e) => !removed.includes(e.id)), ...added],
-    [employees, added, removed]
+    [employees, added, removed],
   );
 
   // Rate resolver for a given set of planned adds: LCAT-resolved $/hr per person
@@ -141,7 +149,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       for (const [cid, cell] of Object.entries(e.cells || {}))
         (m[cid] ||= {})[e.id] = cell.rate ?? null;
     for (const a of addedX || [])
-      for (const [cid, rt] of Object.entries(a.rates || {})) (m[cid] ||= {})[a.id] = rt;
+      for (const [cid, rt] of Object.entries(a.rates || {}))
+        (m[cid] ||= {})[a.id] = rt;
     return (empId, clinId) => {
       const c = m[clinId] || {};
       return c[empId] ?? c._blended ?? 0;
@@ -162,7 +171,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     let totalHrs = 0;
     for (const c of clins) {
       let weekly = 0;
-      for (const e of rost) weekly += (dr[e.id]?.[c.id] || 0) * rate(e.id, c.id);
+      for (const e of rost)
+        weekly += (dr[e.id]?.[c.id] || 0) * rate(e.id, c.id);
       let exhaustWeek = null;
       let runwayDays = null;
       if (weekly > 0) {
@@ -178,14 +188,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       };
       totalWeekly += weekly;
     }
-    for (const e of rost) for (const c of clins) totalHrs += dr[e.id]?.[c.id] || 0;
+    for (const e of rost)
+      for (const c of clins) totalHrs += dr[e.id]?.[c.id] || 0;
     return { clin, totalWeekly, totalHrs, headcount: rost.length };
   };
 
   const rateFor = useMemo(() => makeRate(added), [clins, employees, added]);
   const current = useMemo(
     () => evalPlan({ draft, added, removed }),
-    [draft, added, removed, employees, clins, cw, tw]
+    [draft, added, removed, employees, clins, cw, tw],
   );
   const sim = current.clin;
   const totalWeekly = current.totalWeekly;
@@ -195,7 +206,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       (data && JSON.stringify(draft) !== JSON.stringify(buildDraft(data))) ||
       added.length > 0 ||
       removed.length > 0,
-    [draft, data, added, removed]
+    [draft, data, added, removed],
   );
 
   // Per-person avatar hue keyed to roster order, so a person keeps their color
@@ -207,8 +218,12 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   }, [roster]);
 
   const rowWeeklyOf = (e) =>
-    clins.reduce((s, c) => s + (draft?.[e.id]?.[c.id] || 0) * rateFor(e.id, c.id), 0);
-  const rowHrsOf = (e) => clins.reduce((s, c) => s + (draft?.[e.id]?.[c.id] || 0), 0);
+    clins.reduce(
+      (s, c) => s + (draft?.[e.id]?.[c.id] || 0) * rateFor(e.id, c.id),
+      0,
+    );
+  const rowHrsOf = (e) =>
+    clins.reduce((s, c) => s + (draft?.[e.id]?.[c.id] || 0), 0);
 
   // Someone "charges" a CLIN if they logged hours there originally or have any in
   // the current plan — the set the CLIN-card filter narrows the roster to.
@@ -217,11 +232,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
 
   // The rows actually rendered: CLIN filter, then name/LCAT search, then sort.
   const visible = useMemo(() => {
-    let list = clinFilter ? roster.filter((e) => chargesClin(e, clinFilter)) : roster;
+    let list = clinFilter
+      ? roster.filter((e) => chargesClin(e, clinFilter))
+      : roster;
     const q = query.trim().toLowerCase();
     if (q)
       list = list.filter((e) =>
-        [e.name, e.id, e.lcat].some((v) => (v || "").toLowerCase().includes(q))
+        [e.name, e.id, e.lcat].some((v) => (v || "").toLowerCase().includes(q)),
       );
     if (sort.key) {
       const val = (e) =>
@@ -250,7 +267,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const clinFilterCode = clins.find((c) => c.id === clinFilter)?.code;
 
   // Text columns default A→Z, numeric high→low.
-  const defaultDir = (key) => (key === "name" || key === "lcat" ? "asc" : "desc");
+  const defaultDir = (key) =>
+    key === "name" || key === "lcat" ? "asc" : "desc";
   // Cycle per header: unsorted → default dir → opposite dir → unsorted.
   function toggleSort(key) {
     setSort((s) => {
@@ -307,8 +325,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     // Per-CLIN weekly $ summed over the VISIBLE rows, so the CSV ties out to itself.
     const clinTotals = clins.map((c) =>
       Math.round(
-        visible.reduce((s, e) => s + (draft?.[e.id]?.[c.id] || 0) * rateFor(e.id, c.id), 0)
-      )
+        visible.reduce(
+          (s, e) => s + (draft?.[e.id]?.[c.id] || 0) * rateFor(e.id, c.id),
+          0,
+        ),
+      ),
     );
     const totalRow = [
       "Forward weekly burn →",
@@ -318,8 +339,12 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       ...clinTotals,
       clinTotals.reduce((s, x) => s + x, 0),
     ];
-    const csv = [header, ...body, [], totalRow].map((r) => r.map(esc).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const csv = [header, ...body, [], totalRow]
+      .map((r) => r.map(esc).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = `allocation-${data.contract.piid || data.contract.name || "contract"}.csv`;
@@ -436,12 +461,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       ? { draft, added, removed }
       : plans.find((p) => String(p.id) === String(sel))?.data || { draft: {} };
   const cmpLabel = (sel) =>
-    sel === "current" ? "Current plan" : plans.find((p) => String(p.id) === String(sel))?.name || "—";
+    sel === "current"
+      ? "Current plan"
+      : plans.find((p) => String(p.id) === String(sel))?.name || "—";
 
   // Roll someone off the plan. A planned add just disappears; a synced person is
   // marked removed (excluded from burn) — Reset brings everyone back.
   function removePerson(id) {
-    if (String(id).startsWith("added-")) setAdded((a) => a.filter((p) => p.id !== id));
+    if (String(id).startsWith("added-"))
+      setAdded((a) => a.filter((p) => p.id !== id));
     else setRemoved((r) => (r.includes(id) ? r : [...r, id]));
   }
 
@@ -455,11 +483,18 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     const rate = clins.find((c) => c.id === clin)?.blended_rate || 0;
     setAdded((a) => [
       ...a,
-      { id, name: newPerson.name.trim() || "New hire", lcat: "Planned add", rates: { [clin]: rate } },
+      {
+        id,
+        name: newPerson.name.trim() || "New hire",
+        lcat: "Planned add",
+        rates: { [clin]: rate },
+      },
     ]);
     setDraft((d) => ({
       ...d,
-      [id]: Object.fromEntries(clins.map((c) => [c.id, c.id === clin ? hrs : 0])),
+      [id]: Object.fromEntries(
+        clins.map((c) => [c.id, c.id === clin ? hrs : 0]),
+      ),
     }));
     setNewPerson(null);
   }
@@ -470,22 +505,33 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     const id = `added-${addSeq.current++}`;
     const rates = {};
     clins.forEach((c) => (rates[c.id] = rateFor(e.id, c.id)));
-    setAdded((a) => [...a, { id, name: `${e.name} (copy)`, lcat: e.lcat, rates }]);
+    setAdded((a) => [
+      ...a,
+      { id, name: `${e.name} (copy)`, lcat: e.lcat, rates },
+    ]);
     setDraft((d) => ({
       ...d,
-      [id]: Object.fromEntries(clins.map((c) => [c.id, d?.[e.id]?.[c.id] || 0])),
+      [id]: Object.fromEntries(
+        clins.map((c) => [c.id, d?.[e.id]?.[c.id] || 0]),
+      ),
     }));
   }
 
   if (error) {
     return (
       <div style={{ padding: 40 }}>
-        <div style={{ ...panelStyle, color: "var(--bad)", fontSize: 13 }}>{error}</div>
+        <div style={{ ...panelStyle, color: "var(--bad)", fontSize: 13 }}>
+          {error}
+        </div>
       </div>
     );
   }
   if (!data) {
-    return <div style={{ padding: 40, color: "var(--dim)" }}>Loading allocation…</div>;
+    return (
+      <div style={{ padding: 40, color: "var(--dim)" }}>
+        Loading allocation…
+      </div>
+    );
   }
 
   const name = data.contract.name || data.contract.piid || "this contract";
@@ -503,11 +549,20 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
         }}
       >
         <div>
-          <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 20, fontWeight: 600, color: "var(--text)" }}>
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: grotesk,
+              fontSize: 20,
+              fontWeight: 600,
+              color: "var(--text)",
+            }}
+          >
             Team allocation matrix
           </h2>
           <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 4 }}>
-            Model staffing on <b>{name}</b> · {data.contract.period ? `${data.contract.period}, ` : ""}
+            Model staffing on <b>{name}</b> ·{" "}
+            {data.contract.period ? `${data.contract.period}, ` : ""}
             week {cw} of {tw} · a live what-if — nothing here is saved.
           </div>
         </div>
@@ -523,7 +578,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 color: "var(--warn)",
               }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--warn)" }} />
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "var(--warn)",
+                }}
+              />
               Simulating · live, not saved
             </span>
           )}
@@ -576,18 +638,52 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       ) : (
         <>
           {/* live rollups — slim strip, updates as you edit */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              marginBottom: 14,
+            }}
+          >
             {[
               { label: "Headcount", value: roster.length },
               { label: "FTEs", value: (totalHrs / 40).toFixed(1) },
-              { label: "Hrs / wk", value: Math.round(totalHrs).toLocaleString() },
+              {
+                label: "Hrs / wk",
+                value: Math.round(totalHrs).toLocaleString(),
+              },
               { label: "Weekly burn", value: money(totalWeekly) },
             ].map((t) => (
-              <div key={t.label} style={{ ...panelStyle, padding: "9px 14px", flex: "1 1 120px", minWidth: 110 }}>
-                <div style={{ fontSize: 10.5, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 700 }}>
+              <div
+                key={t.label}
+                style={{
+                  ...panelStyle,
+                  padding: "9px 14px",
+                  flex: "1 1 120px",
+                  minWidth: 110,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    letterSpacing: ".07em",
+                    textTransform: "uppercase",
+                    color: "var(--faint)",
+                    fontWeight: 700,
+                  }}
+                >
                   {t.label}
                 </div>
-                <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 20, color: "var(--text)", marginTop: 2 }}>
+                <div
+                  style={{
+                    fontFamily: grotesk,
+                    fontWeight: 700,
+                    fontSize: 20,
+                    color: "var(--text)",
+                    marginTop: 2,
+                  }}
+                >
                   {t.value}
                 </div>
               </div>
@@ -595,15 +691,34 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           </div>
 
           {/* single control bar: search + filter status (left) · actions (right) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search people or LCAT…"
-              style={{ height: 34, width: 200, maxWidth: "100%", padding: "0 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+              style={{
+                height: 34,
+                width: 200,
+                maxWidth: "100%",
+                padding: "0 12px",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--inputBg)",
+                color: "var(--text)",
+                fontSize: 13,
+              }}
             />
             <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
-              Showing <b style={{ color: "var(--text)" }}>{visible.length}</b> of {roster.length}
+              Showing <b style={{ color: "var(--text)" }}>{visible.length}</b>{" "}
+              of {roster.length}
               {clinFilterCode ? (
                 <>
                   {" "}
@@ -619,13 +734,30 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               </button>
             )}
             {sort.key && (
-              <button onClick={clearSort} title="Return to the default order" style={chipBtnDim}>
+              <button
+                onClick={clearSort}
+                title="Return to the default order"
+                style={chipBtnDim}
+              >
                 ✕ Clear sort
               </button>
             )}
 
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setNewPerson({ name: "", clin: clins[0]?.id || "", hrs: 40 })} title="Add a planned person" style={primaryBtn}>
+            <div
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <button
+                onClick={() =>
+                  setNewPerson({ name: "", clin: clins[0]?.id || "", hrs: 40 })
+                }
+                title="Add a planned person"
+                style={primaryBtn}
+              >
                 + Add person
               </button>
 
@@ -633,16 +765,38 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               <div style={{ position: "relative" }}>
                 <button
                   onClick={() => setPlansMenuOpen((v) => !v)}
-                  style={{ ...secondaryBtn, borderColor: plansMenuOpen ? "var(--accent)" : "var(--border)" }}
+                  style={{
+                    ...secondaryBtn,
+                    borderColor: plansMenuOpen
+                      ? "var(--accent)"
+                      : "var(--border)",
+                  }}
                 >
                   Plans ▾
                 </button>
                 {plansMenuOpen && (
                   <>
-                    <div onClick={() => setPlansMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                    <div style={{ position: "absolute", right: 0, top: 40, zIndex: 41, width: 250, ...panelStyle, padding: 8, boxShadow: "0 16px 40px rgba(15,20,35,.24)" }}>
+                    <div
+                      onClick={() => setPlansMenuOpen(false)}
+                      style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: 40,
+                        zIndex: 41,
+                        width: 250,
+                        ...panelStyle,
+                        padding: 8,
+                        boxShadow: "0 16px 40px rgba(15,20,35,.24)",
+                      }}
+                    >
                       {planName == null ? (
-                        <button onClick={() => setPlanName("")} style={menuItem}>
+                        <button
+                          onClick={() => setPlanName("")}
+                          style={menuItem}
+                        >
                           ＋ Save current plan
                         </button>
                       ) : (
@@ -658,9 +812,35 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                 setPlansMenuOpen(false);
                               } else if (e.key === "Escape") setPlanName(null);
                             }}
-                            style={{ flex: 1, minWidth: 0, height: 30, padding: "0 9px", borderRadius: 8, border: "1px solid var(--accent)", background: "var(--inputBg)", color: "var(--text)", fontSize: 12.5 }}
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              height: 30,
+                              padding: "0 9px",
+                              borderRadius: 8,
+                              border: "1px solid var(--accent)",
+                              background: "var(--inputBg)",
+                              color: "var(--text)",
+                              fontSize: 12.5,
+                            }}
                           />
-                          <button onClick={() => { doSavePlan(); setPlansMenuOpen(false); }} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                          <button
+                            onClick={() => {
+                              doSavePlan();
+                              setPlansMenuOpen(false);
+                            }}
+                            style={{
+                              height: 30,
+                              padding: "0 12px",
+                              borderRadius: 8,
+                              border: "none",
+                              background: "var(--accent)",
+                              color: "#fff",
+                              fontWeight: 600,
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
                             Save
                           </button>
                         </div>
@@ -670,12 +850,45 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                           <div style={menuDivider} />
                           <div style={menuLabel}>Saved plans</div>
                           {plans.map((p) => (
-                            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <button onClick={() => { loadPlan(p.id); setPlansMenuOpen(false); }} style={{ ...menuItem, flex: 1, color: loadedPlan === p.id ? "var(--accent)" : "var(--text)" }}>
+                            <div
+                              key={p.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <button
+                                onClick={() => {
+                                  loadPlan(p.id);
+                                  setPlansMenuOpen(false);
+                                }}
+                                style={{
+                                  ...menuItem,
+                                  flex: 1,
+                                  color:
+                                    loadedPlan === p.id
+                                      ? "var(--accent)"
+                                      : "var(--text)",
+                                }}
+                              >
                                 {loadedPlan === p.id ? "✓ " : ""}
                                 {p.name}
                               </button>
-                              <button onClick={() => deletePlanById(p.id)} title="Delete plan" style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "transparent", color: "var(--faint)", cursor: "pointer", fontSize: 14 }}>
+                              <button
+                                onClick={() => deletePlanById(p.id)}
+                                title="Delete plan"
+                                style={{
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: 7,
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--faint)",
+                                  cursor: "pointer",
+                                  fontSize: 14,
+                                }}
+                              >
                                 ×
                               </button>
                             </div>
@@ -691,8 +904,18 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                           setPlansMenuOpen(false);
                         }}
                         disabled={!plans.length}
-                        title={plans.length ? "" : "Save a plan first to compare"}
-                        style={{ ...menuItem, color: plans.length ? (comparing ? "var(--accent)" : "var(--text)") : "var(--faint)", cursor: plans.length ? "pointer" : "default" }}
+                        title={
+                          plans.length ? "" : "Save a plan first to compare"
+                        }
+                        style={{
+                          ...menuItem,
+                          color: plans.length
+                            ? comparing
+                              ? "var(--accent)"
+                              : "var(--text)"
+                            : "var(--faint)",
+                          cursor: plans.length ? "pointer" : "default",
+                        }}
                       >
                         ⇄ {comparing ? "Close compare" : "Compare plans"}
                       </button>
@@ -701,8 +924,19 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 )}
               </div>
 
-              <button onClick={exportCsv} title="Download this view as a CSV" style={exportBtn}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <button
+                onClick={exportCsv}
+                title="Download this view as a CSV"
+                style={exportBtn}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
                   <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
                   <path d="M14 3v5h5" strokeLinejoin="round" />
                 </svg>
@@ -742,22 +976,52 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               }}
             >
               <div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Name</div>
+                <div
+                  style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}
+                >
+                  Name
+                </div>
                 <input
                   autoFocus
                   value={newPerson.name}
                   placeholder="New hire"
-                  onChange={(e) => setNewPerson((p) => ({ ...p, name: e.target.value }))}
+                  onChange={(e) =>
+                    setNewPerson((p) => ({ ...p, name: e.target.value }))
+                  }
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 200, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  style={{
+                    height: 34,
+                    width: 200,
+                    padding: "0 11px",
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    background: "var(--inputBg)",
+                    color: "var(--text)",
+                    fontSize: 13,
+                  }}
                 />
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>CLIN</div>
+                <div
+                  style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}
+                >
+                  CLIN
+                </div>
                 <select
                   value={newPerson.clin}
-                  onChange={(e) => setNewPerson((p) => ({ ...p, clin: e.target.value }))}
-                  style={{ height: 34, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                  onChange={(e) =>
+                    setNewPerson((p) => ({ ...p, clin: e.target.value }))
+                  }
+                  style={{
+                    height: 34,
+                    padding: "0 11px",
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    background: "var(--panel2)",
+                    color: "var(--text)",
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
                 >
                   {clins.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -767,31 +1031,76 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 </select>
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Hrs / wk</div>
+                <div
+                  style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}
+                >
+                  Hrs / wk
+                </div>
                 <input
                   type="number"
                   min="0"
                   max="80"
                   value={newPerson.hrs}
-                  onChange={(e) => setNewPerson((p) => ({ ...p, hrs: e.target.value }))}
+                  onChange={(e) =>
+                    setNewPerson((p) => ({ ...p, hrs: e.target.value }))
+                  }
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 90, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
+                  style={{
+                    height: 34,
+                    width: 90,
+                    padding: "0 11px",
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    background: "var(--inputBg)",
+                    color: "var(--text)",
+                    fontSize: 13,
+                    textAlign: "right",
+                    fontFamily: mono,
+                  }}
                 />
               </div>
               <button
                 onClick={addPerson}
-                style={{ height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+                style={{
+                  height: 34,
+                  padding: "0 16px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: 12.5,
+                  cursor: "pointer",
+                }}
               >
                 Add
               </button>
               <button
                 onClick={() => setNewPerson(null)}
-                style={{ height: 34, padding: "0 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+                style={{
+                  height: 34,
+                  padding: "0 14px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "var(--panel2)",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                  fontSize: 12.5,
+                  cursor: "pointer",
+                }}
               >
                 Cancel
               </button>
-              <div style={{ fontSize: 11.5, color: "var(--dim)", flexBasis: "100%" }}>
-                Added at {clins.find((c) => c.id === newPerson.clin)?.code || "CLIN"}&apos;s blended rate
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--dim)",
+                  flexBasis: "100%",
+                }}
+              >
+                Added at{" "}
+                {clins.find((c) => c.id === newPerson.clin)?.code || "CLIN"}
+                &apos;s blended rate
                 {clins.find((c) => c.id === newPerson.clin)?.blended_rate
                   ? ` ($${Math.round(clins.find((c) => c.id === newPerson.clin).blended_rate)}/hr)`
                   : ""}
@@ -803,20 +1112,40 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           {/* matrix */}
           <div style={{ ...panelStyle, padding: 0, overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 760 }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 13,
+                  minWidth: 760,
+                }}
+              >
                 <thead>
                   <tr style={{ background: "var(--panel2)" }}>
                     <th
                       onClick={() => toggleSort("name")}
                       title="Sort by name"
-                      style={{ ...thSort, position: "sticky", left: 0, background: "var(--panel2)" }}
+                      style={{
+                        ...thSort,
+                        position: "sticky",
+                        left: 0,
+                        background: "var(--panel2)",
+                      }}
                     >
                       Employee{sortGlyph("name")}
                     </th>
-                    <th onClick={() => toggleSort("lcat")} title="Sort by labor category" style={thSort}>
+                    <th
+                      onClick={() => toggleSort("lcat")}
+                      title="Sort by labor category"
+                      style={thSort}
+                    >
                       LCAT{sortGlyph("lcat")}
                     </th>
-                    <th onClick={() => toggleSort("rate")} title="Sort by rate" style={{ ...thSort, textAlign: "right" }}>
+                    <th
+                      onClick={() => toggleSort("rate")}
+                      title="Sort by rate"
+                      style={{ ...thSort, textAlign: "right" }}
+                    >
                       Rate{sortGlyph("rate")}
                     </th>
                     {clins.map((c, i) => {
@@ -830,20 +1159,40 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                             ...thSort,
                             textAlign: "center",
                             minWidth: 96,
-                            background: active ? `${hueFor(i)}14` : "var(--panel2)",
+                            background: active
+                              ? `${hueFor(i)}14`
+                              : "var(--panel2)",
                           }}
                         >
-                          <span style={{ color: hueFor(i), fontFamily: mono }}>{c.code}</span>
+                          <span style={{ color: hueFor(i), fontFamily: mono }}>
+                            {c.code}
+                          </span>
                           {sortGlyph(c.id)}
                           <br />
-                          <span style={{ fontWeight: 500, textTransform: "none", fontSize: 10.5 }}>hrs/wk</span>
+                          <span
+                            style={{
+                              fontWeight: 500,
+                              textTransform: "none",
+                              fontSize: 10.5,
+                            }}
+                          >
+                            hrs/wk
+                          </span>
                         </th>
                       );
                     })}
-                    <th onClick={() => toggleSort("util")} title="Sort by utilization (hrs vs a 40-hr week)" style={{ ...thSort, textAlign: "center" }}>
+                    <th
+                      onClick={() => toggleSort("util")}
+                      title="Sort by utilization (hrs vs a 40-hr week)"
+                      style={{ ...thSort, textAlign: "center" }}
+                    >
                       Util{sortGlyph("util")}
                     </th>
-                    <th onClick={() => toggleSort("weekly")} title="Sort by weekly $" style={{ ...thSort, textAlign: "right" }}>
+                    <th
+                      onClick={() => toggleSort("weekly")}
+                      title="Sort by weekly $"
+                      style={{ ...thSort, textAlign: "right" }}
+                    >
                       Weekly{sortGlyph("weekly")}
                     </th>
                   </tr>
@@ -851,8 +1200,27 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 <tbody>
                   {visible.length === 0 && (
                     <tr>
-                      <td colSpan={clins.length + 5} style={{ padding: 26, textAlign: "center", color: "var(--faint)", fontSize: 13 }}>
-                        No one matches — <span onClick={showAll} style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 600 }}>show all people</span>.
+                      <td
+                        colSpan={clins.length + 5}
+                        style={{
+                          padding: 26,
+                          textAlign: "center",
+                          color: "var(--faint)",
+                          fontSize: 13,
+                        }}
+                      >
+                        No one matches —{" "}
+                        <span
+                          onClick={showAll}
+                          style={{
+                            color: "var(--accent)",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          show all people
+                        </span>
+                        .
                       </td>
                     </tr>
                   )}
@@ -861,20 +1229,61 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                     const hue = hueOf(e.id);
                     const tier = tierOf(e.lcat);
                     return (
-                      <tr key={e.id} style={{ borderTop: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "var(--panel)" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={avatarStyle(hue)}>{initials(e.name)}</span>
+                      <tr
+                        key={e.id}
+                        style={{ borderTop: "1px solid var(--border)" }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 16px",
+                            position: "sticky",
+                            left: 0,
+                            background: "var(--panel)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                            }}
+                          >
+                            <span style={avatarStyle(hue)}>
+                              {initials(e.name)}
+                            </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
+                              <div
+                                style={{
+                                  fontWeight: 600,
+                                  color: "var(--text)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
                                 {e.name}
                                 {String(e.id).startsWith("added-") && (
-                                  <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--accent)", background: "var(--panel2)", padding: "1px 6px", borderRadius: 5 }}>
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 700,
+                                      color: "var(--accent)",
+                                      background: "var(--panel2)",
+                                      padding: "1px 6px",
+                                      borderRadius: 5,
+                                    }}
+                                  >
                                     PLANNED
                                   </span>
                                 )}
                               </div>
-                              <div style={{ fontSize: 11.5, color: "var(--dim)", fontFamily: mono }}>
+                              <div
+                                style={{
+                                  fontSize: 11.5,
+                                  color: "var(--dim)",
+                                  fontFamily: mono,
+                                }}
+                              >
                                 {String(e.id).startsWith("added-") ? "—" : e.id}
                               </div>
                             </div>
@@ -918,9 +1327,24 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           {e.lcat ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
                               <span style={tierPill(tier)}>{tier.label}</span>
-                              <span style={{ fontSize: 12, color: "var(--dim)", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--dim)",
+                                  maxWidth: 150,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {e.lcat}
                               </span>
                             </div>
@@ -928,7 +1352,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                             <span style={{ color: "var(--dim)" }}>—</span>
                           )}
                         </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right", fontFamily: mono, color: "var(--dim)" }}>
+                        <td
+                          style={{
+                            padding: "10px 12px",
+                            textAlign: "right",
+                            fontFamily: mono,
+                            color: "var(--dim)",
+                          }}
+                        >
                           {e.rate ? "$" + Math.round(e.rate) : "—"}
                         </td>
                         {clins.map((c, ci) => {
@@ -944,7 +1375,10 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                 padding: 8,
                                 textAlign: "center",
                                 position: "relative",
-                                background: clinFilter === c.id ? `${colHue}0d` : undefined,
+                                background:
+                                  clinFilter === c.id
+                                    ? `${colHue}0d`
+                                    : undefined,
                               }}
                             >
                               <input
@@ -953,7 +1387,9 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                 max="80"
                                 step="1"
                                 value={val}
-                                onChange={(ev) => setCell(e.id, c.id, ev.target.value)}
+                                onChange={(ev) =>
+                                  setCell(e.id, c.id, ev.target.value)
+                                }
                                 style={{
                                   width: 62,
                                   height: 34,
@@ -969,7 +1405,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                     : filled
                                       ? `${colHue}14`
                                       : "transparent",
-                                  color: flagged ? "var(--bad)" : filled ? "var(--text)" : "var(--faint)",
+                                  color: flagged
+                                    ? "var(--bad)"
+                                    : filled
+                                      ? "var(--text)"
+                                      : "var(--faint)",
                                   fontFamily: mono,
                                   fontSize: 13,
                                   fontWeight: filled ? 600 : 400,
@@ -978,7 +1418,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                               {flagged && (
                                 <span
                                   title={`${cell.lcat}: no matching rate line — billed at the blended rate`}
-                                  style={{ position: "absolute", top: 4, right: 8, color: "var(--bad)", fontSize: 11, cursor: "help" }}
+                                  style={{
+                                    position: "absolute",
+                                    top: 4,
+                                    right: 8,
+                                    color: "var(--bad)",
+                                    fontSize: 11,
+                                    cursor: "help",
+                                  }}
                                 >
                                   ⚠
                                 </span>
@@ -986,25 +1433,49 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                             </td>
                           );
                         })}
-                        <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                        <td
+                          style={{ padding: "10px 8px", textAlign: "center" }}
+                        >
                           {(() => {
                             const util = rowHrsOf(e) / 40;
                             const uc =
-                              util > 1.05 ? "var(--warn)" : util >= 0.9 ? "var(--good)" : "var(--dim)";
+                              util > 1.05
+                                ? "var(--warn)"
+                                : util >= 0.9
+                                  ? "var(--good)"
+                                  : "var(--dim)";
                             return (
-                              <span style={{ fontFamily: mono, fontSize: 12.5, fontWeight: 600, color: uc }}>
+                              <span
+                                style={{
+                                  fontFamily: mono,
+                                  fontSize: 12.5,
+                                  fontWeight: 600,
+                                  color: uc,
+                                }}
+                              >
                                 {Math.round(util * 100)}%
                               </span>
                             );
                           })()}
                         </td>
-                        <td style={{ padding: "10px 16px", textAlign: "right" }}>
-                          <div style={{ fontFamily: mono, fontWeight: 600, color: "var(--text)" }}>
+                        <td
+                          style={{ padding: "10px 16px", textAlign: "right" }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: mono,
+                              fontWeight: 600,
+                              color: "var(--text)",
+                            }}
+                          >
                             {money(rowWeekly)}
                           </div>
                           {totalWeekly > 0 && (
-                            <div style={{ fontSize: 10.5, color: "var(--faint)" }}>
-                              {Math.round((rowWeekly / totalWeekly) * 100)}% of burn
+                            <div
+                              style={{ fontSize: 10.5, color: "var(--faint)" }}
+                            >
+                              {Math.round((rowWeekly / totalWeekly) * 100)}% of
+                              burn
                             </div>
                           )}
                         </td>
@@ -1013,22 +1484,61 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   })}
                 </tbody>
                 <tfoot>
-                  <tr style={{ borderTop: "2px solid var(--border)", background: "var(--panel2)" }}>
-                    <td colSpan={3} style={{ padding: "12px 16px", fontWeight: 700, color: "var(--text)" }}>
+                  <tr
+                    style={{
+                      borderTop: "2px solid var(--border)",
+                      background: "var(--panel2)",
+                    }}
+                  >
+                    <td
+                      colSpan={3}
+                      style={{
+                        padding: "12px 16px",
+                        fontWeight: 700,
+                        color: "var(--text)",
+                      }}
+                    >
                       Forward weekly burn →
                     </td>
                     {clins.map((c) => (
                       <td
                         key={c.id}
-                        style={{ padding: "12px 8px", textAlign: "center", fontFamily: mono, fontWeight: 600, fontSize: 12, color: statusColor(sim[c.id]?.status) }}
+                        style={{
+                          padding: "12px 8px",
+                          textAlign: "center",
+                          fontFamily: mono,
+                          fontWeight: 600,
+                          fontSize: 12,
+                          color: statusColor(sim[c.id]?.status),
+                        }}
                       >
                         {money(sim[c.id]?.weekly || 0)}
                       </td>
                     ))}
-                    <td style={{ padding: "12px 8px", textAlign: "center", fontFamily: mono, fontWeight: 600, fontSize: 12, color: "var(--dim)" }}>
-                      {roster.length ? Math.round(totalHrs / 40 / roster.length * 100) : 0}%
+                    <td
+                      style={{
+                        padding: "12px 8px",
+                        textAlign: "center",
+                        fontFamily: mono,
+                        fontWeight: 600,
+                        fontSize: 12,
+                        color: "var(--dim)",
+                      }}
+                    >
+                      {roster.length
+                        ? Math.round((totalHrs / 40 / roster.length) * 100)
+                        : 0}
+                      %
                     </td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: mono, fontWeight: 700, color: "var(--text)" }}>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        textAlign: "right",
+                        fontFamily: mono,
+                        fontWeight: 700,
+                        color: "var(--text)",
+                      }}
+                    >
                       {money(totalWeekly)}
                     </td>
                   </tr>
@@ -1050,7 +1560,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           >
             Per-CLIN runway · click a card to filter the roster
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))",
+              gap: 14,
+            }}
+          >
             {clins.map((c, i) => {
               const s = sim[c.id] || {};
               const p = pill(s.status);
@@ -1065,7 +1581,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 <div
                   key={c.id}
                   onClick={() => setClinFilter(active ? null : c.id)}
-                  title={active ? "Showing only this CLIN — click to show everyone" : `Show only people on ${c.code}`}
+                  title={
+                    active
+                      ? "Showing only this CLIN — click to show everyone"
+                      : `Show only people on ${c.code}`
+                  }
                   style={{
                     border: `${active ? 2 : 1}px solid ${rc}`,
                     borderRadius: 14,
@@ -1075,21 +1595,59 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                     boxShadow: active ? `0 0 0 3px ${hueFor(i)}22` : "none",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 3, background: hueFor(i) }} />
-                    <span style={{ fontFamily: mono, fontSize: 11.5, color: "var(--dim)" }}>{c.code}</span>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <span
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: 3,
+                        background: hueFor(i),
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: mono,
+                        fontSize: 11.5,
+                        color: "var(--dim)",
+                      }}
+                    >
+                      {c.code}
+                    </span>
                     <span style={p.style}>{p.label}</span>
                     {active && (
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".06em", color: hueFor(i) }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: ".06em",
+                          color: hueFor(i),
+                        }}
+                      >
                         FILTERING
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--text)", fontWeight: 600, marginTop: 8 }}>{c.name}</div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--text)",
+                      fontWeight: 600,
+                      marginTop: 8,
+                    }}
+                  >
+                    {c.name}
+                  </div>
                   <div style={row}>
-                    <span>Projected exhaustion</span>
+                    {/* Against c.remaining (budget − spent), and budget is the
+                        funded slice on an incrementally funded CLIN — so name the
+                        funds, not the ceiling. */}
+                    <span>Projected funds exhaustion</span>
                     <span style={{ fontWeight: 600, color: rc }}>
-                      {s.exhaustWeek == null ? "—" : `Week ${Math.round(s.exhaustWeek)} / ${tw}`}
+                      {s.exhaustWeek == null
+                        ? "—"
+                        : `Week ${Math.round(s.exhaustWeek)} / ${tw}`}
                     </span>
                   </div>
                   <div style={row}>
@@ -1109,15 +1667,30 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   {dirty && delta !== 0 && (
                     <div style={{ ...row, color: "var(--faint)" }}>
                       <span>vs. actuals</span>
-                      <span style={{ fontWeight: 600, color: delta > 0 ? "var(--good)" : "var(--bad)" }}>
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color: delta > 0 ? "var(--good)" : "var(--bad)",
+                        }}
+                      >
                         {delta > 0 ? `+${delta}` : delta} wk
                       </span>
                     </div>
                   )}
                   {!!c.unmatched_lcats?.length && (
-                    <div style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}>
-                      ⚠ Unmatched LCAT: {c.unmatched_lcats.join(", ")} — billed at blended
-                      {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : ""}.
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 11,
+                        color: "var(--warn)",
+                      }}
+                    >
+                      ⚠ Unmatched LCAT: {c.unmatched_lcats.join(", ")} — billed
+                      at blended
+                      {c.blended_rate
+                        ? ` $${Math.round(c.blended_rate)}/hr`
+                        : ""}
+                      .
                     </div>
                   )}
                 </div>
@@ -1132,7 +1705,19 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
 
 // Side-by-side comparison of two plan states (Current or a saved plan), scored
 // through the same evalPlan the live view uses.
-function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, planStateFor, onClose }) {
+function ComparePanel({
+  a,
+  b,
+  setA,
+  setB,
+  plans,
+  clins,
+  tw,
+  cmpLabel,
+  evalPlan,
+  planStateFor,
+  onClose,
+}) {
   const A = evalPlan(planStateFor(a));
   const B = evalPlan(planStateFor(b));
   const sel = {
@@ -1145,13 +1730,34 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
     fontSize: 12.5,
     cursor: "pointer",
   };
-  const options = [{ value: "current", label: "Current plan" }, ...plans.map((p) => ({ value: String(p.id), label: p.name }))];
+  const options = [
+    { value: "current", label: "Current plan" },
+    ...plans.map((p) => ({ value: String(p.id), label: p.name })),
+  ];
 
   // rows: { label, av, bv, dir (1 higher-better, -1 lower-better, 0 neutral), kind }
   const rows = [
-    { label: "Headcount", av: A.headcount, bv: B.headcount, dir: 0, kind: "num" },
-    { label: "FTEs", av: A.totalHrs / 40, bv: B.totalHrs / 40, dir: 0, kind: "fte" },
-    { label: "Forward weekly burn", av: A.totalWeekly, bv: B.totalWeekly, dir: -1, kind: "money" },
+    {
+      label: "Headcount",
+      av: A.headcount,
+      bv: B.headcount,
+      dir: 0,
+      kind: "num",
+    },
+    {
+      label: "FTEs",
+      av: A.totalHrs / 40,
+      bv: B.totalHrs / 40,
+      dir: 0,
+      kind: "fte",
+    },
+    {
+      label: "Forward weekly burn",
+      av: A.totalWeekly,
+      bv: B.totalWeekly,
+      dir: -1,
+      kind: "money",
+    },
     ...clins.map((c) => ({
       label: `${c.code} runway`,
       av: A.clin[c.id]?.runwayDays,
@@ -1162,12 +1768,31 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
   ];
 
   const fmt = (v, kind) =>
-    v == null ? "—" : kind === "money" ? money(v) : kind === "fte" ? v.toFixed(1) : kind === "days" ? `${v}d` : v;
+    v == null
+      ? "—"
+      : kind === "money"
+        ? money(v)
+        : kind === "fte"
+          ? v.toFixed(1)
+          : kind === "days"
+            ? `${v}d`
+            : v;
   const delta = (av, bv, dir, kind) => {
-    if (av == null || bv == null) return <span style={{ color: "var(--faint)" }}>—</span>;
+    if (av == null || bv == null)
+      return <span style={{ color: "var(--faint)" }}>—</span>;
     const d = bv - av;
-    const color = d === 0 || dir === 0 ? "var(--dim)" : (dir > 0) === d > 0 ? "var(--good)" : "var(--bad)";
-    const mag = kind === "money" ? money(Math.abs(d)) : kind === "fte" ? Math.abs(d).toFixed(1) : `${Math.abs(d)}${kind === "days" ? "d" : ""}`;
+    const color =
+      d === 0 || dir === 0
+        ? "var(--dim)"
+        : dir > 0 === d > 0
+          ? "var(--good)"
+          : "var(--bad)";
+    const mag =
+      kind === "money"
+        ? money(Math.abs(d))
+        : kind === "fte"
+          ? Math.abs(d).toFixed(1)
+          : `${Math.abs(d)}${kind === "days" ? "d" : ""}`;
     return (
       <span style={{ color, fontWeight: 600 }}>
         {d === 0 ? "—" : `${d > 0 ? "+" : "−"}${mag}`}
@@ -1177,18 +1802,37 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
 
   const cell = { padding: "9px 14px", fontFamily: mono, fontSize: 13 };
   return (
-    <div style={{ ...panelStyle, padding: 0, overflow: "hidden", marginBottom: 12 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 14px", flexWrap: "wrap" }}>
+    <div
+      style={{
+        ...panelStyle,
+        padding: 0,
+        overflow: "hidden",
+        marginBottom: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          padding: "12px 14px",
+          flexWrap: "wrap",
+        }}
+      >
         <span style={{ fontSize: 12.5, color: "var(--dim)" }}>Compare</span>
         <select value={a} onChange={(e) => setA(e.target.value)} style={sel}>
           {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
         <span style={{ color: "var(--faint)" }}>vs</span>
         <select value={b} onChange={(e) => setB(e.target.value)} style={sel}>
           {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
         <button
@@ -1210,22 +1854,88 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
           ×
         </button>
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <table
+        style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
+      >
         <thead>
-          <tr style={{ background: "var(--panel2)", color: "var(--faint)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em" }}>
-            <th style={{ textAlign: "left", padding: "10px 14px", fontWeight: 700 }}>Metric</th>
-            <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>{cmpLabel(a)}</th>
-            <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>{cmpLabel(b)}</th>
-            <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Δ</th>
+          <tr
+            style={{
+              background: "var(--panel2)",
+              color: "var(--faint)",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: ".05em",
+            }}
+          >
+            <th
+              style={{
+                textAlign: "left",
+                padding: "10px 14px",
+                fontWeight: 700,
+              }}
+            >
+              Metric
+            </th>
+            <th
+              style={{
+                textAlign: "right",
+                padding: "10px 14px",
+                fontWeight: 700,
+                maxWidth: 160,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {cmpLabel(a)}
+            </th>
+            <th
+              style={{
+                textAlign: "right",
+                padding: "10px 14px",
+                fontWeight: 700,
+              }}
+            >
+              {cmpLabel(b)}
+            </th>
+            <th
+              style={{
+                textAlign: "right",
+                padding: "10px 14px",
+                fontWeight: 700,
+              }}
+            >
+              Δ
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.label} style={{ borderTop: "1px solid var(--border)" }}>
-              <td style={{ padding: "9px 14px", color: "var(--text)", fontWeight: 500 }}>{r.label}</td>
-              <td style={{ ...cell, textAlign: "right", color: "var(--dim)" }}>{fmt(r.av, r.kind)}</td>
-              <td style={{ ...cell, textAlign: "right", color: "var(--text)", fontWeight: 600 }}>{fmt(r.bv, r.kind)}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{delta(r.av, r.bv, r.dir, r.kind)}</td>
+              <td
+                style={{
+                  padding: "9px 14px",
+                  color: "var(--text)",
+                  fontWeight: 500,
+                }}
+              >
+                {r.label}
+              </td>
+              <td style={{ ...cell, textAlign: "right", color: "var(--dim)" }}>
+                {fmt(r.av, r.kind)}
+              </td>
+              <td
+                style={{
+                  ...cell,
+                  textAlign: "right",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                }}
+              >
+                {fmt(r.bv, r.kind)}
+              </td>
+              <td style={{ ...cell, textAlign: "right" }}>
+                {delta(r.av, r.bv, r.dir, r.kind)}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -1239,7 +1949,8 @@ function buildDraft(d) {
   const draft = {};
   for (const e of d.employees || []) {
     draft[e.id] = {};
-    for (const c of d.clins || []) draft[e.id][c.id] = e.cells?.[c.id]?.hours || 0;
+    for (const c of d.clins || [])
+      draft[e.id][c.id] = e.cells?.[c.id]?.hours || 0;
   }
   return draft;
 }
@@ -1254,7 +1965,12 @@ const th = {
   fontWeight: 700,
 };
 // A sortable header: same look, but clearly clickable (pointer + no text-select).
-const thSort = { ...th, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" };
+const thSort = {
+  ...th,
+  cursor: "pointer",
+  userSelect: "none",
+  whiteSpace: "nowrap",
+};
 
 // Control-bar button styles (shared so the single toolbar stays consistent).
 const chipBtn = {
@@ -1268,7 +1984,11 @@ const chipBtn = {
   fontSize: 12,
   cursor: "pointer",
 };
-const chipBtnDim = { ...chipBtn, border: "1px solid var(--border)", color: "var(--dim)" };
+const chipBtnDim = {
+  ...chipBtn,
+  border: "1px solid var(--border)",
+  color: "var(--dim)",
+};
 const primaryBtn = {
   display: "flex",
   alignItems: "center",
@@ -1330,7 +2050,11 @@ const menuLabel = {
   fontWeight: 700,
   padding: "4px 10px",
 };
-const menuDivider = { height: 1, background: "var(--border)", margin: "6px 4px" };
+const menuDivider = {
+  height: 1,
+  background: "var(--border)",
+  margin: "6px 4px",
+};
 const row = {
   display: "flex",
   justifyContent: "space-between",

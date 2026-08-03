@@ -13,7 +13,11 @@ export const hueFor = (i) => HUES[i % HUES.length];
 
 // status → { label, color var, background var }. Mirrors design's pill().
 const PILL = {
-  over: { label: "Over ceiling", color: "--bad", bg: "--badBg" },
+  // "over" is set from the projected exhaust week beating PoP end, and the budget
+  // that exhausts is the funded slice whenever the CLIN is incrementally funded —
+  // so it's neither a ceiling nor something that has already happened. The old
+  // "Over ceiling" claimed both, on CLINs sitting well under their ceiling.
+  over: { label: "Funds short", color: "--bad", bg: "--badBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
   under: { label: "Under pace", color: "--warn", bg: "--warnBg" },
