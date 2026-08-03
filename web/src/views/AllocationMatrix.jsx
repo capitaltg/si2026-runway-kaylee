@@ -17,11 +17,27 @@ function initials(name) {
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase() || "—";
 }
 
-// Forward status from a projected exhaustion week, mirroring burn.py's bands
-// (minus the funding nuance — the simulator is a straight hrs→runway what-if).
-function simStatus(exhaustWeek, totalWeeks) {
+// Forward status from a projected exhaustion week, mirroring burn.py's bands —
+// including the #22 funding downgrade, which this used to skip. Exhausting the
+// funded slice is only red if it's a real ceiling breach or funding is genuinely
+// lagging with no mod flagged; routine incremental funding is an amber "funding
+// due", the same as every other funding state. Skipping it meant these cards
+// scored a CLIN red that the Flight Deck was showing amber for.
+function simStatus(exhaustWeek, totalWeeks, c, weekly, cw) {
   if (exhaustWeek == null) return "paused";
-  if (exhaustWeek < totalWeeks - 1) return "over";
+  if (exhaustWeek < totalWeeks - 1) {
+    const ceilingExhaust =
+      weekly > 0 && c.ceiling ? cw + (c.ceiling - c.spent) / weekly : null;
+    const ceilingBreached =
+      ceilingExhaust != null && ceilingExhaust < totalWeeks - 1;
+    if (
+      c.incrementally_funded &&
+      !ceilingBreached &&
+      (c.mod_in_progress || c.funding_keeps_pace)
+    )
+      return "funding";
+    return "over";
+  }
   if (exhaustWeek < totalWeeks + 2) return "watch";
   if (exhaustWeek > totalWeeks * 1.15) return "under";
   return "ok";
@@ -184,7 +200,8 @@ export default function AllocationMatrix({
         weekly,
         exhaustWeek,
         runwayDays,
-        status: weekly > 0 ? simStatus(exhaustWeek, tw) : "paused",
+        status:
+          weekly > 0 ? simStatus(exhaustWeek, tw, c, weekly, cw) : "paused",
       };
       totalWeekly += weekly;
     }

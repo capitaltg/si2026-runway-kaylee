@@ -18,6 +18,11 @@ const PILL = {
   // so it's neither a ceiling nor something that has already happened. The old
   // "Over ceiling" claimed both, on CLINs sitting well under their ceiling.
   over: { label: "Funds short", color: "--bad", bg: "--badBg" },
+  // The funded slice runs short but the ceiling holds and funding is either
+  // keeping pace or has a mod outstanding (burn.py's #22 downgrade). Routine
+  // incremental funding, so it's amber with the rest of the funding states — the
+  // backend has emitted this since #22 but PILL had no entry, so it rendered "—".
+  funding: { label: "Funding due", color: "--warn", bg: "--warnBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
   under: { label: "Under pace", color: "--warn", bg: "--warnBg" },

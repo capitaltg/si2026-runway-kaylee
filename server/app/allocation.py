@@ -63,6 +63,13 @@ def compute_allocation(
                 "spent": card.get("spent", 0.0),
                 "remaining": card.get("remaining", 0.0),
                 "incrementally_funded": card.get("incrementally_funded", False),
+                # Enough funding context for the simulator to reach the same
+                # verdict the engine does: whether a projected shortfall is a real
+                # ceiling breach, or routine incremental funding that should read
+                # amber. Without these the matrix scored every shortfall as red.
+                "ceiling": card.get("ceiling", 0.0),
+                "mod_in_progress": card.get("mod_in_progress", False),
+                "funding_keeps_pace": card.get("funding_keeps_pace", True),
                 # Actuals baseline the simulator diffs against.
                 "base_weekly": card.get("weekly", 0.0),
                 "base_status": card.get("status"),
