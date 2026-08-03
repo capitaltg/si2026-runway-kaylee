@@ -109,11 +109,22 @@ export default function BurnChart({ clin, contract }) {
     const w = Math.round(tot * k);
     return { x: mx(w).toFixed(1), label: "wk " + w };
   });
-  const yTicks = [0, 0.5, 1].map((k) => ({
-    y: my(ceiling * k).toFixed(1),
-    ty: (my(ceiling * k) + 4).toFixed(1),
-    label: moneyM(ceiling * k),
-  }));
+  // The money axis is scaled off the ceiling, so its top tick already labels the
+  // ceiling. The funded amount gets its own tick in the same gutter, in the
+  // funded line's color — that's the value you're actually measured against, and
+  // reading it off the side beats pinning it inside the plot. When it lands on
+  // top of a regular tick the regular one loses its label (the gridline stays):
+  // funded is the more useful number, and the ceiling is also in the footer.
+  const fundedY = funded != null ? my(funded) : null;
+  const yTicks = [0, 0.5, 1].map((k) => {
+    const y = my(ceiling * k);
+    return {
+      y: y.toFixed(1),
+      ty: (y + 4).toFixed(1),
+      label: moneyM(ceiling * k),
+      hideLabel: fundedY != null && Math.abs(y - fundedY) < 12,
+    };
+  });
 
   const grid = "var(--grid)";
 
@@ -237,15 +248,17 @@ export default function BurnChart({ clin, contract }) {
               stroke={grid}
               strokeWidth="1"
             />
-            <text
-              x="60"
-              y={tk.ty}
-              textAnchor="end"
-              fontSize="12"
-              fill="var(--faint)"
-            >
-              {tk.label}
-            </text>
+            {!tk.hideLabel && (
+              <text
+                x="60"
+                y={tk.ty}
+                textAnchor="end"
+                fontSize="12"
+                fill="var(--faint)"
+              >
+                {tk.label}
+              </text>
+            )}
           </g>
         ))}
         {xTicks.map((xt, i) => (
@@ -260,6 +273,18 @@ export default function BurnChart({ clin, contract }) {
             {xt.label}
           </text>
         ))}
+        {fundedY != null && (
+          <text
+            x="60"
+            y={(fundedY + 4).toFixed(1)}
+            textAnchor="end"
+            fontSize="12"
+            fill="var(--warn)"
+            fontWeight="600"
+          >
+            {moneyM(funded)}
+          </text>
+        )}
 
         {/* unfunded band — the gap between the funded dollars and the ceiling:
             money the contract is authorized for but not obligated yet, spendable
