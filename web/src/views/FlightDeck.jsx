@@ -464,8 +464,24 @@ export default function FlightDeck({
                   — {tw.weeks_early} weeks before the PoP ends.{" "}
                   {/* Hard-stop forecast (#23): the week index as a date a PM can act
                       against. Past dates get the present tense — naming a deadline
-                      that has been and gone reads as though there were time left. */}
-                  {tw.stop_date_passed ? (
+                      that has been and gone reads as though there were time left.
+
+                      No date → the pre-#23 sentence, never a placeholder. A banner
+                      whose whole point is naming a deadline must not render
+                      "charging stops around —": that's worse than not mentioning it,
+                      because it reads as a failed lookup of a date that exists. This
+                      is reachable whenever the served payload is older than the
+                      bundle — an API process without --reload keeps serving the old
+                      shape while Vite has already hot-reloaded this file. */}
+                  {!tw.stop_date ? (
+                    <>
+                      Only {tw.runway_days} days of runway remain
+                      {tw.limited_by === "funding"
+                        ? " unless more funding is obligated"
+                        : ""}
+                      .
+                    </>
+                  ) : tw.stop_date_passed ? (
                     <>
                       That money is already spent through — it ran out around{" "}
                       {shortDate(tw.stop_date)}, so charging should stop <b>today</b>
