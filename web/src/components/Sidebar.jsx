@@ -57,6 +57,7 @@ const CONTRACT_NAV = [
   { key: "allocate", label: "Allocation Matrix", sub: "Staff → CLINs" },
   { key: "expenses", label: "Expenses", sub: "Non-labor CLINs" },
   { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
+  { key: "rates", label: "Indirect Rates", sub: "Cost vs. billing (optional)" },
   { key: "drafts", label: "Drafts", sub: "Memos · invoices · check-ins" },
   { key: "ingest", label: "Contract Ingest", sub: "PDF → data" },
 ];

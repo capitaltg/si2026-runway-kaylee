@@ -6,6 +6,7 @@ import Portfolio from "./views/Portfolio.jsx";
 import FlightDeck from "./views/FlightDeck.jsx";
 import Expenses from "./views/Expenses.jsx";
 import FundingHistory from "./views/FundingHistory.jsx";
+import IndirectRates from "./views/IndirectRates.jsx";
 import AskRunway from "./views/AskRunway.jsx";
 import AllocationMatrix from "./views/AllocationMatrix.jsx";
 import Drafts from "./views/Drafts.jsx";
@@ -171,6 +172,8 @@ export default function App() {
             <Expenses contractId={activeId} initialClin={expenseClin} setActiveId={setActiveId} />
           ) : view === "funding" ? (
             <FundingHistory contractId={activeId} />
+          ) : view === "rates" ? (
+            <IndirectRates contractId={activeId} setActiveId={setActiveId} />
           ) : view === "allocate" ? (
             <AllocationMatrix
               contractId={activeId}

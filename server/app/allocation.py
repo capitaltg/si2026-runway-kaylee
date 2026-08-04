@@ -17,6 +17,7 @@ from typing import List, Optional
 
 from . import burn
 from . import lcat as lcat_match
+from . import rates
 
 
 def _recent_weeks(clin_rows: List[dict]) -> List[str]:
@@ -35,11 +36,17 @@ def _emp_name(rows: List[dict], emp_id: str) -> str:
 
 
 def compute_allocation(
-    contract: dict, rows: List[dict], expenses: Optional[List[dict]] = None
+    contract: dict,
+    rows: List[dict],
+    expenses: Optional[List[dict]] = None,
+    cost_model: Optional[rates.CostModel] = None,
 ) -> dict:
     """Employee x labor-CLIN allocation for the active period, plus the per-CLIN
     budget/spend/clock the simulator recomputes runway against."""
-    b = burn.compute(contract, rows, expenses)
+    b = burn.compute(contract, rows, expenses, cost_model)
+    # Level 1 when the caller supplied nothing: cost falls back to the billing rate
+    # and every cell says so (#77).
+    cost_model = cost_model or rates.CostModel()
     bc = b["contract"]
     period = burn._active_period(contract, rows)
     window, _ = burn._effective_window(period, rows)
@@ -156,6 +163,18 @@ def compute_allocation(
                 # off as a printed rate line.
                 "via": res.via,
                 "rate_line": res.line.payload() if res.matched and res.line else None,
+                # Cost next to price, per person per CLIN (#77) — the acceptance
+                # criterion that cost and price be separately readable for any
+                # (person, CLIN, week). `cost_known` false means this is the billing
+                # rate standing in because no direct rate was provided for them, so
+                # the two columns are equal on purpose and margin is not derivable.
+                **(
+                    lambda cr: {
+                        "cost_rate": round(cr.rate, 2) if cr.rate is not None else None,
+                        "cost_source": cr.source,
+                        "cost_known": cr.known,
+                    }
+                )(cost_model.cost_for(lcat, res.rate, emp)),
             }
 
     # A person's headline LCAT/rate for the row = the CLIN they bill the most hrs on.
