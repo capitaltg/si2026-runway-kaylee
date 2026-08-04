@@ -112,6 +112,62 @@ export async function syncTimesheets(contractId, { rows, seed } = {}) {
   return r.json();
 }
 
+// Supplemental rate-schedule import (#64). Real awards print the CLIN summary on
+// the form face and the fully-burdened rates on a separate continuation sheet, so
+// ingesting the face alone leaves every LCAT priced at the blended rate. This
+// endpoint existed since the burn engine shipped and nothing in the UI called it —
+// which made the resulting flag storm literally unfixable from the app.
+export async function importRateSchedule(contractId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/rates`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!r.ok) {
+    let detail = `Rate import failed (${r.status})`;
+    try {
+      const j = await r.json();
+      if (j.detail) detail = j.detail;
+    } catch {
+      // non-JSON error body; keep the status-code message
+    }
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
+// Every rate line in play on a contract, plus its saved LCAT mappings — the target
+// list the "map this LCAT" affordance offers.
+export async function getLcatRates(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/lcat-rates`);
+  if (!r.ok) throw new Error(`Rate lines failed (${r.status})`);
+  return r.json();
+}
+
+// Map a timesheet LCAT onto a rate line the award prices, optionally one on a
+// different CLIN. Returns before/after spend + runway per CLIN, because applying a
+// mapping re-resolves burn — the caller shows the change rather than just clearing
+// a badge.
+export async function setLcatAlias(contractId, { source, lcat, clin }) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/lcat-aliases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, lcat, clin }),
+  });
+  if (!r.ok) throw new Error(`Mapping failed (${r.status})`);
+  return r.json();
+}
+
+export async function deleteLcatAlias(contractId, source) {
+  const r = await fetch(
+    `${BASE}/api/contracts/${contractId}/lcat-aliases?source=${encodeURIComponent(source)}`,
+    { method: "DELETE" }
+  );
+  if (!r.ok) throw new Error(`Unmapping failed (${r.status})`);
+  return r.json();
+}
+
 // Give a contract a custom nickname (a callsign like "FALCON"), or clear it by
 // passing an empty name. The nickname becomes its display name app-wide.
 export async function renameContract(contractId, name) {

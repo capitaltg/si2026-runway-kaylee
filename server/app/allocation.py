@@ -16,6 +16,7 @@ and rate resolver burn uses, so the matrix reconciles with the Flight Deck.
 from typing import List, Optional
 
 from . import burn
+from . import lcat as lcat_match
 
 
 def _recent_weeks(clin_rows: List[dict]) -> List[str]:
@@ -44,15 +45,21 @@ def compute_allocation(
     window, _ = burn._effective_window(period, rows)
     labor = [c for c in burn._period_clins(contract, period) if c.get("is_labor")]
 
+    # Rate-line resolution context (#64), built on the same period-scoped CLIN set
+    # burn uses — so a cell's flag and the Flight Deck's banner are the same verdict
+    # from the same index, including the user's confirmed LCAT mappings.
+    rate_index = lcat_match.build_index(burn._period_clins(contract, period))
+    aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
+
     # Per-CLIN money/clock read straight off the burn payload — the simulator's
     # "actuals" baseline and the budget each edited column is measured against.
     burn_by_id = {c["id"]: c for c in b["clins"] if c.get("is_labor")}
     clin_cards = []
-    resolvers = {}  # clin id -> rate_for(lcat) -> ($/hr, matched)
+    resolvers = {}  # clin id -> resolve(lcat) -> lcat.Resolution
     for c in labor:
         num = burn._clin_num(c)
-        rate_for, blended, source = burn._rate_resolver(c)
-        resolvers[num] = rate_for
+        resolve, blended, source = burn._rate_resolver(c, rate_index, aliases)
+        resolvers[num] = resolve
         card = burn_by_id.get(num, {})
         clin_cards.append(
             {
@@ -78,6 +85,13 @@ def compute_allocation(
                 "rate_source": source,
                 "blended_rate": round(blended, 2) if blended else None,
                 "unmatched_lcats": card.get("unmatched_lcats", []),
+                # Why this CLIN's LCATs didn't match, from burn (#64). The card
+                # renders one banner off `rate_table_missing` — a missing rate
+                # schedule is a document problem, not 40 people's problem — and
+                # per-LCAT mapping offers off `lcat_issues`.
+                "rate_table_missing": card.get("rate_table_missing", False),
+                "lcat_issues": card.get("lcat_issues", []),
+                "aliased_lcats": card.get("aliased_lcats", []),
             }
         )
 
@@ -86,7 +100,7 @@ def compute_allocation(
     employees = {}  # emp_id -> {id, name, cells: {clin_id: {hours, lcat, rate}}}
     for c in labor:
         num = burn._clin_num(c)
-        rate_for = resolvers[num]
+        resolve = resolvers[num]
         clin_rows = burn._rows_for_clin(c, rows, window)
         recent = set(_recent_weeks(clin_rows))
         n_weeks = len(recent) or 1
@@ -110,17 +124,38 @@ def compute_allocation(
             lcat = (
                 max(lcat_hrs[emp], key=lcat_hrs[emp].get) if lcat_hrs.get(emp) else ""
             )
-            rate, matched = rate_for(lcat)
+            res = resolve(lcat)
             row = employees.setdefault(
                 emp, {"id": emp, "name": _emp_name(rows, emp), "cells": {}}
             )
             row["cells"][num] = {
                 "hours": round(total / n_weeks, 1),
                 "lcat": lcat or None,
-                "rate": round(rate, 2) if rate else None,
+                "rate": round(res.rate, 2) if res.rate else None,
                 # LCAT charged with no matching rate line — the honest compliance
                 # flag (burn surfaces the same set as unmatched_lcats).
-                "unmatched": bool(lcat) and not matched,
+                "unmatched": bool(lcat) and not res.matched,
+                # Which of the three failures this is (#64), so the cell can offer
+                # the fix instead of a dead-end tooltip: a missing rate schedule is
+                # reported once on the CLIN card and deliberately NOT painted red per
+                # cell, "priced elsewhere" names the CLIN that prices it, and a real
+                # gap carries the closest candidate for the user to confirm.
+                "cause": res.cause,
+                "priced_on": (
+                    res.line.clin
+                    if res.cause == lcat_match.PRICED_ELSEWHERE and res.line
+                    else None
+                ),
+                "suggestion": (
+                    res.line.payload()
+                    if res.cause == lcat_match.NO_RATE_LINE and res.line
+                    else None
+                ),
+                # How the rate was resolved — `alias` means a user-confirmed mapping
+                # is pricing these hours, which the matrix shows rather than passing
+                # off as a printed rate line.
+                "via": res.via,
+                "rate_line": res.line.payload() if res.matched and res.line else None,
             }
 
     # A person's headline LCAT/rate for the row = the CLIN they bill the most hrs on.

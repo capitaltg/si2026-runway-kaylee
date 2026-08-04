@@ -10,7 +10,10 @@ Rate resolution (the one value neither feed carries directly):
   1. the labor CLIN's extracted `labor_rates` table  →  LCAT → loaded $/hr
   2. blended fallback = ceiling / est_hours  (real contract arithmetic)
 Every CLIN reports which source it used and any timesheet LCATs that didn't match
-a rate line, so nothing is silently invented.
+a rate line, so nothing is silently invented. The matching itself lives in
+`lcat.py` (#64), which also says *why* a miss missed — the CLIN has no rate table
+at all, the LCAT is priced on a different CLIN, or the line is genuinely absent —
+because those three need three different fixes and used to render identically.
 
 Each CLIN also reports the pricing policy resolved from its contract type
 (`pricing.py`, #76). The engine does not branch on it yet — that's #79 — so it is
@@ -20,6 +23,7 @@ carried on the payload and nothing here reads it to produce a dollar figure.
 from datetime import date, timedelta
 from typing import List, Optional
 
+from . import lcat as lcat_match
 from . import pricing
 
 # Status thresholds, ported verbatim from the design's computeClinFor.
@@ -253,30 +257,19 @@ def _rows_for_clin(clin: dict, rows: List[dict], window=(None, None)) -> List[di
     return [r for r in scoped if slot and _slot(code(r)) == slot]
 
 
-def _rate_resolver(clin: dict):
-    """Return (rate_for_lcat, blended, source_label). rate_for_lcat(lcat) resolves
-    an LCAT string to a $/hr, falling back to the blended rate when the rate table
-    has no matching line."""
-    table = clin.get("labor_rates") or []
-    by_lcat = {}
-    for lr in table:
-        name = (lr.get("lcat") or "").strip()
-        rate = lr.get("loaded_rate")
-        if name and rate:
-            by_lcat[name.lower()] = float(rate)
+def _rate_resolver(clin: dict, index=None, aliases=None):
+    """Return (resolve, blended, source_label). `resolve(lcat)` yields an
+    `lcat.Resolution`: the $/hr the hour bills at, whether a real rate line backed
+    it, and when it didn't, which of the three causes applies (#64).
 
-    ceiling = clin.get("ceiling") or 0
-    est_hours = clin.get("est_hours") or 0
-    blended = (ceiling / est_hours) if est_hours else None
-
-    def rate_for(lcat: Optional[str]):
-        key = (lcat or "").strip().lower()
-        if key and key in by_lcat:
-            return by_lcat[key], True
-        return blended, False
-
-    source = "rate_table" if by_lcat else ("blended" if blended else "none")
-    return rate_for, blended, source
+    Thin wrapper over `lcat.resolver` so both callers — `_compute_clin` here and
+    the allocation matrix — resolve rates through one code path and can never
+    disagree about a flag. `index` (every rate line in the active period, from
+    `lcat.build_index`) and `aliases` (the user's confirmed mappings) are optional:
+    without them resolution still works, it just can't distinguish
+    "priced on another CLIN" from "not priced anywhere".
+    """
+    return lcat_match.resolver(clin, index=index, aliases=aliases)
 
 
 def _forward_band(exhaust: Optional[float], total_weeks: int) -> str:
@@ -415,6 +408,8 @@ def _compute_clin(
     past_pop: bool = False,
     anchor: Optional[date] = None,
     policy: Optional[pricing.PricingPolicy] = None,
+    rate_index=None,
+    aliases=None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -439,23 +434,45 @@ def _compute_clin(
     CLIN. Nothing below branches on it: every figure here is computed exactly as it
     was before the policy existed, and the policy is reported on the payload only.
     #79 is what makes the arithmetic ask it questions. Defaulted rather than
-    required so a caller holding only a CLIN still gets its `CLIN.type` read."""
+    required so a caller holding only a CLIN still gets its `CLIN.type` read.
+
+    `rate_index` and `aliases` come from `compute` for the same reason `policy`
+    does — classifying a rate miss needs the *other* CLINs' rate lines and the
+    contract's confirmed LCAT mappings, and this function only sees one CLIN (#64).
+    Both default to empty, in which case resolution behaves exactly as it did: an
+    unmatched LCAT is still reported, just without naming which of the three causes
+    it is."""
     policy = policy or pricing.policy_for(clin, None)
-    rate_for, blended, source = _rate_resolver(clin)
+    resolve, blended, source = _rate_resolver(clin, rate_index, aliases)
     clin_rows = _rows_for_clin(clin, rows, window)
 
     spent = 0.0
     unmatched = set()
+    # Unmatched LCATs, classified and weighted by the hours riding on them (#64).
+    # Keyed by the LCAT as the timesheet spells it: one row per distinct string, not
+    # per person, because the fix is per string.
+    issues = {}  # lcat -> [Resolution, hours]
+    aliased = {}  # lcat -> the confirmed mapping that priced it
     weekly_totals = {}  # week_ending -> $ that week
     for r in clin_rows:
         hours = float(r.get("total_hours") or 0)
-        rate, matched = rate_for(r.get("labor_category"))
-        if rate is None:
-            unmatched.add(r.get("labor_category") or "?")
+        name = r.get("labor_category")
+        res = resolve(name)
+        label = (name or "").strip()
+        if not res.matched and (label or res.rate is None):
+            # A blank LCAT is only worth reporting when it also cost us the price:
+            # with a blended rate behind it the row still values correctly, and
+            # flagging it would put a "?" in front of the user with no fix attached.
+            # That split is the pre-#64 behaviour, kept deliberately.
+            key = label or "?"
+            unmatched.add(key)
+            entry = issues.setdefault(key, [res, 0.0])
+            entry[1] += hours
+        elif res.matched and res.via == lcat_match.VIA_ALIAS and res.line:
+            aliased[label] = res.line
+        if res.rate is None:
             continue
-        if not matched and r.get("labor_category"):
-            unmatched.add(r.get("labor_category"))
-        amt = hours * rate
+        amt = hours * res.rate
         spent += amt
         wk = r.get("week_ending") or ""
         weekly_totals[wk] = weekly_totals.get(wk, 0.0) + amt
@@ -660,10 +677,31 @@ def _compute_clin(
         "funds_exceeded": bool(funds_exceeded),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
+        # Cause A as a CLIN-level fact (#64): this line item has no usable rate
+        # table, so *every* LCAT charged to it prices at the blended rate. One
+        # missing continuation sheet, one statement — the UI reads this instead of
+        # painting a red cell per person for the same document.
+        "rate_table_missing": source != "rate_table",
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
         # count the engine found but could not value — the "N rows, $0 priced" story.
         "charged_rows": len(clin_rows),
+        # Kept as-is (a sorted list of LCAT strings) because the Flight Deck's
+        # data-quality banner and the allocation cards read it. `lcat_issues` is the
+        # same set with the diagnosis attached.
         "unmatched_lcats": sorted(unmatched),
+        "lcat_issues": [
+            lcat_match.issue_payload(name, res, hours)
+            for name, (res, hours) in sorted(
+                issues.items(), key=lambda kv: (-kv[1][1], kv[0])
+            )
+        ],
+        # LCATs priced through a user-confirmed mapping rather than a printed rate
+        # line. Reported so the numbers on this card are never traceable to a match
+        # nobody agreed to — applying a mapping moves `spent`, and this is the
+        # receipt for that.
+        "aliased_lcats": [
+            {"from": name, **line.payload()} for name, line in sorted(aliased.items())
+        ],
         "actuals": series,
     }
 
@@ -898,6 +936,17 @@ def compute(
     def policy_of(c: dict) -> pricing.PricingPolicy:
         return pricing.policy_for(c, header)
 
+    # Rate-line resolution context (#64), built once for the whole period and
+    # shared by every CLIN. The index is what lets a CLIN say "this LCAT is priced
+    # on CLIN 0002" instead of only "no rate line here"; the aliases are the
+    # mappings a user confirmed, and the reason applying one changes `spent`.
+    #
+    # Scoped to the period's CLINs on purpose: a rate line on an un-exercised
+    # option year prices nothing today, so offering it as the fix would point the
+    # user at a CLIN with no money on it.
+    rate_index = lcat_match.build_index(clins)
+    aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
+
     # First pass with the proxy, just to total the forward burn rate. If SF-30
     # mods have been ingested, re-derive funding pace from that real obligation
     # history (dollars landing vs. burned) and recompute the labor CLINs with it;
@@ -914,6 +963,8 @@ def compute(
             past_pop=past_pop,
             anchor=anchor,
             policy=policy_of(c),
+            rate_index=rate_index,
+            aliases=aliases,
         )
         for c in labor
     ]
@@ -937,6 +988,8 @@ def compute(
                 past_pop=past_pop,
                 anchor=anchor,
                 policy=policy_of(c),
+                rate_index=rate_index,
+                aliases=aliases,
             )
             for c in labor
         ]
@@ -1146,6 +1199,47 @@ def compute(
         if c["status"] == "unpriced"
     ]
 
+    # Cause A, once per CLIN (#64). A labor CLIN with charges and no rate table
+    # prices every hour at the blended rate: the figures are real contract
+    # arithmetic and the CLIN is not "broken", but nothing on it is per-LCAT and the
+    # user has no way to know why unless we say so. One row here replaces the flag
+    # storm the ticket was filed over — N red cells for one missing PDF page.
+    #
+    # `unpriced` CLINs are excluded: they have no blended rate either, so they're
+    # already the louder `data_quality` story above and don't need two banners.
+    # Deliberately does NOT gate `all_clear`: a blended-priced CLIN is measured and
+    # honest, and turning every award ingested without its continuation sheet into a
+    # not-clear contract would be a new alarm, not a fix for an old one.
+    rate_gaps = [
+        {
+            "id": c["id"],
+            "code": c["code"],
+            "name": c["name"],
+            "charged_rows": c["charged_rows"],
+            "blended_rate": c["blended_rate"],
+            # The LCATs riding on the blended rate, so the prompt can be specific
+            # about what is unpriced without listing every person.
+            "lcats": c["unmatched_lcats"],
+        }
+        for c in computed
+        if c["rate_table_missing"] and c["charged_rows"] and c["status"] != "unpriced"
+    ]
+
+    # Causes B and C, contract-wide (#64): unmatched LCATs on CLINs that *do* have a
+    # rate table, which is the case a mapping can fix. Rolled up here so the Flight
+    # Deck can show one "N labor categories need mapping" affordance rather than
+    # making the user open the allocation matrix to discover them.
+    lcat_gaps = [
+        {
+            "id": c["id"],
+            "code": c["code"],
+            "name": c["name"],
+            "issues": c["lcat_issues"],
+        }
+        for c in computed
+        if not c["rate_table_missing"] and c["lcat_issues"]
+    ]
+
     # How many of the period's CLINs could not be typed (#76). Counted on the
     # contract because it's a property of the award's extraction, not of any one
     # line: a non-zero count means some figures below are the legacy type-blind read
@@ -1241,6 +1335,11 @@ def compute(
         "underburn": underburn,
         "funding": funding,
         "data_quality": data_quality,
+        # Rate-line coverage (#64), split by what fixes it: `rate_gaps` needs a
+        # document (import the rate schedule), `lcat_gaps` needs a decision (map
+        # this LCAT to that rate line). Neither gates `all_clear` — see rate_gaps.
+        "rate_gaps": rate_gaps,
+        "lcat_gaps": lcat_gaps,
         # A contract the engine could not fully price is not "all clear" — an
         # unpriced CLIN gates it just like a tripwire (#40).
         "all_clear": (
