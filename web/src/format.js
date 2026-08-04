@@ -57,6 +57,29 @@ const PILL = {
   tracked: { label: "Tracked", color: "--dim", bg: "--panel2" },
 };
 
+// The same ladder in fixed-price vocabulary (#79). A fixed-price CLIN has no funding
+// limit to breach, so `over` means the fee is gone and `watch` means cost is projected
+// to eat it. `under` is absent because the engine never emits it here — spending less
+// than a firm price is margin earned, not a signal to chase.
+const MARGIN_PILL = {
+  over: { label: "Margin exceeded", color: "--bad", bg: "--badBg" },
+  watch: { label: "Margin at risk", color: "--warn", bg: "--warnBg" },
+  ok: { label: "On pace", color: "--good", bg: "--goodBg" },
+  paused: { label: "Paused", color: "--faint", bg: "--panel2" },
+  unpriced: { label: "Unpriced", color: "--bad", bg: "--badBg" },
+};
+
+const pillStyle = (p) => ({
+  fontSize: 10.5,
+  fontWeight: 700,
+  padding: "2px 9px",
+  borderRadius: 20,
+  color: `var(${p.color})`,
+  background: `var(${p.bg})`,
+  marginLeft: "auto",
+  whiteSpace: "nowrap",
+});
+
 // `ceilingBreached` names the limit a red `over` is about, matching burn.py's
 // _pill: projected spend blowing the real ceiling is a ceiling problem, while the
 // ceiling holding means the funded slice ran short with funding lagging behind.
@@ -65,7 +88,20 @@ const PILL = {
 // Defaults to the ceiling wording, which is always right for a CLIN that isn't
 // incrementally funded (its budget *is* the ceiling) and is what callers with no
 // funded-slice notion — expenses — should keep saying.
-export function pill(status, ceilingBreached = true, fundsExceeded = false) {
+// `marginManaged` switches to fixed-price wording (#79), mirroring burn.py's _pill.
+// All three labels above name a funding limit and fixed-price work has none — its red
+// means cost is projected past the price and the fee is gone. Same statuses, different
+// vocabulary, so the pill can never tell an FFP reader their funding ran out.
+export function pill(
+  status,
+  ceilingBreached = true,
+  fundsExceeded = false,
+  marginManaged = false,
+) {
+  if (marginManaged) {
+    const m = MARGIN_PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
+    return { label: m.label, color: `var(${m.color})`, style: pillStyle(m) };
+  }
   const p = PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
   const overLabel = fundsExceeded
     ? "Funds exceeded"
@@ -75,16 +111,7 @@ export function pill(status, ceilingBreached = true, fundsExceeded = false) {
   return {
     label: status === "over" ? overLabel : p.label,
     color: `var(${p.color})`,
-    style: {
-      fontSize: 10.5,
-      fontWeight: 700,
-      padding: "2px 9px",
-      borderRadius: 20,
-      color: `var(${p.color})`,
-      background: `var(${p.bg})`,
-      marginLeft: "auto",
-      whiteSpace: "nowrap",
-    },
+    style: pillStyle(p),
   };
 }
 

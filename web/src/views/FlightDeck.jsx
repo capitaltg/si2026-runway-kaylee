@@ -271,6 +271,10 @@ export default function FlightDeck({
     tripwires,
     underburn = [],
     funding = [],
+    // Fixed-price margin erosion (#79) — the fixed-price counterpart to `tripwires`.
+    // Its own list because these rows have no dates, no runway and no funding limit to
+    // describe, so nothing that renders a tripwire can render one of these.
+    margin_alerts = [],
     data_quality = [],
     // Rate-line coverage (#64), split by what fixes it: `rate_gaps` needs a
     // document, `lcat_gaps` needs a decision in the allocation matrix.
@@ -281,6 +285,17 @@ export default function FlightDeck({
   } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
+  // An all-fixed-price contract has no runway anywhere, so the engine sends no hero
+  // (#79) — and a "—" under "Days of runway" would read as missing data rather than as
+  // a figure that doesn't apply. The tile becomes a margin hero instead: the tightest
+  // projected margin across the fixed-price lines, which is the equivalent question.
+  const marginClins = labor.filter((c) => c.margin_managed && c.margin_position);
+  const marginOnly = !hero && marginClins.length > 0;
+  const worstMargin = marginOnly
+    ? marginClins.reduce((a, b) =>
+        a.margin_position.projected_margin <= b.margin_position.projected_margin ? a : b,
+      )
+    : null;
   const heroColor = statusColor(hero?.status);
   const heroColor2 =
     hero?.status === "over" || hero?.status === "unpriced"
@@ -598,6 +613,88 @@ export default function FlightDeck({
           </div>
         </div>
       ))}
+
+      {/* fixed-price margin erosion (#79) — cost projected to eat the fee. Reads in
+          margin language throughout: no dates, no runway, no "funding runs out",
+          because a firm price is owed however the hours land. */}
+      {margin_alerts.map((ma) => {
+        const red = ma.status === "over";
+        const tone = red ? "var(--bad)" : "var(--warn)";
+        return (
+          <div
+            key={ma.code}
+            style={{
+              border: `1px solid ${tone}`,
+              background: red ? "var(--badBg)" : "var(--warnBg)",
+              borderRadius: 16,
+              padding: "16px 18px",
+              marginBottom: 16,
+              display: "flex",
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                flex: "0 0 38px",
+                borderRadius: 11,
+                background: tone,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 700,
+              }}
+            >
+              %
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: tone }}>
+                  {red ? "Margin exceeded" : "Margin at risk"} — {ma.code} {ma.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "'IBM Plex Mono',monospace",
+                    background: tone,
+                    color: "#fff",
+                    padding: "2px 8px",
+                    borderRadius: 20,
+                  }}
+                >
+                  {ma.policy}
+                </span>
+              </div>
+              <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+                At the current pace, cost on {ma.code} reaches{" "}
+                <b>{moneyM(ma.projected_cost)}</b> by the end of the PoP against a{" "}
+                {moneyM(ma.price)} firm price —{" "}
+                {red ? (
+                  <>
+                    <b>{moneyM(-ma.projected_margin)} past it</b>. The government owes the
+                    price either way, so this is margin the company absorbs, not funding
+                    that runs out.
+                  </>
+                ) : (
+                  <>
+                    leaving <b>{moneyM(ma.projected_margin)}</b> of margin. Nothing stops
+                    charging here; what's at risk is the fee.
+                  </>
+                )}
+                {!ma.known && (
+                  <>
+                    {" "}
+                    Cost is standing in at the billing rate, so treat this as a shape, not
+                    a number — import direct rates to make it real.
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
 
       {/* funding-pace watch — amber, routine incremental funding awaiting its
           next obligation; deliberately not the red over-ceiling tripwire (#22) */}
@@ -969,13 +1066,25 @@ export default function FlightDeck({
             </svg>
           </div>
           <div style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, opacity: 0.9 }}>
-            Days of runway
+            {marginOnly ? "Projected margin" : "Days of runway"}
           </div>
           <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 52, lineHeight: 1, marginTop: 8 }}>
-            {hero && hero.days != null ? hero.days : "—"}
+            {marginOnly
+              ? worstMargin.margin_position.known
+                ? pct(worstMargin.margin_position.projected_margin_pct)
+                : "—"
+              : hero && hero.days != null
+                ? hero.days
+                : "—"}
           </div>
           <div style={{ fontSize: 12.5, opacity: 0.92, marginTop: 8, lineHeight: 1.4 }}>
-            {hero ? `Limited by ${hero.clin} · ${heroSub}` : "No burn logged yet — sync timesheets"}
+            {marginOnly
+              ? worstMargin.margin_position.known
+                ? `Tightest on ${worstMargin.code} · fixed price, so cost against the price is the constraint — not funding`
+                : `Fixed price throughout — margin needs direct rates before it can be read`
+              : hero
+                ? `Limited by ${hero.clin} · ${heroSub}`
+                : "No burn logged yet — sync timesheets"}
           </div>
         </div>
         <div style={panelStyle}>
@@ -1063,19 +1172,44 @@ export default function FlightDeck({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
         {burn.clins.map((c, i) => {
           const hue = hueFor(i);
-          const p = pill(c.status, c.ceiling_breached !== false, !!c.funds_exceeded);
-          const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
+          // Fixed-price lines are margin-managed (#79): no runway, no hard-stop date,
+          // and a cost-vs-price position in their place. A different card, not the same
+          // card with odd numbers in it — the figures below are a different question.
+          const mm = !!c.margin_managed;
+          const pos = c.margin_position;
+          const p = pill(c.status, c.ceiling_breached !== false, !!c.funds_exceeded, mm);
+          const barColor = mm
+            ? statusColor(c.status)
+            : c.pct > 0.85
+              ? "var(--bad)"
+              : c.pct > 0.7
+                ? "var(--warn)"
+                : hue;
           // Non-labor CLINs have no timesheet burn — their card routes into the
           // expense log to add/see actuals; labor cards select the burn chart.
+          // On a margin card the right-hand figure is the margin left in the price,
+          // which is the fixed-price answer to "how much room is there".
           const runwayLabel = !c.is_labor
             ? "log actuals →"
-            : c.status === "paused"
-              ? "no burn"
-              : `${c.runway_days}d runway`;
+            : mm
+              ? pos && pos.known
+                ? `${pct(pos.projected_margin_pct)} margin`
+                : "margin n/a"
+              : c.status === "paused"
+                ? "no burn"
+                : `${c.runway_days}d runway`;
           const runwayColor = !c.is_labor
             ? "var(--accent)"
-            : statusColor(c.status);
-          const stopLabel = stopPhrase(c.stop_date, c.stop_reason, c.stop_date_passed);
+            : mm && !(pos && pos.known)
+              ? "var(--faint)"
+              : statusColor(c.status);
+          // No stop date on a margin card — that's the whole point. Replaced by where
+          // cost lands against the price at the current pace.
+          const stopLabel = mm
+            ? pos
+              ? `${moneyM(pos.projected_cost)} projected cost vs ${moneyM(pos.price)} price`
+              : null
+            : stopPhrase(c.stop_date, c.stop_reason, c.stop_date_passed);
           const sel = c.is_labor && selectedClin && c.id === selectedClin.id;
           const onCardClick = c.is_labor
             ? () => setSelected(c.id)
@@ -1131,8 +1265,14 @@ export default function FlightDeck({
                 />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: "var(--dim)" }}>
+                {/* The label has to name the quantity, because `spent` means a
+                    different thing per pricing policy (#79) — cost on a cost-type or
+                    fixed-price line, billings on T&M. Printing "$X spent" over all
+                    three is how the two get conflated. */}
                 <span>
-                  {moneyM(c.spent)} / {moneyM(c.ceiling)} ·{" "}
+                  {mm ? "cost " : ""}
+                  {moneyM(c.spent)} / {moneyM(c.ceiling)}
+                  {mm ? " price" : ""} ·{" "}
                   <b style={{ color: "var(--text)" }}>{pct(c.pct)}</b>
                 </span>
                 <span style={{ color: runwayColor, fontWeight: 600 }}>{runwayLabel}</span>
@@ -1140,10 +1280,22 @@ export default function FlightDeck({
               {/* Hard-stop forecast (#23): the runway figure above as a calendar
                   date, which is the form the question actually gets asked in
                   ("what day do we have to stop charging?"). Null on non-labor and
-                  paused CLINs, which have no pace to project from. */}
+                  paused CLINs, which have no pace to project from — and on
+                  fixed-price lines, where charging never stops (#79) and this slot
+                  carries the cost-vs-price projection instead. */}
               {stopLabel && (
-                <div style={{ marginTop: 5, fontSize: 11, color: c.stop_date_passed ? "var(--bad)" : "var(--faint)" }}>
+                <div style={{ marginTop: 5, fontSize: 11, color: c.stop_date_passed && !mm ? "var(--bad)" : "var(--faint)" }}>
                   {stopLabel}
+                </div>
+              )}
+              {/* Why this card looks different from its neighbours. One line, only on
+                  fixed-price lines, because a reader who knows the pre-#79 app will
+                  otherwise read the missing runway as a bug. */}
+              {mm && (
+                <div style={{ marginTop: 5, fontSize: 10.5, color: "var(--faint)" }}>
+                  {c.pricing_policy?.label || "Fixed price"} — the price is owed on
+                  delivery, so there is no funding runway to report
+                  {pos && !pos.known ? "; margin needs direct rates" : ""}
                 </div>
               )}
             </div>

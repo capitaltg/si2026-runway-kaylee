@@ -33,6 +33,12 @@ _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
 # until this fraction of the PoP *past* the finish line — a large unspent
 # balance / slipping delivery signal, symmetric to the over-ceiling tripwire.
 _UNDER_SLACK_FRAC = 0.15
+# Margin-erosion watch on fixed-price work (#79). Projected cost this close to the
+# firm price means the fee is nearly gone — amber, because there is still a PoP left
+# to correct in and no funding cliff to hit. Set alongside the 0.8 realized-spend
+# watch band rather than at it: on fixed price the number is a *projection* to PoP
+# end, so a lower gate would go amber on almost every healthy contract.
+_MARGIN_WATCH_FRAC = 0.9
 # Funding-pace tripwire (#22). An incrementally-funded CLIN whose funded slice
 # runs out before the PoP ends is only a real alarm when funding is falling
 # *behind* the burn — incremental funding in tranches is routine. Funding is
@@ -361,7 +367,10 @@ def _funded_shortfall_status(
 
 
 def _pill(
-    status: str, ceiling_breached: bool = True, funds_exceeded: bool = False
+    status: str,
+    ceiling_breached: bool = True,
+    funds_exceeded: bool = False,
+    margin_managed: bool = False,
 ) -> str:
     """Status → pill label. `over` names whichever limit is actually in jeopardy.
 
@@ -381,7 +390,21 @@ def _pill(
     implies a breach there and it keeps the ceiling wording without asking.
 
     Defaults to the ceiling wording for callers with no funded-slice notion.
+
+    `margin_managed` switches to fixed-price wording (#79). All three labels above
+    name a funding limit, and a fixed-price CLIN has none — its red means cost is
+    projected past the price and the fee is gone, which is a profitability statement,
+    not a Limitation of Funds one. Same statuses, different vocabulary, so the pill
+    can never tell an FFP reader their funding ran out.
     """
+    if margin_managed:
+        return {
+            "over": "Margin exceeded",
+            "watch": "Margin at risk",
+            "ok": "On pace",
+            "paused": "Paused",
+            "unpriced": "Unpriced",
+        }.get(status, "—")
     if status == "over":
         if funds_exceeded:
             return "Funds exceeded"
@@ -432,10 +455,28 @@ def _compute_clin(
 
     `policy` is the pricing policy for this CLIN (#76), passed down from `compute`
     because resolving it needs the contract header and this function only sees the
-    CLIN. Nothing below branches on it: every figure here is computed exactly as it
-    was before the policy existed, and the policy is reported on the payload only.
-    #79 is what makes the arithmetic ask it questions. Defaulted rather than
-    required so a caller holding only a CLIN still gets its `CLIN.type` read.
+    CLIN. Defaulted rather than required so a caller holding only a CLIN still gets
+    its `CLIN.type` read.
+
+    **What `spent` means (#79).** It is not "billings" and it is not "cost" — it is
+    *the quantity this CLIN is measured against*, and the policy picks which:
+    cost on cost-reimbursement, billings on T&M and on `unknown`, and cost-against-
+    the-price on fixed price. `measured_against` on the payload always names it.
+    Two readers will otherwise assume differently, and both readings are defensible,
+    which is exactly why it is written down here.
+
+    The name was kept because everything downstream of it — the trailing pace,
+    `remaining`, `weeks_left`, `exhaust_week`, `status`, the tripwire lists, the hero
+    tile, the portfolio rollup, `allocation.py` — is correct as written *once `spent`
+    holds the right quantity*. That is what makes this a reformat of one number
+    rather than a rewrite of the engine. `billings`, `cost`, `revenue` and
+    `fee_earned` are all reported separately, so nothing is hidden behind the choice.
+
+    On fixed-price work the policy also withholds four figures that were always
+    wrong there: the funding tripwire, `runway_days`, `weeks_left`/`exhaust_week`
+    and the dated hard stop. Hours do not consume funding when the government owes a
+    firm price, so a "charging stops on this date" forecast is not imprecise, it is
+    false. A cost-vs-price `margin_position` is reported instead.
 
     `rate_index` and `aliases` come from `compute` for the same reason `policy`
     does — classifying a rate miss needs the *other* CLINs' rate lines and the
@@ -447,13 +488,15 @@ def _compute_clin(
     resolve, blended, source = _rate_resolver(clin, rate_index, aliases)
     clin_rows = _rows_for_clin(clin, rows, window)
     # The cost side (#77). Defaults to an empty model, which is Level 1: cost falls
-    # back to the billing rate and is flagged as such. Nothing below reads `cost` to
-    # produce a status, a runway or a tripwire — `spent` still means billings and
-    # every figure on this card is unchanged. #79 is where the engine starts choosing
-    # between the two.
+    # back to the billing rate and is flagged as such — so at Level 1 `cost` and
+    # `billings` are equal by construction and the policy branch below cannot move
+    # any number, whichever quantity it selects.
     cost_model = cost_model or rates.CostModel()
 
-    spent = 0.0
+    # Two accumulators, never mixed (#77), now both load-bearing (#79): `billings` is
+    # hours x the loaded rate the award prices, `cost` is what those same hours
+    # consumed once burdened. Which of them becomes `spent` is the policy's call.
+    billings = 0.0
     cost = 0.0
     # Hours per cost-rate source, so a CLIN can report which tier actually priced it
     # rather than implying one uniform basis. `cost_known` is False the moment any
@@ -466,7 +509,10 @@ def _compute_clin(
     # per person, because the fix is per string.
     issues = {}  # lcat -> [Resolution, hours]
     aliased = {}  # lcat -> the confirmed mapping that priced it
-    weekly_totals = {}  # week_ending -> $ that week
+    weekly_totals = {}  # week_ending -> billings that week
+    # The same weeks under the same keys, in cost dollars. A cost-measured CLIN needs
+    # a cost-measured pace, or `remaining / weekly` divides one quantity by another.
+    weekly_cost = {}
     for r in clin_rows:
         hours = float(r.get("total_hours") or 0)
         name = r.get("labor_category")
@@ -486,7 +532,7 @@ def _compute_clin(
         if res.rate is None:
             continue
         amt = hours * res.rate
-        spent += amt
+        billings += amt
         wk = r.get("week_ending") or ""
         weekly_totals[wk] = weekly_totals.get(wk, 0.0) + amt
 
@@ -495,6 +541,7 @@ def _compute_clin(
         cr = cost_model.cost_for(label or None, res.rate, r.get("employee_id"))
         if cr.rate is not None:
             cost += hours * cr.rate
+            weekly_cost[wk] = weekly_cost.get(wk, 0.0) + hours * cr.rate
         cost_hours[cr.source] = cost_hours.get(cr.source, 0.0) + hours
         if label and cr.known and label not in cost_by_lcat:
             cost_by_lcat[label] = (cr, res.rate)
@@ -505,13 +552,60 @@ def _compute_clin(
     # so reading it as `paused` and letting it pass `all_clear` shows the most
     # reassuring state for a contract that could not be measured at all (#40). The
     # unmatched LCATs name what to fix, via the supplemental rate import.
-    unpriced = bool(clin_rows) and spent == 0.0 and source == "none"
+    # Deliberately read off `billings`, not `spent`: "the engine found charges it
+    # could not value" is a statement about the rate table, and it must mean the same
+    # thing on every pricing policy.
+    unpriced = bool(clin_rows) and billings == 0.0 and source == "none"
+
+    # ---- the policy branch (#79) --------------------------------------------------
+    # `spent` keeps its name and every downstream reader — pace, remaining, weeks_left,
+    # exhaust_week, status, the tripwires, the hero, the portfolio rollup — but it now
+    # means *the quantity this CLIN is measured against*, which the pricing policy
+    # (#76) chooses:
+    #
+    #   cost_reimbursement → cost.     The government reimburses allowable cost, so
+    #                                  cost is what consumes the funding. Billing
+    #                                  dollars are cost + fee and overstate the draw.
+    #   time_and_materials → billings. Hours x the loaded rate against the ceiling
+    #                                  price (FAR 16.601(c)) — the one type the
+    #                                  pre-#79 engine already measured correctly.
+    #   fixed_price        → cost.     Hours do not consume funding here at all; the
+    #                                  government owes the price. What is at risk is
+    #                                  margin, so the quantity that matters is what
+    #                                  the work cost us, measured against the price.
+    #                                  `measured_against` says "price" to name the
+    #                                  denominator, because that is the part that
+    #                                  differs from a cost-type read.
+    #   unknown            → billings. Exactly the pre-#79 behaviour, and the payload
+    #                                  says `pricing_policy.known: false` so no reader
+    #                                  mistakes the legacy read for a typed one.
+    #
+    # At Level 1 (no direct rates) cost == billings, so on today's data this selection
+    # is a no-op on every type and no existing figure moves.
+    if policy.is_cost_reimbursement:
+        measured_against = "cost"
+    elif policy.is_fixed_price:
+        measured_against = "price"
+    else:
+        measured_against = "billings"
+    on_cost = measured_against in ("cost", "price")
+    spent = cost if on_cost else billings
+    measured_weekly = weekly_cost if on_cost else weekly_totals
+
+    # Fixed-price work is margin-managed, not funding-managed: the policy itself says
+    # so (`funding_tripwire == "none"`), and that single declaration is the seam. On
+    # these CLINs a funding tripwire, a `runway_days` and a dated hard stop are not
+    # imprecise, they are false — charging will not be blocked, because the price is
+    # owed regardless of hours. All three are withheld below and a cost-vs-price
+    # margin position is reported in their place.
+    margin_managed = policy.funding_tripwire == "none"
 
     # Forward weekly pace = mean weekly spend over the most recent PACE_WEEKS weeks
-    # that actually have charges. Steadier than a single noisy week.
-    recent_weeks = sorted(weekly_totals)[-_PACE_WEEKS:]
+    # that actually have charges. Steadier than a single noisy week. Measured in the
+    # same quantity as `spent`, so `remaining / weekly` stays dimensionally honest.
+    recent_weeks = sorted(measured_weekly)[-_PACE_WEEKS:]
     weekly = (
-        sum(weekly_totals[w] for w in recent_weeks) / len(recent_weeks)
+        sum(measured_weekly[w] for w in recent_weeks) / len(recent_weeks)
         if recent_weeks
         else 0.0
     )
@@ -529,6 +623,38 @@ def _compute_clin(
     remaining = budget - spent
     pct = (spent / ceiling) if ceiling else 0.0
 
+    # ---- cost, revenue and fee (#79) ----------------------------------------------
+    # Three numbers that must always reconcile: `fee = revenue - cost`, reported and
+    # never derived independently, so no reader can arrive at a fourth answer.
+    #
+    # `cost_known` is the #77 flag, hoisted here because the fee read depends on it.
+    cost_known = bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours
+    if policy.is_cost_reimbursement:
+        # Cost incurred plus the fee earned on it. The fee *rate* lands in #80; until
+        # then there is no honest number to put here, so the fee is zero and says so
+        # via `fee_known: false` rather than being estimated off the billing spread.
+        # That keeps revenue == cost on a CPFF card, which is the correct partial
+        # answer: what we may invoice today, before fee.
+        revenue = cost
+        fee_known = False
+    elif policy.is_fixed_price:
+        # The price is owed on delivery, not on hours (FAR 16.202) — so revenue is the
+        # firm price and the fee is whatever the price did not have to spend. This is
+        # the margin-at-completion position the FFP card reports instead of a runway.
+        revenue = ceiling
+        fee_known = cost_known
+    else:
+        # T&M and unknown: we may bill hours x the loaded rate, and the spread over
+        # cost is the fee inside that rate.
+        revenue = billings
+        fee_known = cost_known
+    fee = revenue - cost
+    # Withheld, not estimated, when cost is a billing-rate stand-in: at Level 1 cost
+    # equals billings, so `fee` is a structural zero and a margin % off it would be a
+    # fabricated 0%. `fee` itself stays a number so the rollups still reconcile; the
+    # percentage — the figure a user would actually read as profitability — is None.
+    margin_pct = (fee / revenue) if (fee_known and revenue) else None
+
     if weekly <= 0:
         weeks_left = _PAUSED_WEEKS_LEFT
         status = "unpriced" if unpriced else "paused"
@@ -541,6 +667,13 @@ def _compute_clin(
         # tile. `exhaust_week` keeps the true (already-past) crossing point.
         runway_days = max(0, round(weeks_left * 7))
     exhaust_week = current_week + weeks_left
+    if margin_managed:
+        # No runway on fixed-price work. Nothing runs out, so there is no number of
+        # days to report and reporting one invites the reader to plan around a wall
+        # that does not exist. `weeks_left` and `exhaust_week` are nulled on the
+        # payload for the same reason; both stay live as locals because the margin
+        # projection below is the same forward pace, aimed at the price.
+        runway_days = None
 
     # Funding-pace context (#22). When the binding budget is the funded slice
     # (not the full ceiling), the slice running out early is routine incremental
@@ -567,10 +700,39 @@ def _compute_clin(
     ceiling_breached = ceiling_exhaust is not None and ceiling_exhaust < total_weeks - 1
     # Realized, not projected: the allotted funding is already spent through. Both
     # branches below stay red on it and the pill says so in the past tense.
-    funds_exceeded = _funds_exceeded(spent, budget, ceiling, incrementally_funded)
+    # Never raised on fixed-price work: there is no allotment to exceed, and "Funds
+    # exceeded" on a CLIN whose price is owed in full is the single most misleading
+    # thing the pre-#79 engine said.
+    funds_exceeded = (
+        False
+        if margin_managed
+        else _funds_exceeded(spent, budget, ceiling, incrementally_funded)
+    )
+
+    # Cost projected to PoP end, at the current pace — the margin read's forward look.
+    # Past the finish line there is nothing left to project into, so realized cost is
+    # the answer. Computed for every CLIN so the payload can carry the position, and
+    # consulted for the status only on margin-managed ones.
+    weeks_to_go = max(0, total_weeks - current_week)
+    projected_cost = spent if past_pop else spent + weekly * weeks_to_go
 
     if weekly <= 0:
         status = "unpriced" if unpriced else "paused"
+    elif margin_managed:
+        # Fixed price: cost against the price, not spend against funding. The risk is
+        # that cost eats the fee, so the bands are margin bands. There is deliberately
+        # no `under` — spending less than the price on fixed-price work is margin
+        # earned, not a delivery signal to chase, and flagging it as under-burn is how
+        # the pre-#79 engine told teams to spend down money they got to keep. Delivery
+        # slippage is a real fixed-price risk, but it is not visible in cost pace and
+        # is not this ticket's to invent.
+        margin_frac = (projected_cost / ceiling) if ceiling else 0.0
+        if margin_frac > 1.0:
+            status = "over"
+        elif margin_frac >= _MARGIN_WATCH_FRAC:
+            status = "watch"
+        else:
+            status = "ok"
     elif past_pop:
         # Past the finish line: there is no remaining PoP to project into, so a
         # forward exhaust week is meaningless. Read realized spend against the
@@ -625,7 +787,18 @@ def _compute_clin(
     stop_date = None
     stop_reason = None
     stop_date_passed = False
-    if status not in ("paused", "unpriced") and anchor is not None:
+    #
+    # Withheld entirely on margin-managed (fixed-price) CLINs. This is the most
+    # consequential of the four removals: a hard-stop date asserts that the
+    # accounting system will block charging on a given day, and on fixed-price work
+    # it will not — the price is owed however the hours land. Saying "charging stops
+    # 14 Nov" there is not a rounding error, it is a false statement about what the
+    # user's own Costpoint will do.
+    if (
+        status not in ("paused", "unpriced")
+        and anchor is not None
+        and not margin_managed
+    ):
         stop_days = round(weeks_left * 7)
         stop_date = (anchor + timedelta(days=stop_days)).isoformat()
         # Which limit produces that date. No precedence rule is needed and none is
@@ -650,10 +823,13 @@ def _compute_clin(
         if v:
             rate_variance.append({"lcat": lc, **v})
 
+    # Drawn in the measured quantity (#79), not always in billings: the chart's
+    # "funds run out" marker sits at `budget`, so a cost-measured CLIN whose curve was
+    # still billings would show the crossing at the wrong week.
     cum = 0.0
     series = []
-    for i, w in enumerate(sorted(weekly_totals)):
-        cum += weekly_totals[w]
+    for i, w in enumerate(sorted(measured_weekly)):
+        cum += measured_weekly[w]
         series.append({"week_ending": w, "cum_spent": round(cum, 2)})
 
     return {
@@ -661,11 +837,22 @@ def _compute_clin(
         "code": f"CLIN {_clin_num(clin)}",
         "name": clin.get("title"),
         "is_labor": bool(clin.get("is_labor")),
-        # The pricing policy governing this line (#76). Carried, not applied: the
-        # numbers below are type-blind until #79. `known: false` means the type was
-        # missing or unreadable and these figures are the legacy read — not a
-        # statement about the award.
+        # The pricing policy governing this line (#76), now applied (#79): it chooses
+        # which quantity `spent` holds, whether a funding tripwire and a runway mean
+        # anything here, and how revenue and fee are recognised. `known: false` means
+        # the type was missing or unreadable, in which case this card is the legacy
+        # billings-vs-funding read and says so — not a statement about the award.
         "pricing_policy": policy.payload(),
+        # Which quantity `spent` holds on this card, and therefore what every figure
+        # derived from it means: "cost" (cost-reimbursement — allowable cost consumes
+        # the funding), "billings" (T&M and unknown — hours x loaded rate against the
+        # ceiling price), or "price" (fixed price — cost measured against the firm
+        # price, a margin read with no funding constraint). Any UI printing a "$ spent"
+        # label must read this to label it correctly.
+        "measured_against": measured_against,
+        # Fixed-price work is margin-managed: no funding tripwire, no runway, no dated
+        # hard stop. The flag the Flight Deck switches card shape on.
+        "margin_managed": margin_managed,
         "ceiling": ceiling,
         # The binding budget the runway is measured against, and whether it's the
         # funded slice (incremental funding) rather than the full ceiling. The
@@ -687,11 +874,17 @@ def _compute_clin(
         # Dollars already spent past the binding budget, when there are any. The
         # honest expression of a negative balance, since runway now floors at 0.
         "overspent": round(-remaining, 2) if remaining < 0 else 0.0,
+        # Nulled on margin-managed CLINs alongside `runway_days`: all three answer
+        # "when does the money run out", and on fixed price nothing does.
         "weeks_left": (
-            None if status in ("paused", "unpriced") else round(weeks_left, 2)
+            None
+            if status in ("paused", "unpriced") or margin_managed
+            else round(weeks_left, 2)
         ),
         "exhaust_week": (
-            None if status in ("paused", "unpriced") else round(exhaust_week, 2)
+            None
+            if status in ("paused", "unpriced") or margin_managed
+            else round(exhaust_week, 2)
         ),
         "runway_days": runway_days,
         # Hard-stop forecast (#23): the date charging gets blocked, which limit
@@ -700,7 +893,7 @@ def _compute_clin(
         "stop_reason": stop_reason,
         "stop_date_passed": stop_date_passed,
         "status": status,
-        "status_label": _pill(status, ceiling_breached, funds_exceeded),
+        "status_label": _pill(status, ceiling_breached, funds_exceeded, margin_managed),
         # Which limit is in jeopardy, so the frontend can label a red `over` the
         # same way this does (and its simulator can too). `ceiling_breached` is a
         # projection; `funds_exceeded` already happened, and outranks it.
@@ -708,14 +901,52 @@ def _compute_clin(
         "funds_exceeded": bool(funds_exceeded),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
-        # ---- the cost side (#77) -------------------------------------------------
-        # `spent` above is billings: hours x the loaded rate the award prices. `cost`
-        # is what those same hours consumed, burdened through the indirect pools. The
-        # two are equal by construction when nobody has given us direct rates, which
-        # is precisely what `cost_known: false` means — do NOT read margin off them
-        # in that state (see rates.py for why that's a refusal and not a gap).
+        # ---- cost, revenue and fee (#77, #79) ------------------------------------
+        # `cost` is what the hours consumed, burdened through the indirect pools;
+        # `billings` is what the award lets us invoice for them. They are equal by
+        # construction when nobody has given us direct rates, which is precisely what
+        # `cost_known: false` means — do NOT read margin off them in that state (see
+        # rates.py for why that's a refusal and not a gap).
+        #
+        # `revenue` is what this CLIN earns under its policy and `fee_earned` is
+        # `revenue - cost`, always. Reported rather than independently derived, so the
+        # three reconcile by definition and no reader can produce a fourth number.
         "cost": round(cost, 2),
-        "cost_known": bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours,
+        "cost_known": cost_known,
+        "billings": round(billings, 2),
+        "revenue": round(revenue, 2),
+        "fee_earned": round(fee, 2),
+        # False on cost-reimbursement until the fee engine (#80) supplies a fee rate,
+        # and false anywhere cost is a billing-rate stand-in. When false, `fee_earned`
+        # is a structural number that still reconciles but says nothing about profit.
+        "fee_known": fee_known,
+        # None rather than 0.0 when the fee isn't known: a withheld margin is the
+        # layered-privacy contract, and a fabricated 0% is the failure it prevents.
+        "margin_pct": round(margin_pct, 4) if margin_pct is not None else None,
+        # The fixed-price margin position that stands in for the runway (#79): what the
+        # price is, what the work has cost, where cost lands at PoP end at the current
+        # pace, and whether that projection eats the fee. None on every other policy —
+        # cost-type and T&M work keeps its funding read, and emitting a margin position
+        # there would invite the two to be compared as if they were the same shape.
+        "margin_position": (
+            {
+                "price": round(ceiling, 2),
+                "cost": round(cost, 2),
+                "projected_cost": round(projected_cost, 2),
+                "projected_margin": round(ceiling - projected_cost, 2),
+                "projected_margin_pct": (
+                    round((ceiling - projected_cost) / ceiling, 4) if ceiling else None
+                ),
+                "eroding": bool(
+                    ceiling and projected_cost >= _MARGIN_WATCH_FRAC * ceiling
+                ),
+                # The same withholding as `margin_pct`: at Level 1 cost is a billing
+                # stand-in, so these numbers reconcile but are not a profit read.
+                "known": cost_known,
+            }
+            if margin_managed
+            else None
+        ),
         # Which tier priced the most hours on this CLIN: `employee_direct` (L3),
         # `lcat_direct` (L2), `negotiated_fallback` (L1) or `none`.
         "cost_rate_source": (
@@ -1118,6 +1349,13 @@ def compute(
                 # type, so it resolves per CLIN here too rather than inheriting the
                 # header by assumption.
                 "pricing_policy": policy_of(c).payload(),
+                # A logged travel or ODC dollar is a cost dollar — there is no rate
+                # ladder between the two here, so the measured quantity is cost
+                # whatever the CLIN's type says, and there is no margin read to make
+                # of it. Both keys are present-and-flat so the lists below can filter
+                # labor and non-labor rows on the same field (#79).
+                "measured_against": "cost",
+                "margin_managed": False,
                 "ceiling": ceiling,
                 # Binding budget the status is measured against, and whether it's
                 # the funded slice rather than the full ceiling (#41).
@@ -1164,10 +1402,17 @@ def compute(
         )
 
     # An `unpriced` CLIN has no runway (its spend could not be valued), so it can't
-    # be the worst-runway hero any more than a `paused` one can — exclude both.
+    # be the worst-runway hero any more than a `paused` one can — exclude both. A
+    # margin-managed (fixed-price) CLIN is excluded for a stronger reason (#79): it has
+    # no runway at all, so it cannot be the worst one, and the `or computed` fallback
+    # would otherwise hand the hero tile a card whose `runway_days` is None. On an
+    # all-fixed-price contract `worst` is None and the hero is absent — correct, and
+    # the Flight Deck renders the margin hero in its place.
     active = [
-        c for c in computed if c["status"] not in ("paused", "unpriced")
-    ] or computed
+        c
+        for c in computed
+        if c["status"] not in ("paused", "unpriced") and not c["margin_managed"]
+    ] or [c for c in computed if not c["margin_managed"]]
     worst = min(active, key=lambda c: c["exhaust_week"] or 1e9) if active else None
 
     labor_ceiling = sum(c["ceiling"] for c in computed)
@@ -1179,6 +1424,14 @@ def compute(
     # logged travel dollar is a cost dollar — so they roll in unburdened. Reported
     # next to `spent`, never instead of it.
     total_cost = sum(c["cost"] for c in computed) + sum(c["spent"] for c in nl_cards)
+    # Revenue and fee rolled up the same way (#79). Non-labor actuals are cost dollars
+    # that pass straight through to a reimbursement, so they contribute equally to both
+    # and carry no fee — which keeps `total_fee == total_revenue - total_cost` true at
+    # the contract level exactly as it is per CLIN.
+    total_revenue = sum(c["revenue"] for c in computed) + sum(
+        c["spent"] for c in nl_cards
+    )
+    total_fee = total_revenue - total_cost
     cost_model_out = cost_model or rates.CostModel()
 
     tripwires = [
@@ -1205,7 +1458,29 @@ def compute(
         # problems too (#41), so they roll into the red list alongside labor.
         # Their `exhaust_week` is None (realized read, no forward pace).
         for c in computed + nl_cards
-        if c["status"] == "over"
+        # Every row in this list is a funding story — the banner says when the money
+        # runs out and which limit does it. A red fixed-price CLIN is red for an
+        # unrelated reason (cost is eating the fee), so it goes to `margin_alerts`
+        # instead of being described with funding vocabulary it has no version of.
+        if c["status"] == "over" and not c["margin_managed"]
+    ]
+
+    # Margin erosion on fixed-price work (#79) — the list that stands in for the
+    # funding tripwire on these CLINs. Same severity ladder (`over` = the fee is gone,
+    # `watch` = projected to eat it), no dates and no runway, because neither exists
+    # here. Kept as its own list rather than a flag on `tripwires` so no existing
+    # reader picks these up and prints "funding runs out" over them.
+    margin_alerts = [
+        {
+            "code": c["code"],
+            "name": c["name"],
+            "status": c["status"],
+            "pct": c["pct"],
+            "policy": c["pricing_policy"]["code"],
+            **c["margin_position"],
+        }
+        for c in computed
+        if c["margin_managed"] and c["status"] in ("over", "watch")
     ]
 
     # Under-burn: too slow to land the budget by PoP end. Projected end-of-PoP
@@ -1227,7 +1502,10 @@ def compute(
             "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
         }
         for c in computed
-        if c["status"] == "under"
+        # Fixed-price CLINs can't reach `under` (their margin bands don't emit it), so
+        # this guard is belt-and-braces: under-burn means "money you were given is
+        # going unspent", and on fixed price unspent money is margin you keep.
+        if c["status"] == "under" and not c["margin_managed"]
     ]
 
     # Funding-pace watch (#22): the funded slice runs out before PoP end, but the
@@ -1257,7 +1535,11 @@ def compute(
         # CLIN awaiting its next obligation lands in the same "request outstanding"
         # list as labor rather than reading All clear.
         for c in computed + nl_cards
-        if c["status"] == "funding"
+        # A fixed-price CLIN can never be `funding` — its policy declares
+        # `funding_tripwire: "none"` and `_compute_clin` never reaches the funded-
+        # shortfall branch for it. Filtered anyway so the invariant is stated where the
+        # list is built, not only where the status is chosen.
+        if c["status"] == "funding" and not c["margin_managed"]
     ]
 
     # Data-quality gaps (#40): CLINs with charged rows the engine could not price
@@ -1403,6 +1685,14 @@ def compute(
             # putting a margin anywhere near a user.
             "cost": round(total_cost, 2),
             "cost_known": all(c["cost_known"] for c in computed) if computed else False,
+            # Revenue and fee across the contract (#79). `fee` is
+            # `revenue - cost` here exactly as it is per CLIN, so the three
+            # reconcile at both levels. `fee_known` false means the fee is a
+            # structural figure — either cost is a billing stand-in, or a
+            # cost-type CLIN is still waiting on the fee engine (#80).
+            "revenue": round(total_revenue, 2),
+            "fee": round(total_fee, 2),
+            "fee_known": all(c["fee_known"] for c in computed) if computed else False,
         },
         "hero": (
             {
@@ -1424,6 +1714,10 @@ def compute(
         "tripwires": tripwires,
         "underburn": underburn,
         "funding": funding,
+        # Fixed-price margin erosion (#79). The fixed-price counterpart to `tripwires`:
+        # every CLIN whose projected cost is at or past its price. Empty on contracts
+        # with no fixed-price lines, which is most of them today.
+        "margin_alerts": margin_alerts,
         "data_quality": data_quality,
         # Rate-line coverage (#64), split by what fixes it: `rate_gaps` needs a
         # document (import the rate schedule), `lcat_gaps` needs a decision (map
@@ -1432,11 +1726,15 @@ def compute(
         "lcat_gaps": lcat_gaps,
         # A contract the engine could not fully price is not "all clear" — an
         # unpriced CLIN gates it just like a tripwire (#40).
+        # A fixed-price CLIN eating its fee gates `all_clear` too (#79): it is not a
+        # funding problem, but it is money the company is losing, and it is exactly the
+        # thing this contract type is at risk of.
         "all_clear": (
             len(tripwires) == 0
             and len(underburn) == 0
             and len(funding) == 0
             and len(data_quality) == 0
+            and len(margin_alerts) == 0
         ),
         "sync": {
             "rows": len(rows),
@@ -1497,6 +1795,12 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
                     overall,
                     any(x["ceiling_breached"] for x in red),
                     any(x.get("funds_exceeded") for x in red),
+                    # Margin wording only when *every* red line is fixed-price (#79).
+                    # A mixed contract has a genuine funding breach to report and that
+                    # is the more urgent of the two, so the funding label wins; on an
+                    # all-fixed-price card "Over ceiling" would name a limit that does
+                    # not constrain anything.
+                    bool(red) and all(x.get("margin_managed") for x in red),
                 ),
                 "on_pace": on_pace,
                 "lines": len(labor),
