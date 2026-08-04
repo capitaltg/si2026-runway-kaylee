@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import allocation, ask, burn, db, draft, extract, lcat, sources
+from . import allocation, ask, burn, db, draft, extract, lcat, rates, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -325,6 +325,21 @@ def sync_timesheets(
     }
 
 
+def _cost_model(contract_id: int) -> rates.CostModel:
+    """The indirect-cost buildup in force for a contract (#77).
+
+    Returns an empty model when the user has provided nothing, which is Level 1 and
+    a fully supported state: billing burn, PoP clock and every tripwire work off the
+    award alone, and the payload marks cost as `negotiated_fallback` rather than
+    presenting billing dollars as cost. Nobody is ever required to upload salaries to
+    use this app.
+    """
+    stored = db.get_rate_model(contract_id)
+    return rates.model_from_rows(
+        stored["pools"], stored["direct_rates"], scope=stored["scope"]
+    )
+
+
 @app.get("/api/contracts/{contract_id}/burn")
 def contract_burn(contract_id: int):
     """Full Flight Deck payload: the active period's burn, runway and tripwires
@@ -336,6 +351,7 @@ def contract_burn(contract_id: int):
         contract,
         db.get_timesheets(contract_id),
         db.list_expenses(contract_id),
+        _cost_model(contract_id),
     )
 
 
@@ -373,6 +389,7 @@ def contract_allocation(contract_id: int):
         contract,
         db.get_timesheets(contract_id),
         db.list_expenses(contract_id),
+        _cost_model(contract_id),
     )
 
 
@@ -481,6 +498,107 @@ def remove_lcat_alias(contract_id: int, source: str):
         "before": before,
         "after": _lcat_gap_snapshot(contract_id),
     }
+
+
+class PoolIn(BaseModel):
+    """One indirect pool: fringe, overhead or G&A, as a decimal fraction."""
+
+    pool: str
+    rate: float
+    base: Optional[str] = None
+
+
+class DirectRateIn(BaseModel):
+    """One direct (unburdened) labor rate. `lcat` is the privacy-preserving Level-2
+    case — a category average, nobody named. `employee_id` is Level 3 and only ever
+    arrives because a user chose to send it."""
+
+    lcat: Optional[str] = None
+    employee_id: Optional[str] = None
+    rate: float
+
+
+class RateModelIn(BaseModel):
+    """A whole rate model for one fiscal year. Sending empty lists withdraws it and
+    drops the contract back to Level 1 — deleting has to be as easy as providing."""
+
+    fiscal_year: Optional[str] = None
+    status: str = rates.PROVISIONAL
+    pools: list[PoolIn] = []
+    direct_rates: list[DirectRateIn] = []
+
+
+def _rate_model_payload(contract_id: Optional[int]) -> dict:
+    """Stored rows plus the derived model, so the panel can render the buildup
+    without re-implementing the arithmetic in JavaScript."""
+    stored = db.get_rate_model(contract_id)
+    model = rates.model_from_rows(
+        stored["pools"], stored["direct_rates"], scope=stored["scope"]
+    )
+    return {
+        "contract_id": contract_id,
+        "pools": stored["pools"],
+        "direct_rates": stored["direct_rates"],
+        "scope": stored["scope"],
+        "model": model.payload(),
+        # The derived buildup for each direct rate we hold — direct → fringe → OH →
+        # G&A → total cost, layer by layer, so the panel can print the same ladder an
+        # accountant would hand-work and the user can check it.
+        "derived": [
+            {
+                "lcat": r.get("lcat"),
+                "employee_id": r.get("employee_id"),
+                "direct": r.get("rate"),
+                **rates.burden(float(r.get("rate") or 0), model.rate_set).payload(),
+            }
+            for r in stored["direct_rates"]
+        ],
+    }
+
+
+@app.get("/api/rate-model")
+def company_rate_model():
+    """The company-wide default indirect rates — set once, inherited by every
+    contract that doesn't override a pool."""
+    return _rate_model_payload(None)
+
+
+@app.put("/api/rate-model")
+def set_company_rate_model(body: RateModelIn):
+    db.save_rate_pools(
+        None, body.fiscal_year, [p.model_dump() for p in body.pools], body.status
+    )
+    db.save_direct_rates(
+        None, body.fiscal_year, [d.model_dump() for d in body.direct_rates], body.status
+    )
+    return _rate_model_payload(None)
+
+
+@app.get("/api/contracts/{contract_id}/rate-model")
+def contract_rate_model(contract_id: int):
+    """This contract's indirect rates and direct rates, with company defaults filling
+    any pool it doesn't set itself."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return _rate_model_payload(contract_id)
+
+
+@app.put("/api/contracts/{contract_id}/rate-model")
+def set_contract_rate_model(contract_id: int, body: RateModelIn):
+    """Set (or clear) this contract's rates. Clearing falls back to the company
+    default, and clearing both returns the contract to billing-only."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    db.save_rate_pools(
+        contract_id, body.fiscal_year, [p.model_dump() for p in body.pools], body.status
+    )
+    db.save_direct_rates(
+        contract_id,
+        body.fiscal_year,
+        [d.model_dump() for d in body.direct_rates],
+        body.status,
+    )
+    return _rate_model_payload(contract_id)
 
 
 class PlanIn(BaseModel):

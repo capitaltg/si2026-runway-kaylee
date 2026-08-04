@@ -24,7 +24,7 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from . import lcat as lcat_match
-from . import pricing
+from . import pricing, rates
 
 # Status thresholds, ported verbatim from the design's computeClinFor.
 _PAUSED_WEEKS_LEFT = 999
@@ -410,6 +410,7 @@ def _compute_clin(
     policy: Optional[pricing.PricingPolicy] = None,
     rate_index=None,
     aliases=None,
+    cost_model: Optional[rates.CostModel] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -445,8 +446,20 @@ def _compute_clin(
     policy = policy or pricing.policy_for(clin, None)
     resolve, blended, source = _rate_resolver(clin, rate_index, aliases)
     clin_rows = _rows_for_clin(clin, rows, window)
+    # The cost side (#77). Defaults to an empty model, which is Level 1: cost falls
+    # back to the billing rate and is flagged as such. Nothing below reads `cost` to
+    # produce a status, a runway or a tripwire — `spent` still means billings and
+    # every figure on this card is unchanged. #79 is where the engine starts choosing
+    # between the two.
+    cost_model = cost_model or rates.CostModel()
 
     spent = 0.0
+    cost = 0.0
+    # Hours per cost-rate source, so a CLIN can report which tier actually priced it
+    # rather than implying one uniform basis. `cost_known` is False the moment any
+    # hour fell back to a billing rate.
+    cost_hours = {}
+    cost_by_lcat = {}  # lcat -> CostResolution, for the rate-variance reconciliation
     unmatched = set()
     # Unmatched LCATs, classified and weighted by the hours riding on them (#64).
     # Keyed by the LCAT as the timesheet spells it: one row per distinct string, not
@@ -476,6 +489,15 @@ def _compute_clin(
         spent += amt
         wk = r.get("week_ending") or ""
         weekly_totals[wk] = weekly_totals.get(wk, 0.0) + amt
+
+        # What the same hour cost us, down the fallback ladder (#77). Accumulated
+        # alongside billings, never mixed into them.
+        cr = cost_model.cost_for(label or None, res.rate, r.get("employee_id"))
+        if cr.rate is not None:
+            cost += hours * cr.rate
+        cost_hours[cr.source] = cost_hours.get(cr.source, 0.0) + hours
+        if label and cr.known and label not in cost_by_lcat:
+            cost_by_lcat[label] = (cr, res.rate)
 
     # Unpriced: rows were charged to this CLIN but none could be priced (no rate
     # table and no est_hours → blended None → every row skipped above). This is a
@@ -619,6 +641,15 @@ def _compute_clin(
 
     # Cumulative actuals by week index (0-based over the weeks that have charges),
     # for the Flight Deck chart. Frontend maps these onto the SVG.
+    # Derived-vs-negotiated reconciliation per LCAT (#77). Only LCATs whose cost we
+    # actually derived can be reconciled; a fallback cost equals the billing rate, so
+    # comparing them would always report zero variance and mean nothing.
+    rate_variance = []
+    for lc, (cr, negotiated) in sorted(cost_by_lcat.items()):
+        v = rates.variance(cr.rate, negotiated)
+        if v:
+            rate_variance.append({"lcat": lc, **v})
+
     cum = 0.0
     series = []
     for i, w in enumerate(sorted(weekly_totals)):
@@ -677,6 +708,36 @@ def _compute_clin(
         "funds_exceeded": bool(funds_exceeded),
         "rate_source": source,
         "blended_rate": round(blended, 2) if blended else None,
+        # ---- the cost side (#77) -------------------------------------------------
+        # `spent` above is billings: hours x the loaded rate the award prices. `cost`
+        # is what those same hours consumed, burdened through the indirect pools. The
+        # two are equal by construction when nobody has given us direct rates, which
+        # is precisely what `cost_known: false` means — do NOT read margin off them
+        # in that state (see rates.py for why that's a refusal and not a gap).
+        "cost": round(cost, 2),
+        "cost_known": bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours,
+        # Which tier priced the most hours on this CLIN: `employee_direct` (L3),
+        # `lcat_direct` (L2), `negotiated_fallback` (L1) or `none`.
+        "cost_rate_source": (
+            max(cost_hours, key=cost_hours.get) if cost_hours else rates.SOURCE_NONE
+        ),
+        # Every tier that priced any hour here, with the hours behind it — a CLIN
+        # that is 90% category-costed and 10% fallback is a real and common state,
+        # and one dominant label would hide it.
+        "cost_rate_mix": [
+            {"source": s, "hours": round(h, 1)}
+            for s, h in sorted(cost_hours.items(), key=lambda kv: -kv[1])
+        ],
+        # Reconciliation, per LCAT: the rate our buildup derives vs the one the award
+        # schedule prints. Both numbers, the gap, and no verdict — a negotiated rate
+        # that disagrees with the buildup is routine (prior-year indirects, a
+        # discount to win), and picking one silently is how this loses an
+        # accountant's trust. Empty until direct rates exist to derive from.
+        #
+        # Fee is not yet subtracted: #76 carries no fee *rate* (that's #80), so the
+        # gap on a fee-bearing type still includes the fee. `fee_rate: 0` on each row
+        # says so rather than letting the delta read as pure variance.
+        "rate_variance": rate_variance,
         # Cause A as a CLIN-level fact (#64): this line item has no usable rate
         # table, so *every* LCAT charged to it prices at the blended rate. One
         # missing continuation sheet, one statement — the UI reads this instead of
@@ -838,10 +899,19 @@ def _funding_pace_from_history(
 
 
 def compute(
-    contract: dict, rows: List[dict], expenses: Optional[List[dict]] = None
+    contract: dict,
+    rows: List[dict],
+    expenses: Optional[List[dict]] = None,
+    cost_model: Optional[rates.CostModel] = None,
 ) -> dict:
     """Full Flight Deck payload for one contract + its synced timesheets and any
-    logged non-labor actuals (expenses)."""
+    logged non-labor actuals (expenses).
+
+    `cost_model` is the indirect-cost buildup in force (#77), supplied by the caller
+    because it comes from its own hand-maintained tables rather than the award. Omit
+    it and the engine runs at Level 1: every billing figure is exactly what it was,
+    cost falls back to the billing rate, and the payload flags that rather than
+    presenting billings as cost. Nothing here branches on it to produce a status."""
     header = contract.get("contract") or {}
     # The *current* exercised period, not the first one — see _active_period.
     period = _active_period(contract, rows)
@@ -965,6 +1035,7 @@ def compute(
             policy=policy_of(c),
             rate_index=rate_index,
             aliases=aliases,
+            cost_model=cost_model,
         )
         for c in labor
     ]
@@ -990,6 +1061,7 @@ def compute(
                 policy=policy_of(c),
                 rate_index=rate_index,
                 aliases=aliases,
+                cost_model=cost_model,
             )
             for c in labor
         ]
@@ -1103,6 +1175,11 @@ def compute(
     # Both feeds roll into burn: labor hours × rate, plus logged non-labor actuals.
     total_spent = sum(c["spent"] for c in computed) + sum(c["spent"] for c in nl_cards)
     total_weekly = sum(c["weekly"] for c in computed)
+    # Total cost of the labor charged (#77). Non-labor CLINs are already actuals — a
+    # logged travel dollar is a cost dollar — so they roll in unburdened. Reported
+    # next to `spent`, never instead of it.
+    total_cost = sum(c["cost"] for c in computed) + sum(c["spent"] for c in nl_cards)
+    cost_model_out = cost_model or rates.CostModel()
 
     tripwires = [
         {
@@ -1306,6 +1383,13 @@ def compute(
                 "obligation_history" if pace_override is not None else "proxy"
             ),
             "obligation_weekly": obligation_weekly,
+            # Which cost tier this contract is operating at (#77): 1 = contract
+            # documents only (billing burn, margin withheld), 2 = LCAT category
+            # direct rates + indirect pools (margin, nobody named), 3 = per-person
+            # direct rates (#69). Every rung above 1 is opt-in, and the app is fully
+            # functional at 1 — `margin_available` is the single flag the
+            # profitability surfaces gate on.
+            "cost_model": cost_model_out.payload(),
         },
         "totals": {
             "ceiling": round(total_ceiling, 2),
@@ -1313,6 +1397,12 @@ def compute(
             "pct": round(total_spent / total_ceiling, 4) if total_ceiling else 0.0,
             "weekly": round(total_weekly, 2),
             "labor_count": len(computed),
+            # Cost of the same work, when it's independently known (#77).
+            # `cost_known` false means this equals `spent` because no direct rates
+            # were provided — read `contract.cost_model.margin_available` before
+            # putting a margin anywhere near a user.
+            "cost": round(total_cost, 2),
+            "cost_known": all(c["cost_known"] for c in computed) if computed else False,
         },
         "hero": (
             {

@@ -168,6 +168,28 @@ export async function deleteLcatAlias(contractId, source) {
   return r.json();
 }
 
+// Indirect-rate model (#77): the fringe/OH/G&A pools and direct labor rates in
+// force, plus the derived buildup. `contractId` null reads/writes the company-wide
+// default that every contract inherits per pool. All of it is optional — with none
+// of it stored the app runs at Level 1 (billing burn, margin withheld).
+export async function getRateModel(contractId) {
+  const url = contractId ? `${BASE}/api/contracts/${contractId}/rate-model` : `${BASE}/api/rate-model`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Rate model failed (${r.status})`);
+  return r.json();
+}
+
+export async function saveRateModel(contractId, body) {
+  const url = contractId ? `${BASE}/api/contracts/${contractId}/rate-model` : `${BASE}/api/rate-model`;
+  const r = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`Saving rates failed (${r.status})`);
+  return r.json();
+}
+
 // Give a contract a custom nickname (a callsign like "FALCON"), or clear it by
 // passing an empty name. The nickname becomes its display name app-wide.
 export async function renameContract(contractId, name) {
