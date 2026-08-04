@@ -1014,6 +1014,18 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
             {" "}(LCAT &amp; billing)
           </button>
         )}
+        {/* Cause A, caught at the point it happens (#64). A form face carries the
+            CLIN summary; the fully-burdened rates live on a continuation sheet. If
+            we ingested the face alone this CLIN prices every hour at a blended
+            average, and until now the first the user heard of it was a red ⚠ on
+            every person charging it, days later. Say it here, while they are still
+            looking at the document. */}
+        {cl.is_labor && rates.length === 0 && (
+          <span style={{ fontSize: 11.5, color: "var(--warn)" }}>
+            No rate schedule on this CLIN — hours will price at a blended average. You can import the
+            award&apos;s rate continuation sheet from the Flight Deck after saving.
+          </span>
+        )}
       </div>
 
       {open && (

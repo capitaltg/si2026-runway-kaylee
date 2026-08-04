@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
+import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { suggestFor } from "../suggest.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
@@ -263,7 +264,21 @@ export default function FlightDeck({
     return <div style={{ padding: "40px", color: "var(--dim)" }}>Loading flight deck…</div>;
   }
 
-  const { contract, totals, hero, tripwires, underburn = [], funding = [], data_quality = [], all_clear, sync } = burn;
+  const {
+    contract,
+    totals,
+    hero,
+    tripwires,
+    underburn = [],
+    funding = [],
+    data_quality = [],
+    // Rate-line coverage (#64), split by what fixes it: `rate_gaps` needs a
+    // document, `lcat_gaps` needs a decision in the allocation matrix.
+    rate_gaps = [],
+    lcat_gaps = [],
+    all_clear,
+    sync,
+  } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
   const selectedClin = labor.find((c) => c.id === selected) || labor[0];
   const heroColor = statusColor(hero?.status);
@@ -722,9 +737,102 @@ export default function FlightDeck({
               {" "}Import a labor-rate schedule for this contract (supplemental rates) so the engine can
               price these hours.
             </div>
+            {/* The instruction used to end there, with nothing to click (#64). */}
+            <div style={{ marginTop: 10 }}>
+              <ImportRateSchedule
+                contractId={contractId}
+                tone="var(--bad)"
+                onImported={() => load(contractId)}
+              />
+            </div>
           </div>
         </div>
       ))}
+
+      {/* Rate coverage (#64) — cause A, stated once per CLIN. These CLINs *are*
+          priced (blended = ceiling / est_hours, real contract arithmetic), so this
+          is amber and does not gate all_clear: it says why nothing here is
+          per-LCAT, and offers the document that fixes it. The old behaviour was a
+          red ⚠ on every person charging the CLIN, for one missing PDF page. */}
+      {rate_gaps.map((g) => (
+        <div
+          key={g.code}
+          style={{
+            border: "1px solid var(--warn)",
+            background: "var(--warnBg)",
+            borderRadius: 16,
+            padding: "14px 18px",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 14.5, color: "var(--warn)" }}>
+              {g.code} has no rate table
+            </span>
+            <span style={{ fontSize: 11.5, color: "var(--dim)" }}>{g.name}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
+            Every labor category on this CLIN prices at the blended{" "}
+            <b>{g.blended_rate ? money(g.blended_rate) : "—"}/hr</b> (its ceiling ÷ estimated hours), because
+            the award we ingested carries a CLIN summary but no rate schedule.{" "}
+            {g.lcats.length > 0 && (
+              <>
+                {g.lcats.length} categor{g.lcats.length === 1 ? "y" : "ies"} affected:{" "}
+                <b>{g.lcats.slice(0, 4).join(", ")}</b>
+                {g.lcats.length > 4 ? ` +${g.lcats.length - 4} more` : ""}.{" "}
+              </>
+            )}
+            The burn figures are real, but nothing on this CLIN is per-person until the schedule lands.
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <ImportRateSchedule contractId={contractId} onImported={() => load(contractId)} />
+          </div>
+        </div>
+      ))}
+
+      {/* Causes B and C (#64) — LCATs on CLINs that DO have a rate table, which no
+          document fixes: someone has to decide which rate line they belong to.
+          One line here, with the count and the way in, rather than making the user
+          open the matrix to discover there's anything to do. */}
+      {lcat_gaps.length > 0 && (
+        <div
+          style={{
+            ...panelStyle,
+            padding: "12px 16px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--text)" }}>
+            <b>
+              {lcat_gaps.reduce((n, g) => n + g.issues.length, 0)} labor categor
+              {lcat_gaps.reduce((n, g) => n + g.issues.length, 0) === 1 ? "y" : "ies"}
+            </b>{" "}
+            charged on {lcat_gaps.map((g) => g.code).join(", ")} don&apos;t match a rate line, so their hours
+            bill at the blended rate. Each one needs pointing at the line it belongs to.
+          </span>
+          <button
+            type="button"
+            onClick={() => onOpenAllocation?.()}
+            style={{
+              height: 30,
+              padding: "0 13px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--panel2)",
+              color: "var(--text)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Map labor categories →
+          </button>
+        </div>
+      )}
 
       {all_clear && (
         <div

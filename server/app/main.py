@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import allocation, ask, burn, db, draft, extract, sources
+from . import allocation, ask, burn, db, draft, extract, lcat, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -374,6 +374,113 @@ def contract_allocation(contract_id: int):
         db.get_timesheets(contract_id),
         db.list_expenses(contract_id),
     )
+
+
+class LcatAliasIn(BaseModel):
+    """Point one timesheet LCAT at a rate line the award prices (#64).
+
+    `source` is the LCAT as the timesheet spells it, `lcat` the rate line to bill
+    it at, and `clin` the CLIN that rate line lives on — which may be a *different*
+    CLIN than the one being charged. That cross-CLIN case is the whole reason this
+    exists: an LCAT priced on 0002 and charged on 0003 is unmatchable by any amount
+    of string cleverness, and only a human knows whether it's a data bug or the
+    contract's actual intent.
+    """
+
+    source: str
+    lcat: str
+    clin: Optional[str] = None
+
+
+def _lcat_gap_snapshot(contract_id: int) -> dict:
+    """The rate-coverage part of the burn payload, per labor CLIN. Used to show what
+    applying a mapping actually did — see `set_lcat_alias`."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        return {}
+    b = burn.compute(
+        contract, db.get_timesheets(contract_id), db.list_expenses(contract_id)
+    )
+    return {
+        c["id"]: {
+            "spent": c["spent"],
+            "remaining": c["remaining"],
+            "runway_days": c["runway_days"],
+            "status": c["status"],
+            "unmatched_lcats": c["unmatched_lcats"],
+        }
+        for c in b["clins"]
+        if c.get("is_labor")
+    }
+
+
+@app.get("/api/contracts/{contract_id}/lcat-rates")
+def lcat_rate_lines(contract_id: int):
+    """Every rate line in play for a contract, plus its saved LCAT mappings (#64).
+
+    What the mapping affordance offers as targets. Scoped to the active period's
+    CLINs by `burn`, because a rate line on an un-exercised option year prices
+    nothing today and picking it would map an LCAT onto a CLIN with no money on it.
+    """
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    rows = db.get_timesheets(contract_id)
+    period = burn._active_period(contract, rows)
+    index = lcat.build_index(burn._period_clins(contract, period))
+    lines = sorted(
+        (line.payload() for entries in index.values() for line in entries),
+        key=lambda p: (p["clin"], p["lcat"]),
+    )
+    return {
+        "id": contract_id,
+        "rate_lines": lines,
+        "aliases": [
+            a for a in (contract.get("lcat_aliases") or []) if isinstance(a, dict)
+        ],
+    }
+
+
+@app.post("/api/contracts/{contract_id}/lcat-aliases")
+def set_lcat_alias(contract_id: int, body: LcatAliasIn):
+    """Save one LCAT → rate-line mapping and re-resolve burn against it.
+
+    Returns the affected CLINs' spend/runway *before and after*, because a mapping
+    that silently cleared a badge would be the dead-end ⚠ this ticket is about: the
+    point of a mapping is that hours previously billed at the blended rate now bill
+    at a real rate line, so the money moves, and the user has to be able to see by
+    how much.
+    """
+    before = _lcat_gap_snapshot(contract_id)
+    if not before and db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    updated = db.set_lcat_alias(contract_id, body.source, body.lcat, body.clin)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    after = _lcat_gap_snapshot(contract_id)
+    return {
+        "id": contract_id,
+        "aliases": updated.get("lcat_aliases") or [],
+        "before": before,
+        "after": after,
+    }
+
+
+@app.delete("/api/contracts/{contract_id}/lcat-aliases")
+def remove_lcat_alias(contract_id: int, source: str):
+    """Drop one LCAT mapping. The LCAT goes back to whatever it resolved to before
+    (usually the blended rate) and its flag comes back — undoing a mapping has to
+    move the numbers the same way applying one does."""
+    before = _lcat_gap_snapshot(contract_id)
+    updated = db.delete_lcat_alias(contract_id, source)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {
+        "id": contract_id,
+        "aliases": updated.get("lcat_aliases") or [],
+        "before": before,
+        "after": _lcat_gap_snapshot(contract_id),
+    }
 
 
 class PlanIn(BaseModel):

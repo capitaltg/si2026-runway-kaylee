@@ -5,8 +5,12 @@ import {
   listPlans,
   savePlan,
   deletePlan,
+  getLcatRates,
+  setLcatAlias,
+  deleteLcatAlias,
 } from "../api.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
+import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -115,6 +119,26 @@ const tierPill = (tier) => ({
   whiteSpace: "nowrap",
 });
 
+// Why an LCAT didn't resolve, in words (#64). The backend classifies (see
+// `lcat.py`); this only phrases it. Every branch has to name a *fix*, because the
+// whole complaint about the old flag was that it described a problem and stopped.
+function causeText(x) {
+  switch (x?.cause) {
+    case "clin_unpriced":
+      return "this CLIN has no rate table at all — import the rate schedule";
+    case "priced_elsewhere":
+      return `priced on CLIN ${x.priced_on || "another line"}, not the one it's charged to`;
+    case "ambiguous_rate_line":
+      return "two rate lines match it at different rates — pick one";
+    case "no_rate_line":
+      return x.suggestion
+        ? `no rate line matches; closest is "${x.suggestion.lcat}"`
+        : "no rate line on this contract matches it";
+    default:
+      return "no matching rate line";
+  }
+}
+
 export default function AllocationMatrix({ contractId, setActiveId, autoBalance, onAutoBalanced }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -141,6 +165,16 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [cmpA, setCmpA] = useState("current");
   const [cmpB, setCmpB] = useState("current");
   const [plansMenuOpen, setPlansMenuOpen] = useState(false);
+  // LCAT → rate-line mapping (#64). `rateLines` is every line in play on this
+  // contract plus the mappings already saved; `mapping` is the open affordance
+  // ({ lcat, clinId, cause, suggestion, priced_on }), which is what the ⚠ opens
+  // instead of a dead-end tooltip. `mapResult` holds the before/after the server
+  // returns, because a mapping re-resolves burn and the user has to see it move.
+  const [rateLines, setRateLines] = useState({ rate_lines: [], aliases: [] });
+  const [mapping, setMapping] = useState(null);
+  const [mapTarget, setMapTarget] = useState("");
+  const [mapBusy, setMapBusy] = useState(false);
+  const [mapResult, setMapResult] = useState(null);
 
   // No contract picked yet — fall back to the newest, like the other views.
   useEffect(() => {
@@ -169,6 +203,95 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     if (contractId) listPlans(contractId).then(setPlans).catch(() => setPlans([]));
   };
   useEffect(refreshPlans, [contractId]);
+
+  const refreshRateLines = () => {
+    if (!contractId) return;
+    getLcatRates(contractId)
+      .then(setRateLines)
+      .catch(() => setRateLines({ rate_lines: [], aliases: [] }));
+  };
+  useEffect(refreshRateLines, [contractId]);
+
+  // Re-read the allocation after a rate change (a mapping applied/removed, or a
+  // rate schedule imported). Deliberately leaves `draft` / `added` / `removed`
+  // alone: a mapping changes what an hour *bills at*, not who is working which
+  // hours, so blowing away an in-progress what-if plan would be a worse surprise
+  // than the flag we just fixed.
+  async function reloadRates() {
+    if (!contractId) return;
+    try {
+      const d = await getAllocation(contractId);
+      setData(d);
+      if (!draft) setDraft(buildDraft(d));
+      refreshRateLines();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  // Saved mappings, keyed for lookup so a mapped LCAT can offer "remove" instead
+  // of "apply". Keys are the raw source strings the API stores.
+  const aliasBySource = useMemo(() => {
+    const m = {};
+    for (const a of rateLines.aliases || []) m[(a.from || "").trim().toLowerCase()] = a;
+    return m;
+  }, [rateLines]);
+
+  function openMapping(lcat, clinId, cell) {
+    const existing = aliasBySource[(lcat || "").trim().toLowerCase()];
+    setMapResult(null);
+    setMapping({
+      lcat,
+      clinId,
+      cause: cell?.cause || null,
+      suggestion: cell?.suggestion || null,
+      priced_on: cell?.priced_on || null,
+      existing: existing || null,
+    });
+    // Pre-select the best available target: an existing mapping, the engine's
+    // suggestion, or the CLIN that already prices this LCAT (cause B). Never
+    // auto-*applied* — a fuzzy match has to be confirmed by a human before it can
+    // move a dollar (see lcat.py).
+    const pick =
+      (existing && `${existing.clin || ""}|${existing.lcat}`) ||
+      (cell?.suggestion && `${cell.suggestion.clin}|${cell.suggestion.lcat}`) ||
+      (cell?.priced_on ? `${cell.priced_on}|${lcat}` : "");
+    setMapTarget(pick || "");
+  }
+
+  async function applyMapping() {
+    if (!mapping || !mapTarget) return;
+    const [clin, ...rest] = mapTarget.split("|");
+    setMapBusy(true);
+    try {
+      const r = await setLcatAlias(contractId, {
+        source: mapping.lcat,
+        lcat: rest.join("|"),
+        clin: clin || null,
+      });
+      setMapResult(r);
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMapBusy(false);
+    }
+  }
+
+  async function removeMapping() {
+    if (!mapping) return;
+    setMapBusy(true);
+    try {
+      const r = await deleteLcatAlias(contractId, mapping.lcat);
+      setMapResult(r);
+      setMapping((m) => (m ? { ...m, existing: null } : m));
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMapBusy(false);
+    }
+  }
 
   const clins = data?.clins || [];
   const employees = data?.employees || [];
@@ -986,7 +1109,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                           const cell = e.cells?.[c.id];
                           const val = draft?.[e.id]?.[c.id] ?? 0;
                           const colHue = hueFor(ci);
-                          const flagged = cell?.unmatched;
+                          // A CLIN with no rate table at all is one document
+                          // problem, reported once on the CLIN card (#64) — it must
+                          // not paint a red cell per person. Red on 40 cells for one
+                          // missing PDF page is what trained people to ignore red.
+                          const noise = cell?.cause === "clin_unpriced";
+                          const flagged = cell?.unmatched && !noise;
+                          const mapped = cell?.via === "alias";
                           const filled = val > 0;
                           return (
                             <td
@@ -1026,13 +1155,54 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                   fontWeight: filled ? 600 : 400,
                                 }}
                               />
+                              {/* ⚠ is a button now, not a tooltip (#64). It opens
+                                  the mapping affordance: which of the three causes
+                                  this is, and the rate line it can be pointed at.
+                                  The old dead-end told the user something was wrong
+                                  and gave them nowhere to go. */}
                               {flagged && (
-                                <span
-                                  title={`${cell.lcat}: no matching rate line — billed at the blended rate`}
-                                  style={{ position: "absolute", top: 4, right: 8, color: "var(--bad)", fontSize: 11, cursor: "help" }}
+                                <button
+                                  type="button"
+                                  onClick={() => openMapping(cell.lcat, c.id, cell)}
+                                  title={`${cell.lcat}: ${causeText(cell)} — click to map it to a rate line`}
+                                  style={{
+                                    position: "absolute",
+                                    top: 2,
+                                    right: 4,
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "var(--bad)",
+                                    fontSize: 11,
+                                    cursor: "pointer",
+                                    padding: 2,
+                                    lineHeight: 1,
+                                  }}
                                 >
                                   ⚠
-                                </span>
+                                </button>
+                              )}
+                              {/* Priced through a mapping the user confirmed, not a
+                                  rate line the award prints. Shown, never implied. */}
+                              {mapped && (
+                                <button
+                                  type="button"
+                                  onClick={() => openMapping(cell.lcat, c.id, cell)}
+                                  title={`${cell.lcat}: mapped to ${cell.rate_line?.lcat} on CLIN ${cell.rate_line?.clin} — click to change`}
+                                  style={{
+                                    position: "absolute",
+                                    top: 2,
+                                    right: 4,
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "var(--dim)",
+                                    fontSize: 10,
+                                    cursor: "pointer",
+                                    padding: 2,
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  ⇄
+                                </button>
                               )}
                             </td>
                           );
@@ -1168,10 +1338,62 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                       </span>
                     </div>
                   )}
-                  {!!c.unmatched_lcats?.length && (
-                    <div style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}>
-                      ⚠ Unmatched LCAT: {c.unmatched_lcats.join(", ")} — billed at blended
-                      {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : ""}.
+                  {/* Rate coverage, cause-first (#64). This used to be one line —
+                      "⚠ Unmatched LCAT: … — billed at blended" — for all three
+                      failures at once, which is why a missing continuation sheet and
+                      a single misspelled category read identically. */}
+                  {c.rate_table_missing ? (
+                    <div
+                      style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      No rate table on this CLIN — all{" "}
+                      {c.unmatched_lcats?.length || 0} categor
+                      {(c.unmatched_lcats?.length || 0) === 1 ? "y" : "ies"} bill at the blended
+                      {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : " rate"}.
+                      <div style={{ marginTop: 6 }}>
+                        <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
+                      </div>
+                    </div>
+                  ) : (
+                    !!c.lcat_issues?.length && (
+                      <div
+                        style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        {c.lcat_issues.slice(0, 3).map((iss) => (
+                          <div key={iss.lcat} style={{ marginBottom: 4 }}>
+                            <b>{iss.lcat}</b> · {Math.round(iss.hours)} hrs — {causeText(iss)}{" "}
+                            <button
+                              type="button"
+                              onClick={() => openMapping(iss.lcat, c.id, iss)}
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                color: "var(--accent)",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              Map →
+                            </button>
+                          </div>
+                        ))}
+                        {c.lcat_issues.length > 3 && (
+                          <div style={{ color: "var(--faint)" }}>
+                            +{c.lcat_issues.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                  {!!c.aliased_lcats?.length && (
+                    <div style={{ marginTop: 8, fontSize: 10.5, color: "var(--dim)" }}>
+                      ⇄ {c.aliased_lcats.length} categor
+                      {c.aliased_lcats.length === 1 ? "y" : "ies"} priced through a mapping you
+                      confirmed.
                     </div>
                   )}
                 </div>
@@ -1180,6 +1402,200 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           </div>
         </>
       )}
+
+      {mapping && (
+        <MappingPanel
+          mapping={mapping}
+          rateLines={rateLines.rate_lines || []}
+          target={mapTarget}
+          setTarget={setMapTarget}
+          busy={mapBusy}
+          result={mapResult}
+          contractId={contractId}
+          onApply={applyMapping}
+          onRemove={removeMapping}
+          onImported={reloadRates}
+          onClose={() => {
+            setMapping(null);
+            setMapResult(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// The mapping affordance behind the ⚠ (#64) — the thing that makes the flag not a
+// dead end. It states which of the three causes it is, offers the rate lines this
+// contract actually prices (including ones on other CLINs, which is the only fix
+// for a "priced elsewhere" charge), and after applying, shows what the money did.
+//
+// The engine's suggestion is pre-selected but never pre-applied: a fuzzy match that
+// moved spend-to-date without a human agreeing to it is exactly the failure mode
+// `lcat.py` is built to avoid.
+function MappingPanel({
+  mapping,
+  rateLines,
+  target,
+  setTarget,
+  busy,
+  result,
+  contractId,
+  onApply,
+  onRemove,
+  onImported,
+  onClose,
+}) {
+  const rows = [];
+  if (result?.before && result?.after) {
+    for (const [id, after] of Object.entries(result.after)) {
+      const before = result.before[id];
+      if (!before) continue;
+      if (before.spent === after.spent && before.runway_days === after.runway_days) continue;
+      rows.push({ id, before, after });
+    }
+  }
+
+  const label = { fontSize: 11, color: "var(--faint)", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" };
+  const btn = (primary) => ({
+    height: 32,
+    padding: "0 14px",
+    borderRadius: 9,
+    border: primary ? "none" : "1px solid var(--border)",
+    background: primary ? "var(--accent)" : "var(--panel2)",
+    color: primary ? "#fff" : "var(--text)",
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: busy ? "default" : "pointer",
+    opacity: busy ? 0.6 : 1,
+  });
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 60,
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ ...panelStyle, padding: 20, width: 520, maxWidth: "100%", maxHeight: "90vh", overflow: "auto" }}
+      >
+        <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
+          Map “{mapping.lcat}”
+        </div>
+        <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 6, lineHeight: 1.5 }}>
+          Charged on CLIN {mapping.clinId} — {causeText(mapping)}.
+        </div>
+
+        {/* Cause A has no mapping answer: no rate line exists to point at, so the
+            panel offers the document instead of a picker full of nothing. */}
+        {mapping.cause === "clin_unpriced" && !rateLines.length ? (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12.5, color: "var(--text)", marginBottom: 10 }}>
+              This contract has no rate lines at all yet, so there is nothing to map to. Import the award&apos;s
+              rate schedule (the continuation sheet that prints the fully-burdened rates) and these
+              categories resolve on their own.
+            </div>
+            <ImportRateSchedule contractId={contractId} onImported={onImported} />
+          </div>
+        ) : (
+          <>
+            {mapping.suggestion && (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "var(--panel2)",
+                  fontSize: 12.5,
+                  color: "var(--text)",
+                }}
+              >
+                Closest match: <b>{mapping.suggestion.lcat}</b> · CLIN {mapping.suggestion.clin} ·{" "}
+                {money(mapping.suggestion.rate)}/hr
+                <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 3 }}>
+                  Suggested, not applied — confirm below and the hours re-price.
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <div style={label}>Bill these hours at</div>
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                style={{
+                  marginTop: 7,
+                  width: "100%",
+                  height: 36,
+                  padding: "0 10px",
+                  borderRadius: 9,
+                  border: "1px solid var(--border)",
+                  background: "var(--inputBg)",
+                  color: "var(--text)",
+                  fontSize: 12.5,
+                }}
+              >
+                <option value="">Select a rate line…</option>
+                {rateLines.map((l) => (
+                  <option key={`${l.clin}|${l.lcat}`} value={`${l.clin}|${l.lcat}`}>
+                    {l.lcat} — CLIN {l.clin} — {money(l.rate)}/hr
+                    {l.clin !== mapping.clinId ? " (other CLIN)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* What the mapping did to the money. The acceptance criterion this exists
+            to satisfy: applying a mapping changes spent / remaining / runway, and
+            the change is visible rather than a badge quietly clearing. */}
+        {rows.length > 0 && (
+          <div style={{ marginTop: 16, fontSize: 12.5, color: "var(--text)" }}>
+            <div style={label}>What changed</div>
+            {rows.map((r) => (
+              <div key={r.id} style={{ marginTop: 7, fontFamily: mono, fontSize: 12 }}>
+                CLIN {r.id}: {money(r.before.spent)} → <b>{money(r.after.spent)}</b> spent
+                {r.before.runway_days != null && r.after.runway_days != null && (
+                  <>
+                    {" · "}
+                    {r.before.runway_days} → <b>{r.after.runway_days}</b> days runway
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {result && rows.length === 0 && (
+          <div style={{ marginTop: 14, fontSize: 12, color: "var(--dim)" }}>
+            Saved. No CLIN&apos;s spend moved — the mapped rate matches what these hours already billed at.
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+          <button type="button" style={btn(true)} disabled={busy || !target} onClick={onApply}>
+            {busy ? "Applying…" : mapping.existing ? "Update mapping" : "Apply mapping"}
+          </button>
+          {mapping.existing && (
+            <button type="button" style={btn(false)} disabled={busy} onClick={onRemove}>
+              Remove mapping
+            </button>
+          )}
+          <button type="button" style={btn(false)} onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import os
 import sqlite3
 from typing import Optional
 
+from . import lcat
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
 
 
@@ -105,6 +107,68 @@ def rename_contract(cid: int, nickname: Optional[str]) -> Optional[dict]:
         blob["nickname"] = clean
     else:
         blob.pop("nickname", None)
+    update_contract(cid, blob)
+    return get_contract(cid)
+
+
+def set_lcat_alias(
+    cid: int, source: str, target_lcat: str, target_clin: Optional[str] = None
+) -> Optional[dict]:
+    """Point a timesheet LCAT at a rate line the award does price (#64).
+
+    This is the resolution path for the two unmatched causes a document can't fix:
+    a near-miss string the normaliser doesn't fold, and an LCAT priced on a
+    *different* CLIN than the one being charged (`target_clin`). Applying one
+    re-resolves burn on the next read — that's the point, and it is why the API
+    returns the refreshed contract rather than just an ack: `spent`, `remaining` and
+    the runway all move, and hiding that behind a cleared badge would be the
+    dead-end ⚠ all over again.
+
+    Stored on the contract's data blob, upserted by the *normalised* source LCAT so
+    one mapping catches every spelling of it. Deliberately not a table: a mapping is
+    a fact about this award's paperwork, it is hand-maintained, and living on the
+    blob means `replace_timesheets`' wholesale delete-then-insert can never reach it
+    (see its docstring — that trap is real and cost us a ticket).
+    """
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    key = lcat.normalize(source)
+    target = (target_lcat or "").strip()
+    if not key or not target:
+        return get_contract(cid)
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+    aliases = [
+        a
+        for a in (blob.get("lcat_aliases") or [])
+        if isinstance(a, dict) and lcat.normalize(a.get("from")) != key
+    ]
+    aliases.append(
+        {
+            "from": (source or "").strip(),
+            "lcat": target,
+            "clin": str(target_clin).strip() if target_clin else None,
+        }
+    )
+    blob["lcat_aliases"] = aliases
+    update_contract(cid, blob)
+    return get_contract(cid)
+
+
+def delete_lcat_alias(cid: int, source: str) -> Optional[dict]:
+    """Drop one LCAT mapping, putting that LCAT back to whatever it resolved to
+    before (usually the blended rate) and restoring its flag. Returns the refreshed
+    contract, or None if the contract doesn't exist."""
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    key = lcat.normalize(source)
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+    blob["lcat_aliases"] = [
+        a
+        for a in (blob.get("lcat_aliases") or [])
+        if isinstance(a, dict) and lcat.normalize(a.get("from")) != key
+    ]
     update_contract(cid, blob)
     return get_contract(cid)
 
