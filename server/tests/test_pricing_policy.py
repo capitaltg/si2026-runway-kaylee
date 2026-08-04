@@ -11,9 +11,12 @@ the three things it must get right:
   * **normalise, never guess** — every spelling of a type resolves identically, and
     text that isn't a type resolves to `unknown` with a reason instead of being
     rounded to the nearest plausible policy;
-  * **no number moves** — the regression bar that matters most here. Typing an award
-    must change nothing in the burn payload but the pricing fields themselves, because
-    `_compute_clin` doesn't ask the policy anything until #79.
+  * **no number moves** — the regression bar that mattered most here, since
+    `_compute_clin` didn't ask the policy anything yet. #79 is the ticket that changed
+    that, so this bar now holds only for the types measured in billings against
+    funding (T&M and `unknown`); see
+    `test_typing_an_award_moves_no_number_on_a_billings_measured_type` for why that's
+    the right remainder, and `test_cost_revenue_fee.py` for the types that do move.
 """
 
 from app import burn, pricing
@@ -394,18 +397,22 @@ def _type_blind(payload):
     }
 
 
-def test_typing_an_award_moves_no_number():
-    # THE regression bar for this ticket. `_compute_clin` does not ask the policy
-    # anything yet — that's #79 — so a fully typed award and an untyped one must
-    # produce identical payloads once the type-dependent fields are removed. If this
-    # ever fails, dollar math leaked into a data-model ticket.
+def test_typing_an_award_moves_no_number_on_a_billings_measured_type():
+    # Was #76's blanket "typing an award moves NO number anywhere" bar, deliberately
+    # narrowed by #79 — the ticket that makes the engine ask the policy questions, and
+    # whose entire point is that a fixed-price or cost-type award now reads
+    # differently. What survives, and is still worth guarding, is the half that must
+    # never move: a type measured in billings against funding has to produce
+    # byte-identical numbers to the untyped legacy read.
+    #
+    # T&M is that type — the one the pre-#79 engine already got right — and `unknown`
+    # is the same read by definition. The types that DO move are covered in
+    # test_cost_revenue_fee.py, which asserts what each changes and why.
     rows = _rows()
     baseline = _type_blind(burn.compute(_contract(), rows))
     for header_type, clin_types in (
-        ("FFP", (None, None, None)),
-        ("CPFF", (None, None, None)),
-        (None, ("FFP", "T&M", "CPFF")),
-        ("IDIQ", ("CPAF", "CPIF", "FPI")),
+        ("T&M", (None, None, None)),
+        (None, ("T&M", "Time and Materials", "T&M")),
         ("nonsense text", ("also nonsense", None, "BPA")),
     ):
         typed = _type_blind(burn.compute(_contract(header_type, clin_types), rows))
