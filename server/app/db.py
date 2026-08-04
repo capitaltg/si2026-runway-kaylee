@@ -68,8 +68,171 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # Indirect rate pools — fringe / overhead / G&A (#77). `contract_id IS NULL` is
+    # a company-wide default; a row with a contract_id overrides it for that award.
+    # Fiscal-year-keyed from day one (see rates.RateSet) and status-tagged, because
+    # #87 trues provisional rates up to actuals and retrofitting either key later
+    # means recomputing every number derived from it.
+    #
+    # Its own table, NOT the contract blob and NOT anything the timesheet sync
+    # touches: rate sets are hand-maintained and must survive a re-sync. See
+    # `replace_timesheets` for the delete-then-insert trap this is avoiding.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS rate_sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            fiscal_year TEXT,
+            pool TEXT CHECK (pool IN ('fringe','overhead','gna')),
+            rate REAL,
+            base TEXT,
+            status TEXT CHECK (status IN ('provisional','actual')) DEFAULT 'provisional',
+            updated_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
+    # Direct (unburdened) labor rates. An LCAT row is the Level-2 case — category
+    # averages, no employee named, no payroll file. An employee_id row is Level 3 and
+    # exists only if the user opts in (#69 supplies the roster). Exactly one of the
+    # two is set per row.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS direct_rates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            fiscal_year TEXT,
+            lcat TEXT,
+            employee_id TEXT,
+            rate REAL,
+            status TEXT CHECK (status IN ('provisional','actual')) DEFAULT 'provisional',
+            updated_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
     conn.commit()
     conn.close()
+
+
+def _scope_clause(contract_id: Optional[int]) -> tuple:
+    """SQL fragment + params for "this contract" vs "the company default"."""
+    if contract_id is None:
+        return "contract_id IS NULL", ()
+    return "contract_id = ?", (contract_id,)
+
+
+def get_rate_model(contract_id: Optional[int] = None) -> dict:
+    """The indirect pools + direct rates in force, with the company default filling
+    in per-pool gaps (#77).
+
+    Merged per pool, not all-or-nothing: a company that sets fringe and G&A centrally
+    and negotiates overhead per contract is normal, and an all-or-nothing merge would
+    make them re-enter the two they had already given us.
+    """
+    conn = get_conn()
+    pool_rows = conn.execute(
+        """SELECT contract_id, fiscal_year, pool, rate, base, status
+           FROM rate_sets WHERE contract_id IS NULL OR contract_id = ?
+           ORDER BY contract_id IS NULL""",
+        (contract_id,),
+    ).fetchall()
+    direct = conn.execute(
+        """SELECT contract_id, fiscal_year, lcat, employee_id, rate, status
+           FROM direct_rates WHERE contract_id IS NULL OR contract_id = ?
+           ORDER BY contract_id IS NULL""",
+        (contract_id,),
+    ).fetchall()
+    conn.close()
+
+    # Contract-specific rows sort first, so the first row seen for a key wins.
+    pools = {}
+    for r in pool_rows:
+        pools.setdefault(r["pool"], dict(r))
+    direct_rates = {}
+    for r in direct:
+        direct_rates.setdefault((r["employee_id"], r["lcat"]), dict(r))
+    return {
+        "pools": list(pools.values()),
+        "direct_rates": list(direct_rates.values()),
+        # Which scope supplied the pools, so the UI can say "inherited from your
+        # company rates" rather than implying they were set on this contract.
+        "scope": (
+            "contract"
+            if any(p["contract_id"] is not None for p in pools.values())
+            else "company"
+        ),
+    }
+
+
+def save_rate_pools(
+    contract_id: Optional[int],
+    fiscal_year: Optional[str],
+    pools: list,
+    status: str = "provisional",
+) -> dict:
+    """Replace the indirect pools for one (scope, fiscal year).
+
+    Delete-then-insert *scoped to that year*, so entering FY26's rates never disturbs
+    FY25's — which is exactly what #87 will true up against. An empty list clears
+    them, because withdrawing rates has to be as easy as providing them or "optional"
+    isn't true.
+    """
+    where, params = _scope_clause(contract_id)
+    conn = get_conn()
+    conn.execute(
+        f"DELETE FROM rate_sets WHERE {where} AND (fiscal_year IS ? OR fiscal_year = ?)",
+        (*params, fiscal_year, fiscal_year),
+    )
+    conn.executemany(
+        """INSERT INTO rate_sets (contract_id, fiscal_year, pool, rate, base, status)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [
+            (
+                contract_id,
+                fiscal_year,
+                p.get("pool"),
+                float(p.get("rate") or 0),
+                p.get("base"),
+                status,
+            )
+            for p in pools or []
+            if p.get("pool") and p.get("rate") is not None
+        ],
+    )
+    conn.commit()
+    conn.close()
+    return get_rate_model(contract_id)
+
+
+def save_direct_rates(
+    contract_id: Optional[int],
+    fiscal_year: Optional[str],
+    rows: list,
+    status: str = "provisional",
+) -> dict:
+    """Replace the direct-rate table for one (scope, fiscal year). An empty list
+    withdraws them and drops the contract back to billing-only (Level 1)."""
+    where, params = _scope_clause(contract_id)
+    conn = get_conn()
+    conn.execute(
+        f"DELETE FROM direct_rates WHERE {where} AND (fiscal_year IS ? OR fiscal_year = ?)",
+        (*params, fiscal_year, fiscal_year),
+    )
+    conn.executemany(
+        """INSERT INTO direct_rates
+           (contract_id, fiscal_year, lcat, employee_id, rate, status)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [
+            (
+                contract_id,
+                fiscal_year,
+                (r.get("lcat") or None) if not r.get("employee_id") else None,
+                r.get("employee_id") or None,
+                float(r.get("rate") or 0),
+                status,
+            )
+            for r in rows or []
+            if r.get("rate") is not None and (r.get("lcat") or r.get("employee_id"))
+        ],
+    )
+    conn.commit()
+    conn.close()
+    return get_rate_model(contract_id)
 
 
 def save_contract(piid: str, data: dict) -> int:
