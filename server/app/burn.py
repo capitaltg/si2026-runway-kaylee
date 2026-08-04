@@ -11,10 +11,16 @@ Rate resolution (the one value neither feed carries directly):
   2. blended fallback = ceiling / est_hours  (real contract arithmetic)
 Every CLIN reports which source it used and any timesheet LCATs that didn't match
 a rate line, so nothing is silently invented.
+
+Each CLIN also reports the pricing policy resolved from its contract type
+(`pricing.py`, #76). The engine does not branch on it yet — that's #79 — so it is
+carried on the payload and nothing here reads it to produce a dollar figure.
 """
 
 from datetime import date, timedelta
 from typing import List, Optional
+
+from . import pricing
 
 # Status thresholds, ported verbatim from the design's computeClinFor.
 _PAUSED_WEEKS_LEFT = 999
@@ -408,6 +414,7 @@ def _compute_clin(
     window=(None, None),
     past_pop: bool = False,
     anchor: Optional[date] = None,
+    policy: Optional[pricing.PricingPolicy] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -425,7 +432,15 @@ def _compute_clin(
 
     `anchor` is the "now" the week clock is read against (`_anchor_date`) — the
     calendar date `current_week` corresponds to. It's what turns the week-indexed
-    projection into the dated hard-stop forecast (#23)."""
+    projection into the dated hard-stop forecast (#23).
+
+    `policy` is the pricing policy for this CLIN (#76), passed down from `compute`
+    because resolving it needs the contract header and this function only sees the
+    CLIN. Nothing below branches on it: every figure here is computed exactly as it
+    was before the policy existed, and the policy is reported on the payload only.
+    #79 is what makes the arithmetic ask it questions. Defaulted rather than
+    required so a caller holding only a CLIN still gets its `CLIN.type` read."""
+    policy = policy or pricing.policy_for(clin, None)
     rate_for, blended, source = _rate_resolver(clin)
     clin_rows = _rows_for_clin(clin, rows, window)
 
@@ -598,6 +613,11 @@ def _compute_clin(
         "code": f"CLIN {_clin_num(clin)}",
         "name": clin.get("title"),
         "is_labor": bool(clin.get("is_labor")),
+        # The pricing policy governing this line (#76). Carried, not applied: the
+        # numbers below are type-blind until #79. `known: false` means the type was
+        # missing or unreadable and these figures are the legacy read — not a
+        # statement about the award.
+        "pricing_policy": policy.payload(),
         "ceiling": ceiling,
         # The binding budget the runway is measured against, and whether it's the
         # funded slice (incremental funding) rather than the full ceiling. The
@@ -871,6 +891,13 @@ def compute(
     # the funding tripwire to "request outstanding" rather than an alarm (#22).
     mod_in_progress = bool(header.get("mod_in_progress"))
 
+    # Pricing policy per CLIN (#76). Resolved here because this is the only scope
+    # holding both the CLIN and the header, and per CLIN rather than per contract
+    # because a mixed award — an FFP deliverable CLIN, a T&M surge CLIN, a cost
+    # travel CLIN — is normal, and is the case `CLIN.type` exists for.
+    def policy_of(c: dict) -> pricing.PricingPolicy:
+        return pricing.policy_for(c, header)
+
     # First pass with the proxy, just to total the forward burn rate. If SF-30
     # mods have been ingested, re-derive funding pace from that real obligation
     # history (dollars landing vs. burned) and recompute the labor CLINs with it;
@@ -886,6 +913,7 @@ def compute(
             window=window,
             past_pop=past_pop,
             anchor=anchor,
+            policy=policy_of(c),
         )
         for c in labor
     ]
@@ -908,6 +936,7 @@ def compute(
                 window=window,
                 past_pop=past_pop,
                 anchor=anchor,
+                policy=policy_of(c),
             )
             for c in labor
         ]
@@ -959,6 +988,11 @@ def compute(
                 "code": f"CLIN {num}",
                 "name": c.get("title"),
                 "is_labor": False,
+                # Same policy read the labor cards carry (#76). A travel/ODC CLIN on
+                # a cost contract is the one line item most likely to print its own
+                # type, so it resolves per CLIN here too rather than inheriting the
+                # header by assumption.
+                "pricing_policy": policy_of(c).payload(),
                 "ceiling": ceiling,
                 # Binding budget the status is measured against, and whether it's
                 # the funded slice rather than the full ceiling (#41).
@@ -1112,6 +1146,16 @@ def compute(
         if c["status"] == "unpriced"
     ]
 
+    # How many of the period's CLINs could not be typed (#76). Counted on the
+    # contract because it's a property of the award's extraction, not of any one
+    # line: a non-zero count means some figures below are the legacy type-blind read
+    # and the UI should say so rather than presenting them as type-aware. Reported
+    # for the same reason `clin_scope` is — an unlabelled read must never look like
+    # a typed one (#42).
+    pricing_unknown = sum(
+        1 for c in computed + nl_cards if not c["pricing_policy"]["known"]
+    )
+
     return {
         "contract": {
             "id": contract.get("id"),
@@ -1128,7 +1172,11 @@ def compute(
             # Addressees for generated correspondence (funding letters, etc.).
             "contracting_officer": header.get("contracting_officer"),
             "cor": header.get("cor"),
+            # The raw header type text, unchanged — it's a display label and the UI
+            # reads it. The *meaning* of that text now lives on each CLIN's
+            # `pricing_policy` (#76), which is what code should branch on.
             "vehicle": header.get("contract_type"),
+            "pricing_unknown": pricing_unknown,
             "pop_start": clk["pop_start"],
             "pop_end": clk["pop_end"],
             "current_week": cw,
