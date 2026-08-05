@@ -64,6 +64,12 @@ BUNDLES = {
             # Crewed ABOVE plan, which is what makes it hot.
             "staffing": 1.2,
             "target_hours": 40,
+            # Shared cross-contract people pool. Both bundles draw from it so a
+            # handful of employees recur across contracts, which is the only thing
+            # the portfolio resource-conflict detector (booked >100% across
+            # contracts) has to find. Runway's live sync pins this too — see
+            # server/app/sources.py DEMO_SCENARIO_OPTS.
+            "shared_pool": True,
         },
         "want": "over",
     },
@@ -85,6 +91,7 @@ BUNDLES = {
             # already behind it.
             "staffing": 0.75,
             "target_hours": 35,
+            "shared_pool": True,
         },
         "want": "funding",
     },

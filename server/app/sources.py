@@ -27,23 +27,35 @@ _TIMEOUT = 3.0  # seconds; Fixtura being down must not hang ingest Step 1
 # source of truth for the burn-demo scenario: seed 42, an in-progress single
 # base year, T&M — the same set that produced sample-data/fixtura-runway-burn-
 # demo.* (award PIID 7026HEXDVC0001043).
+#
+# Kept in step with `sample-data/regenerate.py`'s "burn" bundle, which is what
+# actually writes those files. tests/test_demo_scenario_opts.py fails when the two
+# drift apart — a drift here is invisible until the burn quietly stops tying out.
 DEMO_SCENARIO_OPTS = {
     "pop_in_progress": True,
     "option_years": 0,
     "contract_type": "T&M",
-    # Crew the roster to the contract's planned FTEs so the synced hours burn it
-    # on plan — otherwise a one-person-per-line roster logs a fraction of the
-    # hours and the contract reads far under budget.
-    "staffing": 1.0,
+    # Pin the funding posture instead of depending on the seed's own draw. This
+    # bundle exists to show a ceiling/funded gap, and an un-pinned posture stopped
+    # producing one.
+    "funding": "incremental",
+    # Crew the roster ABOVE the contract's planned FTEs so the synced hours burn it
+    # hot — this is the demo that is meant to read red. A one-person-per-line
+    # roster logs a fraction of the hours and the contract reads far under budget.
+    "staffing": 1.2,
+    # The regular weekly billable target. Stated explicitly because the burn scales
+    # with it and the red band is narrow enough that the default is worth pinning.
+    "target_hours": 40,
     # Draw rosters from a shared cross-contract people pool so some employees show
     # up on more than one contract — which is what the portfolio resource-conflict
     # detector (people booked >100% across contracts) needs to have anything to
     # find. Identity is shared; each contract still sets its own LCAT/CLIN/rate.
     "shared_pool": True,
 }
-# Rows to pull on a full sync. At the demo's staffing this is ~one weekly
-# timesheet per person across the in-progress period — enough logged hours to
-# burn on plan (funded dollars then exhaust ~wk 34). Any caller can override it.
+# Rows to pull on a full sync. Deliberately above the roster x weeks grid: Fixtura
+# caps a timesheet request at the full grid (one row per person per week), so
+# asking for more than the grid holds returns the whole grid rather than wrapping
+# and double-booking anyone. Any caller can override it.
 DEMO_SYNC_ROWS = 460
 
 # Fallback Fixtura seed for a contract that hasn't recorded its own. The demo's

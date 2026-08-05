@@ -49,7 +49,7 @@ Measured by `burn.compute` on the generated timesheets, 2026-08-05:
 
 | CLIN | Title | Ceiling | Funded | Funded % | Spent | Funds exhaust | Runway | Status |
 |---|---|---|---|---|---|---|---|---|
-| 0001 | Professional Services (Labor) | $2,090,860.80 | $1,250,000.00 | 59.8% | $1,100,431.92 | wk 41.89 | 41 d | `funding` |
+| 0001 | Professional Services (Labor) | $2,090,860.80 | $1,250,000.00 | 59.8% | $1,102,749.84 | wk 41.07 | 35 d | `funding` |
 
 Red tripwires firing: **0**. Contract `all_clear`: **False**.
 
@@ -66,7 +66,8 @@ Fixtura preset generation, **seed 19**, with:
   "contract_type": "T&M",
   "funding": "incremental",
   "staffing": 0.75,
-  "target_hours": 35
+  "target_hours": 35,
+  "shared_pool": true
 }
 ```
 
