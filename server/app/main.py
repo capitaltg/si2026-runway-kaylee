@@ -7,7 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import allocation, ask, burn, db, draft, extract, lcat, people, rates, sources
+from . import (
+    allocation,
+    ask,
+    burn,
+    capacity,
+    db,
+    draft,
+    extract,
+    lcat,
+    people,
+    rates,
+    sources,
+)
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -390,7 +402,56 @@ def contract_allocation(contract_id: int):
         db.get_timesheets(contract_id),
         db.list_expenses(contract_id),
         _cost_model(contract_id),
+        db.expected_hours_by_person(),
     )
+
+
+class CapacityIn(BaseModel):
+    """A contract's expected-hours defaults (#84).
+
+    `utilization_target` accepts a fraction (0.8) or a percentage (80); an empty string
+    clears it back to the app default. `lcat_expected_hours` is the whole map and is
+    replaced wholesale, so one category's default can be removed.
+    """
+
+    utilization_target: Optional[object] = None
+    lcat_expected_hours: Optional[dict] = None
+
+
+@app.put("/api/contracts/{contract_id}/capacity")
+def set_contract_capacity(contract_id: int, body: CapacityIn):
+    """Set a contract's utilisation target and per-LCAT expected hours (#84).
+
+    Changing the target moves the forward projection, which is the point and is why
+    this returns the refreshed contract rather than an ack — the same reasoning as the
+    LCAT-alias endpoint. The matrix refetches its allocation after a save and every
+    hrs/wk expectation, utilisation figure and projected runway moves with it.
+    """
+    target = body.utilization_target
+    if target not in (None, ""):
+        if capacity.target_hours(target) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{target!r} is not a usable utilisation target. Give a fraction "
+                    "like 0.8 or a percentage like 80."
+                ),
+            )
+    for name, hours in (body.lcat_expected_hours or {}).items():
+        if hours in (None, ""):
+            continue
+        problem = capacity.validate_expected_hours(str(hours))
+        if problem:
+            raise HTTPException(status_code=400, detail=f"{name}: {problem}")
+
+    updated = db.set_contract_capacity(
+        contract_id,
+        utilization_target=target,
+        lcat_expected_hours=body.lcat_expected_hours,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return updated
 
 
 class LcatAliasIn(BaseModel):
@@ -637,9 +698,14 @@ def remove_plan(contract_id: int, plan_id: int):
 def _all_allocations() -> list:
     """One allocation payload per contract. The expensive sweep — a burn pass each —
     behind both portfolio utilisation and conflicts."""
+    # One query for every per-person expected week (#84), not one per contract.
+    overrides = db.expected_hours_by_person()
     return [
         allocation.compute_allocation(
-            c, db.get_timesheets(c["id"]), db.list_expenses(c["id"])
+            c,
+            db.get_timesheets(c["id"]),
+            db.list_expenses(c["id"]),
+            expected_hours_by_person=overrides,
         )
         for c in db.list_contracts()
     ]
@@ -765,20 +831,27 @@ def save_person_quals(employee_id: str, body: QualsIn):
     if problem:
         raise HTTPException(status_code=400, detail=problem)
     attrs = db.save_person_attrs(employee_id, incoming, body.authored_by)
-    quals = {
-        a["field"]: {
-            "value": a["value"],
-            "source_note": a["source_note"],
-            "authored_by": a["authored_by"],
-            "authored_at": a["authored_at"],
+
+    def _entries(fields) -> dict:
+        return {
+            a["field"]: {
+                "value": a["value"],
+                "source_note": a["source_note"],
+                "authored_by": a["authored_by"],
+                "authored_at": a["authored_at"],
+            }
+            for a in attrs
+            if a["field"] in fields
         }
-        for a in attrs
-        if a["field"] in people.ALLOWED_FIELDS
-    }
+
+    # Expected hours shares this table and this endpoint but is not a qualification —
+    # split back out so nothing downstream reads a part-time week as a credential (#84).
+    quals = _entries(people.QUAL_FIELDS + people.CONTEXT_FIELDS)
     return {
         "employee_id": employee_id,
         "quals": quals,
         "quals_status": people.quals_status(quals),
+        "capacity": _entries(people.CAPACITY_FIELDS),
     }
 
 

@@ -8,6 +8,7 @@ import {
   getLcatRates,
   setLcatAlias,
   deleteLcatAlias,
+  setContractCapacity,
 } from "../api.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
@@ -20,6 +21,25 @@ function initials(name) {
   const parts = (name || "").trim().split(/\s+/);
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase() || "—";
 }
+
+// The denominator of an FTE, mirroring capacity.py's FTE_HOURS_PER_WEEK. One FTE is
+// a 2,080-hour year — 40 hrs × 52 weeks — by definition, so this is the one place a
+// 40 belongs in this file after #84.
+//
+// Utilisation is a different measure and no longer uses it: it divides by each
+// person's *expected* week, which the server resolves (person → LCAT → contract →
+// a labelled fallback) and sends down on every employee row. That resolution is
+// never repeated here — a second precedence chain in JSX is exactly how the API and
+// the UI end up disagreeing about what "utilisation" means.
+const FTE_HOURS_PER_WEEK = 40;
+
+// A stored utilisation target as a fraction. Mirrors capacity.target_hours' tolerance:
+// the value may be 0.8 or 80, because both spellings reach the API and it accepts them.
+const pctOf = (target) => {
+  const n = Number(target);
+  if (!(n > 0)) return 0;
+  return n > 1 ? n / 100 : n;
+};
 
 // Mirrors burn.py's _FUNDING_DUE_DAYS — how close the funded money has to be to
 // running out before a CLIN mentions funding at all. 60 days is FAR 52.232-22(c)'s
@@ -175,6 +195,10 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [mapTarget, setMapTarget] = useState("");
   const [mapBusy, setMapBusy] = useState(false);
   const [mapResult, setMapResult] = useState(null);
+  // The contract's utilisation target (#84) — the open editor and its in-flight save.
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [targetDraft, setTargetDraft] = useState("");
+  const [targetBusy, setTargetBusy] = useState(false);
 
   // No contract picked yet — fall back to the newest, like the other views.
   useEffect(() => {
@@ -226,6 +250,24 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       refreshRateLines();
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  // Expected-hours editor (#84). Saving re-reads the allocation through the same
+  // path a rate change uses, and for the same reason: the target changes what a full
+  // week *means*, not who is working which hours, so an in-progress what-if survives
+  // it. Every utilisation figure and the forward projection move visibly.
+  async function saveTarget(raw) {
+    if (!contractId) return;
+    setTargetBusy(true);
+    try {
+      await setContractCapacity(contractId, { utilization_target: raw });
+      setTargetOpen(false);
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setTargetBusy(false);
     }
   }
 
@@ -304,6 +346,22 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     [employees, added, removed]
   );
 
+  // #84 — what this contract expects of a full-time person, resolved server-side and
+  // used to seed planned adds. Present on every contract, since the chain always
+  // terminates in a labelled 40-hr fallback.
+  const contractExpected = data?.contract?.expected_hours || null;
+
+  // One person's expected week. Synced people carry their own resolution (which may
+  // be their personal override); a planned add inherits the contract's.
+  const expectedOf = (e) =>
+    e?.expected ||
+    contractExpected || {
+      hours: FTE_HOURS_PER_WEEK,
+      level: "fallback",
+      label: "a 40-hour week, assumed — nothing is set",
+      assumed: true,
+    };
+
   // Rate resolver for a given set of planned adds: LCAT-resolved $/hr per person
   // per CLIN, blended-rate fallback. Pure so it can score any plan, not just live.
   const makeRate = (addedX) => {
@@ -353,7 +411,12 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       totalWeekly += weekly;
     }
     for (const e of rost) for (const c of clins) totalHrs += dr[e.id]?.[c.id] || 0;
-    return { clin, totalWeekly, totalHrs, headcount: rost.length };
+    // The team's expected hours, summed per person — so team utilisation divides by
+    // what this roster is actually expected to work rather than by 40 × headcount.
+    // Summing across *people* is sound; the thing that isn't is summing one person's
+    // expectations across contracts (see capacity.portfolio_expected).
+    const totalExpected = rost.reduce((s, e) => s + (expectedOf(e).hours || 0), 0);
+    return { clin, totalWeekly, totalHrs, totalExpected, headcount: rost.length };
   };
 
   const rateFor = useMemo(() => makeRate(added), [clins, employees, added]);
@@ -384,6 +447,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     clins.reduce((s, c) => s + (draft?.[e.id]?.[c.id] || 0) * rateFor(e.id, c.id), 0);
   const rowHrsOf = (e) => clins.reduce((s, c) => s + (draft?.[e.id]?.[c.id] || 0), 0);
 
+  // Utilisation: hours against this person's expected week. 1 means fully utilised.
+  // null when there is nothing to divide by, which renders as "—" rather than 0% —
+  // an unset expectation is missing information, and showing it as idle is a claim.
+  const utilOf = (e) => {
+    const hours = expectedOf(e).hours;
+    return hours > 0 ? rowHrsOf(e) / hours : null;
+  };
+
   // Someone "charges" a CLIN if they logged hours there originally or have any in
   // the current plan — the set the CLIN-card filter narrows the roster to.
   const chargesClin = (e, clinId) =>
@@ -408,7 +479,10 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               : sort.key === "weekly"
                 ? rowWeeklyOf(e)
                 : sort.key === "util"
-                  ? rowHrsOf(e)
+                  ? // Sorts on the ratio now, not raw hours: a 32-hr person at 32
+                    // hours outranks a 40-hr person at 34, which is the point of the
+                    // column and was not true when everyone shared a denominator.
+                    (utilOf(e) ?? -1)
                   : draft?.[e.id]?.[sort.key] || 0;
       list = [...list].sort((a, b) => {
         const va = val(a);
@@ -629,7 +703,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     const rate = clins.find((c) => c.id === clin)?.blended_rate || 0;
     setAdded((a) => [
       ...a,
-      { id, name: newPerson.name.trim() || "New hire", lcat: "Planned add", rates: { [clin]: rate } },
+      {
+        id,
+        name: newPerson.name.trim() || "New hire",
+        lcat: "Planned add",
+        rates: { [clin]: rate },
+        // So their utilisation cell measures against the same expectation their
+        // seeded hours came from, rather than falling back to 40.
+        expected: contractExpected,
+      },
     ]);
     setDraft((d) => ({
       ...d,
@@ -644,7 +726,12 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     const id = `added-${addSeq.current++}`;
     const rates = {};
     clins.forEach((c) => (rates[c.id] = rateFor(e.id, c.id)));
-    setAdded((a) => [...a, { id, name: `${e.name} (copy)`, lcat: e.lcat, rates }]);
+    // "Another like this one" carries their expected week too — a copy of a 32-hr
+    // person is another 32-hr person, not a 40-hr one.
+    setAdded((a) => [
+      ...a,
+      { id, name: `${e.name} (copy)`, lcat: e.lcat, rates, expected: expectedOf(e) },
+    ]);
     setDraft((d) => ({
       ...d,
       [id]: Object.fromEntries(clins.map((c) => [c.id, d?.[e.id]?.[c.id] || 0])),
@@ -753,11 +840,17 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
             {[
               { label: "Headcount", value: roster.length },
-              { label: "FTEs", value: (totalHrs / 40).toFixed(1) },
+              {
+                label: "FTEs",
+                value: (totalHrs / FTE_HOURS_PER_WEEK).toFixed(1),
+                // Says which measure this is, because the other one is two tiles away
+                // and they answer different questions (#84).
+                hint: `Full-time equivalents — hours against a ${FTE_HOURS_PER_WEEK}-hour week, the definition of an FTE. Not utilisation: that measures each person against their own expected week.`,
+              },
               { label: "Hrs / wk", value: Math.round(totalHrs).toLocaleString() },
               { label: "Weekly burn", value: money(totalWeekly) },
             ].map((t) => (
-              <div key={t.label} style={{ ...panelStyle, padding: "9px 14px", flex: "1 1 120px", minWidth: 110 }}>
+              <div key={t.label} title={t.hint} style={{ ...panelStyle, padding: "9px 14px", flex: "1 1 120px", minWidth: 110 }}>
                 <div style={{ fontSize: 10.5, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 700 }}>
                   {t.label}
                 </div>
@@ -799,7 +892,110 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
             )}
 
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setNewPerson({ name: "", clin: clins[0]?.id || "", hrs: 40 })} title="Add a planned person" style={primaryBtn}>
+              {/* The expectation everything on this screen is measured against, and
+                  the one control that moves it. Reads as a setting rather than a
+                  number so the fallback can say it is an assumption. */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => {
+                    setTargetDraft(
+                      data.contract.utilization_target != null
+                        ? String(Math.round(pctOf(data.contract.utilization_target) * 100))
+                        : ""
+                    );
+                    setTargetOpen((v) => !v);
+                  }}
+                  title="What a full week is on this contract. Utilisation and every planned add measure against it."
+                  style={{
+                    ...chipBtnDim,
+                    borderColor: targetOpen ? "var(--accent)" : "var(--border)",
+                  }}
+                >
+                  {contractExpected?.assumed ? "Expected: 40 hrs/wk*" : `Expected: ${contractExpected?.hours} hrs/wk`}
+                </button>
+                {targetOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 20,
+                      width: 268,
+                      ...panelStyle,
+                      padding: 13,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 5 }}>
+                      Utilisation target
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--faint)", lineHeight: 1.5, marginBottom: 9 }}>
+                      The share of a 40-hour week a full-time person on this contract
+                      is expected to bill. 80–90% is the norm once holidays, leave and
+                      unbillable time come out. Nobody bills 40.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={targetDraft}
+                        onChange={(e) => setTargetDraft(e.target.value)}
+                        placeholder="80"
+                        style={{
+                          width: 74,
+                          padding: "7px 9px",
+                          borderRadius: 9,
+                          border: "1px solid var(--border)",
+                          background: "var(--inputBg)",
+                          color: "var(--text)",
+                          fontSize: 13,
+                          fontFamily: mono,
+                        }}
+                      />
+                      <span style={{ fontSize: 12.5, color: "var(--dim)" }}>
+                        % ={" "}
+                        {targetDraft && +targetDraft > 0
+                          ? `${Math.round((FTE_HOURS_PER_WEEK * +targetDraft) / 100 * 10) / 10} hrs/wk`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 7, marginTop: 11 }}>
+                      <button
+                        onClick={() => saveTarget(targetDraft)}
+                        disabled={targetBusy || !targetDraft}
+                        style={{ ...primaryBtn, padding: "6px 12px", fontSize: 12 }}
+                      >
+                        {targetBusy ? "Saving…" : "Apply"}
+                      </button>
+                      {/* Clearing back to the default has to stay reachable, or the
+                          default is a one-way door. */}
+                      <button
+                        onClick={() => saveTarget("")}
+                        disabled={targetBusy || data.contract.utilization_target == null}
+                        style={{ ...chipBtnDim, padding: "6px 12px" }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() =>
+                  setNewPerson({
+                    name: "",
+                    clin: clins[0]?.id || "",
+                    // Seeded from what this contract expects, not 40 (#84). Seeding at
+                    // 40 assumed a planned hire bills every hour of every remaining
+                    // week — no holidays, no leave, no ramp — which overstated forward
+                    // burn and understated the runway on every what-if.
+                    hrs: Math.round(contractExpected?.hours ?? FTE_HOURS_PER_WEEK),
+                  })
+                }
+                title="Add a planned person"
+                style={primaryBtn}
+              >
                 + Add person
               </button>
 
@@ -1014,7 +1210,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                         </th>
                       );
                     })}
-                    <th onClick={() => toggleSort("util")} title="Sort by utilization (hrs vs a 40-hr week)" style={{ ...thSort, textAlign: "center" }}>
+                    <th
+                      onClick={() => toggleSort("util")}
+                      title="Sort by utilization — hours against each person's expected week, so 100% means fully utilised. Hover a figure to see where that expectation comes from."
+                      style={{ ...thSort, textAlign: "center" }}
+                    >
                       Util{sortGlyph("util")}
                     </th>
                     <th onClick={() => toggleSort("weekly")} title="Sort by weekly $" style={{ ...thSort, textAlign: "right" }}>
@@ -1209,12 +1409,29 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                         })}
                         <td style={{ padding: "10px 8px", textAlign: "center" }}>
                           {(() => {
-                            const util = rowHrsOf(e) / 40;
+                            const util = utilOf(e);
+                            if (util == null)
+                              return <span style={{ color: "var(--faint)" }}>—</span>;
+                            const exp = expectedOf(e);
+                            // 100% is now fully utilised, so the bands sit around 1
+                            // rather than around the old 0.85-is-really-full fudge.
                             const uc =
-                              util > 1.05 ? "var(--warn)" : util >= 0.9 ? "var(--good)" : "var(--dim)";
+                              util > 1.05
+                                ? "var(--warn)"
+                                : util >= 0.95
+                                  ? "var(--good)"
+                                  : "var(--dim)";
                             return (
-                              <span style={{ fontFamily: mono, fontSize: 12.5, fontWeight: 600, color: uc }}>
+                              <span
+                                title={`${rowHrsOf(e).toFixed(1)} hrs/wk against ${exp.hours} expected — ${exp.label}.`}
+                                style={{ fontFamily: mono, fontSize: 12.5, fontWeight: 600, color: uc }}
+                              >
                                 {Math.round(util * 100)}%
+                                {/* An assumed expectation is marked, so a number
+                                    resting on the fallback never reads as configured. */}
+                                {exp.assumed && (
+                                  <span style={{ color: "var(--faint)", fontWeight: 400 }}>*</span>
+                                )}
                               </span>
                             );
                           })()}
@@ -1246,8 +1463,17 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                         {money(sim[c.id]?.weekly || 0)}
                       </td>
                     ))}
-                    <td style={{ padding: "12px 8px", textAlign: "center", fontFamily: mono, fontWeight: 600, fontSize: 12, color: "var(--dim)" }}>
-                      {roster.length ? Math.round(totalHrs / 40 / roster.length * 100) : 0}%
+                    <td
+                      title={
+                        current.totalExpected > 0
+                          ? `${Math.round(totalHrs)} hrs/wk against ${Math.round(current.totalExpected)} expected across ${roster.length} people.`
+                          : undefined
+                      }
+                      style={{ padding: "12px 8px", textAlign: "center", fontFamily: mono, fontWeight: 600, fontSize: 12, color: "var(--dim)" }}
+                    >
+                      {current.totalExpected > 0
+                        ? `${Math.round((totalHrs / current.totalExpected) * 100)}%`
+                        : "—"}
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right", fontFamily: mono, fontWeight: 700, color: "var(--text)" }}>
                       {money(totalWeekly)}
@@ -1620,7 +1846,13 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
   // rows: { label, av, bv, dir (1 higher-better, -1 lower-better, 0 neutral), kind }
   const rows = [
     { label: "Headcount", av: A.headcount, bv: B.headcount, dir: 0, kind: "num" },
-    { label: "FTEs", av: A.totalHrs / 40, bv: B.totalHrs / 40, dir: 0, kind: "fte" },
+    {
+      label: "FTEs",
+      av: A.totalHrs / FTE_HOURS_PER_WEEK,
+      bv: B.totalHrs / FTE_HOURS_PER_WEEK,
+      dir: 0,
+      kind: "fte",
+    },
     { label: "Forward weekly burn", av: A.totalWeekly, bv: B.totalWeekly, dir: -1, kind: "money" },
     ...clins.map((c) => ({
       label: `${c.code} runway`,

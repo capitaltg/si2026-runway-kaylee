@@ -78,6 +78,27 @@ const QUAL_FIELDS = [
   },
 ];
 
+// Capacity, not a credential (#84). Shares the attrs table and this editor, kept in
+// its own group and its own payload bucket so nothing reads a part-time week as a
+// qualification — it never counts toward quals coverage and the compliance check
+// never compares it.
+//
+// This is the top of the precedence chain: person → the contract's per-LCAT default
+// → the contract's utilisation target → a labelled 40-hour fallback. It belongs on
+// the person rather than on a contract for the same reason quals do — a 32-hour week
+// is a fact about them, not about one of their engagements.
+const CAPACITY_FIELDS = [
+  {
+    key: "expected_hours",
+    bucket: "capacity",
+    label: "Expected hours per week",
+    type: "number",
+    placeholder: "32",
+    max: 80,
+    note: "What a full week looks like for this person — part-time, or split with something Runway can't see. Leave blank to use the contract's target. Utilisation measures against this, so 100% means fully utilised.",
+  },
+];
+
 const STATUS = {
   complete: { label: "Recorded", color: "var(--good)", bg: "var(--goodBg)" },
   partial: { label: "Partial", color: "var(--accent)", bg: "var(--panel2)" },
@@ -385,6 +406,14 @@ export default function People({ onOpenContract }) {
                     </td>
                     {util && (
                       <td
+                        // Amber means over their *own* expected week (#84), not over
+                        // 40 — so the colour is explicable, the tooltip says which
+                        // week it is and where that expectation came from.
+                        title={
+                          u?.expected
+                            ? `${u.total_hours} hrs/wk against ${u.expected.hours} expected — ${u.expected.label}.`
+                            : undefined
+                        }
                         style={{
                           padding: "9px 13px",
                           fontFamily: mono,
@@ -491,22 +520,27 @@ function AddPerson({ onDone, onError }) {
 function PersonPanel({ person, vocab, util, author, setAuthor, onOpenContract, onSaved, onError }) {
   // Draft state seeded from what's stored. Only edited fields are sent, so saving a
   // clearance can't disturb a years assertion somebody sourced separately.
+  // Quals and capacity arrive in separate buckets and are edited together here.
+  const EDITABLE = [...QUAL_FIELDS, ...CAPACITY_FIELDS];
+  const storedFor = (f) => (f.bucket === "capacity" ? person.capacity : person.quals)?.[f.key];
+
   const [draft, setDraft] = useState(() => {
     const d = {};
-    QUAL_FIELDS.forEach(({ key }) => {
-      d[key] = {
-        value: person.quals[key]?.value || "",
-        source_note: person.quals[key]?.source_note || "",
+    EDITABLE.forEach((f) => {
+      const stored = (f.bucket === "capacity" ? person.capacity : person.quals)?.[f.key];
+      d[f.key] = {
+        value: stored?.value || "",
+        source_note: stored?.source_note || "",
       };
     });
     return d;
   });
   const [busy, setBusy] = useState(false);
 
-  const dirty = QUAL_FIELDS.some(
-    ({ key }) =>
-      draft[key].value !== (person.quals[key]?.value || "") ||
-      draft[key].source_note !== (person.quals[key]?.source_note || ""),
+  const dirty = EDITABLE.some(
+    (f) =>
+      draft[f.key].value !== (storedFor(f)?.value || "") ||
+      draft[f.key].source_note !== (storedFor(f)?.source_note || ""),
   );
 
   function set(key, patch) {
@@ -515,20 +549,102 @@ function PersonPanel({ person, vocab, util, author, setAuthor, onOpenContract, o
 
   function save() {
     setBusy(true);
+    // One endpoint for both — the server splits them back apart on the way out.
     const quals = {};
-    QUAL_FIELDS.forEach(({ key }) => {
-      const before = person.quals[key];
+    EDITABLE.forEach((f) => {
+      const before = storedFor(f);
       if (
-        draft[key].value !== (before?.value || "") ||
-        draft[key].source_note !== (before?.source_note || "")
+        draft[f.key].value !== (before?.value || "") ||
+        draft[f.key].source_note !== (before?.source_note || "")
       ) {
-        quals[key] = draft[key];
+        quals[f.key] = draft[f.key];
       }
     });
     savePersonQuals(person.employee_id, quals, author)
       .then(onSaved)
       .catch((e) => onError(e.message))
       .finally(() => setBusy(false));
+  }
+
+  // One field row — a closed-vocabulary select, or a typed value — with its source
+  // note and provenance. Shared by the quals and capacity groups so both carry the
+  // same evidence trail; the groups differ in meaning, not in how they're recorded.
+  function renderField(f) {
+    const stored = storedFor(f);
+    const options = f.vocab ? vocab[f.vocab] || [] : null;
+    // A value typed in before the vocabularies existed. Shown as-is rather than
+    // guessed at or silently blanked — it is somebody's assertion, and rewriting it
+    // would be inventing a fact. It stays saveable unchanged; only a *new* value has
+    // to come off the ladder.
+    const legacy =
+      options && draft[f.key].value && !options.includes(draft[f.key].value)
+        ? draft[f.key].value
+        : null;
+    return (
+      <div key={f.key}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+          {f.label}
+          {f.optionalNote && (
+            <span style={{ fontWeight: 400, color: "var(--faint)" }}> · optional</span>
+          )}
+        </div>
+        {options ? (
+          <select
+            value={draft[f.key].value}
+            onChange={(e) => set(f.key, { value: e.target.value })}
+            style={input}
+          >
+            {/* Unset is not a value. Picking it back clears the field to unknown,
+                which has to stay reachable or "optional" isn't true — and for
+                clearance it is emphatically not "None". */}
+            <option value="">{f.unsetLabel}</option>
+            {options.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+            {legacy && <option value={legacy}>{legacy} (unrecognised)</option>}
+          </select>
+        ) : (
+          <input
+            type={f.type === "number" ? "number" : "text"}
+            min={f.type === "number" ? 0 : undefined}
+            max={f.type === "number" ? (f.max ?? 70) : undefined}
+            step={f.type === "number" ? 1 : undefined}
+            value={draft[f.key].value}
+            onChange={(e) => set(f.key, { value: e.target.value })}
+            placeholder={f.placeholder}
+            style={input}
+          />
+        )}
+        {legacy && (
+          <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 4, lineHeight: 1.45 }}>
+            Recorded before this became a set list. Pick the matching value so the
+            qualification check can read it.
+          </div>
+        )}
+        <input
+          value={draft[f.key].source_note}
+          onChange={(e) => set(f.key, { source_note: e.target.value })}
+          placeholder="Source — e.g. per proposal resume, 2026-03"
+          style={{ ...input, marginTop: 5, fontSize: 12 }}
+        />
+        {f.note && (
+          <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4, lineHeight: 1.45 }}>
+            {f.note}
+          </div>
+        )}
+        {/* Provenance: the evidence trail is the deliverable, not a boolean. DCAA
+            asks you to demonstrate the person meets the category you billed, which a
+            bare value cannot do. */}
+        {stored && (
+          <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 4, fontStyle: "italic" }}>
+            {stored.authored_by ? `typed by ${stored.authored_by}` : "typed"} ·{" "}
+            {shortDate(stored.authored_at)}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -595,83 +711,28 @@ function PersonPanel({ person, vocab, util, author, setAuthor, onOpenContract, o
           All optional. Leave a field blank to keep it unrecorded.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-          {QUAL_FIELDS.map((f) => {
-            const stored = person.quals[f.key];
-            const options = f.vocab ? vocab[f.vocab] || [] : null;
-            // A value typed in before the vocabularies existed. Shown as-is rather
-            // than guessed at or silently blanked — it is somebody's assertion, and
-            // rewriting it would be inventing a fact. It stays saveable unchanged;
-            // only a *new* value has to come off the ladder.
-            const legacy =
-              options && draft[f.key].value && !options.includes(draft[f.key].value)
-                ? draft[f.key].value
-                : null;
-            return (
-              <div key={f.key}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  {f.label}
-                  {f.optionalNote && (
-                    <span style={{ fontWeight: 400, color: "var(--faint)" }}> · optional</span>
-                  )}
-                </div>
-                {options ? (
-                  <select
-                    value={draft[f.key].value}
-                    onChange={(e) => set(f.key, { value: e.target.value })}
-                    style={input}
-                  >
-                    {/* Unset is not a value. Picking it back clears the field to
-                        unknown, which has to stay reachable or "optional" isn't
-                        true — and for clearance it is emphatically not "None". */}
-                    <option value="">{f.unsetLabel}</option>
-                    {options.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                    {legacy && <option value={legacy}>{legacy} (unrecognised)</option>}
-                  </select>
-                ) : (
-                  <input
-                    type={f.type === "number" ? "number" : "text"}
-                    min={f.type === "number" ? 0 : undefined}
-                    max={f.type === "number" ? 70 : undefined}
-                    step={f.type === "number" ? 1 : undefined}
-                    value={draft[f.key].value}
-                    onChange={(e) => set(f.key, { value: e.target.value })}
-                    placeholder={f.placeholder}
-                    style={input}
-                  />
-                )}
-                {legacy && (
-                  <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 4, lineHeight: 1.45 }}>
-                    Recorded before this became a set list. Pick the matching value
-                    so the qualification check can read it.
-                  </div>
-                )}
-                <input
-                  value={draft[f.key].source_note}
-                  onChange={(e) => set(f.key, { source_note: e.target.value })}
-                  placeholder="Source — e.g. per proposal resume, 2026-03"
-                  style={{ ...input, marginTop: 5, fontSize: 12 }}
-                />
-                {f.note && (
-                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4, lineHeight: 1.45 }}>
-                    {f.note}
-                  </div>
-                )}
-                {/* Provenance: the evidence trail is the deliverable, not a boolean.
-                    DCAA asks you to demonstrate the person meets the category you
-                    billed, which a bare value cannot do. */}
-                {stored && (
-                  <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 4, fontStyle: "italic" }}>
-                    {stored.authored_by ? `typed by ${stored.authored_by}` : "typed"} ·{" "}
-                    {shortDate(stored.authored_at)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {QUAL_FIELDS.map(renderField)}
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: "var(--border)" }} />
+
+      {/* capacity — how many hours they plausibly have, which is not a credential */}
+      <div>
+        <div style={{ ...label, marginBottom: 3 }}>Capacity</div>
+        <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 10, lineHeight: 1.5 }}>
+          A capacity input for the forecast, never a performance measure.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          {CAPACITY_FIELDS.map(renderField)}
+          {/* Where their week actually comes from today, resolved server-side, so an
+              empty field reads as "inheriting" rather than as "unset". */}
+          {person.expected && (
+            <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.45 }}>
+              Currently <b style={{ color: "var(--text)" }}>{person.expected.hours} hrs/wk</b> —{" "}
+              {person.expected.label}.
+            </div>
+          )}
         </div>
       </div>
 
@@ -687,7 +748,7 @@ function PersonPanel({ person, vocab, util, author, setAuthor, onOpenContract, o
 
       <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
         <button style={button(true)} onClick={save} disabled={busy || !dirty}>
-          {busy ? "Saving…" : "Save qualifications"}
+          {busy ? "Saving…" : "Save record"}
         </button>
         {/* Only ever offered for someone the feed doesn't carry. A person with hours
             belongs to the timesheet feed, not to this screen. */}

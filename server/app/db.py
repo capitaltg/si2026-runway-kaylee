@@ -361,6 +361,64 @@ def rename_contract(cid: int, nickname: Optional[str]) -> Optional[dict]:
     return get_contract(cid)
 
 
+def set_contract_capacity(
+    cid: int,
+    utilization_target=None,
+    lcat_expected_hours=None,
+) -> Optional[dict]:
+    """Set (or clear) a contract's utilisation target and per-LCAT expected hours (#84).
+
+    Stored on the data blob, like `nickname` and the LCAT aliases, so it splats out of
+    `get_contract`/`list_contracts` and needs no migration — every contract in the DB
+    predates these keys and reads clean without them.
+
+    Passing None for either leaves it alone; passing an empty value clears it back to
+    the default, which has to stay reachable or "default" is a one-way door. Returns
+    the refreshed contract, or None if it doesn't exist.
+    """
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+
+    if utilization_target is not None:
+        if utilization_target == "":
+            blob.pop("utilization_target", None)
+        else:
+            blob["utilization_target"] = float(utilization_target)
+
+    if lcat_expected_hours is not None:
+        # Replace rather than merge: the editor sends the whole map, and a merge would
+        # make removing one category's default impossible.
+        clean = {
+            str(name).strip(): float(hours)
+            for name, hours in (lcat_expected_hours or {}).items()
+            if str(name).strip() and hours not in (None, "")
+        }
+        if clean:
+            blob["lcat_expected_hours"] = clean
+        else:
+            blob.pop("lcat_expected_hours", None)
+
+    update_contract(cid, blob)
+    return get_contract(cid)
+
+
+def expected_hours_by_person() -> dict:
+    """Every per-person expected-hours override, as `{employee_id: value}` (#84).
+
+    Read here and passed *into* `allocation.compute_allocation` rather than looked up
+    there, because allocation must not reach the people directory — see the invariant
+    in people.py. One query for the whole sweep, not one per contract.
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT employee_id, value FROM person_attrs WHERE field = 'expected_hours'"
+    ).fetchall()
+    conn.close()
+    return {r["employee_id"]: r["value"] for r in rows}
+
+
 def set_lcat_alias(
     cid: int, source: str, target_lcat: str, target_clin: Optional[str] = None
 ) -> Optional[dict]:
