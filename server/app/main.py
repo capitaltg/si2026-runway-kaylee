@@ -742,6 +742,18 @@ def create_plan(contract_id: int, body: PlanIn):
     return db.save_plan(contract_id, name, body.data)
 
 
+@app.put("/api/contracts/{contract_id}/plans/{plan_id}")
+def replace_plan(contract_id: int, plan_id: int, body: PlanIn):
+    """Save over an existing plan — editing a loaded plan updates it, not forks it."""
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    name = (body.name or "").strip() or "Untitled plan"
+    row = db.update_plan(contract_id, plan_id, name, body.data)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Plan not found.")
+    return row
+
+
 @app.delete("/api/contracts/{contract_id}/plans/{plan_id}")
 def remove_plan(contract_id: int, plan_id: int):
     """Delete one saved allocation plan."""

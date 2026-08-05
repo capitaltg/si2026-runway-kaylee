@@ -273,6 +273,18 @@ export async function savePlan(contractId, name, data) {
   return r.json();
 }
 
+// Save over a plan that already exists (#62). `savePlan` always creates, so
+// re-saving a loaded plan through it forked a second plan with the same name.
+export async function updatePlan(contractId, planId, name, data) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/plans/${planId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, data }),
+  });
+  if (!r.ok) throw new Error(`Save plan failed (${r.status})`);
+  return r.json();
+}
+
 export async function deletePlan(contractId, planId) {
   const r = await fetch(`${BASE}/api/contracts/${contractId}/plans/${planId}`, {
     method: "DELETE",
