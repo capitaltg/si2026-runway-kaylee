@@ -26,18 +26,56 @@ const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
 
 // The fields the directory stores, and how each is described to the person typing
-// it. Degree and clearance are clean factual fields. Years is not — GovCon quals
-// read "BS + 10 years *relevant* experience", and "relevant" is what gets argued in
-// a proposal — so it is presented as an assertion that wants a source.
+// it.
+//
+// Three of the four are drawn from closed vocabularies (#98), because #66 compares
+// them to a labor category's floor and cannot do that across two spellings. The
+// options themselves are NOT listed here — they arrive with the directory payload
+// (`qual_vocab`) so this screen and the check read one ladder, not two that drifted.
+//
+// Field of study is the exception and stays open text: "Computer Science" is not
+// more or less than "Mechanical Engineering", so there is nothing to compare and
+// nothing to close. Splitting it off the level is what keeps "BS Computer Science"
+// sayable without making it the thing being checked.
+//
+// Years is a number for the same comparability reason — `12`, `12 yrs`, `~12` and
+// `12+` were all reachable before. The argument behind the number was never the
+// number's job: it goes in the source note, which is the whole point of an
+// assertion carrying its provenance.
 const QUAL_FIELDS = [
-  { key: "education", label: "Education", placeholder: "BS Computer Science" },
+  {
+    key: "education",
+    label: "Education level",
+    type: "select",
+    vocab: "education",
+    unsetLabel: "Not recorded",
+  },
+  {
+    key: "education_field",
+    label: "Field of study",
+    type: "text",
+    placeholder: "Computer Science",
+    optionalNote: true,
+    note: "Context, not a credential — nothing compares one field of study to another. Recorded for the person reading the record.",
+  },
   {
     key: "years_experience",
     label: "Years of experience",
+    type: "number",
     placeholder: "12",
-    note: "Recorded as an assertion with a source, not a fact. “12 — per proposal resume, 2026-03” is defensible in an audit; a bare 12 is a number someone will dispute.",
+    note: "Recorded as an assertion with a source, not a fact. “12 · per proposal resume, 2026-03” is defensible in an audit; a bare 12 is a number someone will dispute.",
   },
-  { key: "clearance", label: "Clearance", placeholder: "TS/SCI" },
+  {
+    key: "clearance",
+    label: "Clearance",
+    type: "select",
+    vocab: "clearance",
+    unsetLabel: "Not recorded",
+    // "None" is one of the options and means they hold no clearance. That is a
+    // different fact from not having recorded one, and the ladder has to keep them
+    // apart or the check reports an unasked question as a failure.
+    note: "“None” means they hold no clearance — which is not the same as leaving this unrecorded.",
+  },
 ];
 
 const STATUS = {
@@ -385,6 +423,7 @@ export default function People({ onOpenContract }) {
             <PersonPanel
               key={selected.employee_id}
               person={selected}
+              vocab={data.qual_vocab || {}}
               util={utilById[selected.employee_id]}
               author={author}
               setAuthor={rememberAuthor}
@@ -449,7 +488,7 @@ function AddPerson({ onDone, onError }) {
   );
 }
 
-function PersonPanel({ person, util, author, setAuthor, onOpenContract, onSaved, onError }) {
+function PersonPanel({ person, vocab, util, author, setAuthor, onOpenContract, onSaved, onError }) {
   // Draft state seeded from what's stored. Only edited fields are sent, so saving a
   // clearance can't disturb a years assertion somebody sourced separately.
   const [draft, setDraft] = useState(() => {
@@ -558,17 +597,58 @@ function PersonPanel({ person, util, author, setAuthor, onOpenContract, onSaved,
         <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
           {QUAL_FIELDS.map((f) => {
             const stored = person.quals[f.key];
+            const options = f.vocab ? vocab[f.vocab] || [] : null;
+            // A value typed in before the vocabularies existed. Shown as-is rather
+            // than guessed at or silently blanked — it is somebody's assertion, and
+            // rewriting it would be inventing a fact. It stays saveable unchanged;
+            // only a *new* value has to come off the ladder.
+            const legacy =
+              options && draft[f.key].value && !options.includes(draft[f.key].value)
+                ? draft[f.key].value
+                : null;
             return (
               <div key={f.key}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
                   {f.label}
+                  {f.optionalNote && (
+                    <span style={{ fontWeight: 400, color: "var(--faint)" }}> · optional</span>
+                  )}
                 </div>
-                <input
-                  value={draft[f.key].value}
-                  onChange={(e) => set(f.key, { value: e.target.value })}
-                  placeholder={f.placeholder}
-                  style={input}
-                />
+                {options ? (
+                  <select
+                    value={draft[f.key].value}
+                    onChange={(e) => set(f.key, { value: e.target.value })}
+                    style={input}
+                  >
+                    {/* Unset is not a value. Picking it back clears the field to
+                        unknown, which has to stay reachable or "optional" isn't
+                        true — and for clearance it is emphatically not "None". */}
+                    <option value="">{f.unsetLabel}</option>
+                    {options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                    {legacy && <option value={legacy}>{legacy} (unrecognised)</option>}
+                  </select>
+                ) : (
+                  <input
+                    type={f.type === "number" ? "number" : "text"}
+                    min={f.type === "number" ? 0 : undefined}
+                    max={f.type === "number" ? 70 : undefined}
+                    step={f.type === "number" ? 1 : undefined}
+                    value={draft[f.key].value}
+                    onChange={(e) => set(f.key, { value: e.target.value })}
+                    placeholder={f.placeholder}
+                    style={input}
+                  />
+                )}
+                {legacy && (
+                  <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 4, lineHeight: 1.45 }}>
+                    Recorded before this became a set list. Pick the matching value
+                    so the qualification check can read it.
+                  </div>
+                )}
                 <input
                   value={draft[f.key].source_note}
                   onChange={(e) => set(f.key, { source_note: e.target.value })}

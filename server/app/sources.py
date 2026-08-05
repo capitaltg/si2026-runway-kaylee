@@ -49,7 +49,15 @@ DEMO_SCENARIO_OPTS = {
     # Draw rosters from a shared cross-contract people pool so some employees show
     # up on more than one contract — which is what the portfolio resource-conflict
     # detector (people booked >100% across contracts) needs to have anything to
-    # find. Identity is shared; each contract still sets its own LCAT/CLIN/rate.
+    # find. Each contract still sets its own CLIN and rate.
+    #
+    # The labor category no longer comes off the seat. A shared person is bound to
+    # a qualification lineage upstream (Fixtura #70) and only fills categories
+    # inside it, because #66 checks one global credential set per person against
+    # each contract's billed category — a person spanning Administrative Support
+    # and Senior Software Engineer is unrepresentable, and flagging them would be
+    # flagging an artifact of data generation. Variation *inside* a lineage stays:
+    # Systems Engineer here, Senior Software Engineer there is a career.
     "shared_pool": True,
 }
 # Rows to pull on a full sync. Deliberately above the roster x weeks grid: Fixtura

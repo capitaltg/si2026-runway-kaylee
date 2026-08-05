@@ -40,7 +40,50 @@ from typing import List, Optional
 # free-form keys — the attrs table would otherwise become arbitrary key-value
 # storage on the first caller that felt like inventing a field. #84's utilisation
 # target joins this tuple and needs no schema change to do it.
+#
+# These three are the *comparable* fields: #66 checks a person's credentials against
+# a labor category's floor, so each one has to be drawn from a vocabulary that lines
+# up with the floor's (#98).
 QUAL_FIELDS = ("education", "years_experience", "clearance")
+
+# Stored and allowlisted, but never compared: context a human reads. Education is
+# two things wearing one label — a *level* (closed, ordered) and a *field of study*
+# (open). Only the level can be checked; "Computer Science" is not more or less than
+# "Mechanical Engineering". Splitting them keeps "BS Computer Science" expressible
+# without making it the thing #66 compares.
+CONTEXT_FIELDS = ("education_field",)
+
+ALLOWED_FIELDS = QUAL_FIELDS + CONTEXT_FIELDS
+
+# The closed vocabularies, in ascending order. Order is the point: the check is
+# "meets or exceeds", not equality, so a TS/SCI holder must clear a Secret floor and
+# a Master's must clear a Bachelor's floor. Index in these tuples *is* the rank.
+#
+# `None` is a real clearance value — "holds no clearance" — and is a different fact
+# from "we have not recorded one", which is the absence of a row. #66 must never
+# conflate them: the first is a person who fails a Secret floor, the second is a
+# person nobody has checked.
+CLEARANCE_LEVELS = ("None", "Public Trust", "Secret", "Top Secret", "TS/SCI")
+
+EDUCATION_LEVELS = (
+    "HS Diploma",
+    "Associate's",
+    "Bachelor's",
+    "Master's",
+    "Doctorate",
+)
+
+# Served to the UI rather than restated there. A second copy of these lists in JSX
+# is the same two-vocabularies-that-never-line-up problem this ticket exists to
+# remove, one layer further out.
+QUAL_VOCAB = {
+    "clearance": list(CLEARANCE_LEVELS),
+    "education": list(EDUCATION_LEVELS),
+}
+
+# A typo guard, not a policy. Past this it is a slip — a birth year, a rate — rather
+# than a career.
+MAX_YEARS_EXPERIENCE = 70
 
 # Coverage states for one person's quals. `unknown` is a first-class, supported
 # state and the day-one state for everybody — nothing in the UI may imply an
@@ -59,6 +102,104 @@ def quals_status(quals: dict) -> str:
     if not have:
         return UNKNOWN
     return COMPLETE if len(have) == len(QUAL_FIELDS) else PARTIAL
+
+
+def clearance_rank(value: Optional[str]) -> Optional[int]:
+    """Where a clearance sits on the ladder, or None if it isn't on it.
+
+    None means "not comparable" and is what #66 must treat as *unchecked*, never as
+    a failure — an unrecognised or unrecorded clearance is missing information, and
+    reporting missing information as "does not meet" is the failure mode this whole
+    ticket exists to prevent.
+    """
+    try:
+        return CLEARANCE_LEVELS.index((value or "").strip())
+    except ValueError:
+        return None
+
+
+def education_rank(value: Optional[str]) -> Optional[int]:
+    """Where an education *level* sits on the ladder, or None if it isn't on it.
+
+    Reads the `education` field only. `education_field` ("Computer Science") has no
+    rank by design — a field of study is not more or less than another one.
+    """
+    try:
+        return EDUCATION_LEVELS.index((value or "").strip())
+    except ValueError:
+        return None
+
+
+def years_value(value: Optional[str]) -> Optional[float]:
+    """Years of experience as a number, or None if it isn't one.
+
+    Stored as TEXT like every other attr, so the comparison has to parse. Anything
+    unparseable is not-comparable, same as an off-ladder clearance.
+    """
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def validate_qual_value(field: str, value: str) -> Optional[str]:
+    """Reject a value the vocabularies don't admit; None means it's fine.
+
+    Server-side because the API is the contract and #66 will trust it — a dropdown
+    constrains one client, and the check reading `TS-SCI` next to a `TS/SCI` floor
+    reports "does not meet", which looks like a finding rather than like a typo.
+
+    Blank never reaches here: an empty value is a delete, and clearing a field back
+    to unknown stays available (see save_person_attrs).
+    """
+    value = (value or "").strip()
+    if field == "clearance" and clearance_rank(value) is None:
+        return (
+            f"{value!r} is not a recognised clearance. "
+            f"Use one of: {', '.join(CLEARANCE_LEVELS)}."
+        )
+    if field == "education" and education_rank(value) is None:
+        return (
+            f"{value!r} is not a recognised education level. "
+            f"Use one of: {', '.join(EDUCATION_LEVELS)}. "
+            "A field of study goes in the separate field-of-study box."
+        )
+    if field == "years_experience":
+        years = years_value(value)
+        if years is None:
+            return (
+                f"{value!r} is not a number. Record the years as a number and put "
+                'the argument in the source note — "12 · per proposal resume, '
+                '2026-03".'
+            )
+        if years < 0 or years > MAX_YEARS_EXPERIENCE:
+            return f"Years of experience must be between 0 and {MAX_YEARS_EXPERIENCE}."
+    return None
+
+
+def validate_quals(incoming: dict, stored: dict) -> Optional[str]:
+    """Check one save's field names and values. First problem, or None.
+
+    `stored` is what is already on file for this person, and it grandfathers itself
+    in: a value typed before the vocabularies existed can be re-sent unchanged, which
+    is what editing only its source note does. Without that, an old free-text
+    clearance would make its own provenance uneditable. Typing a *new* unrecognised
+    value is still refused, so the set of off-ladder values can only shrink.
+
+    A blank value is a delete, never a violation — clearing a field back to unknown
+    has to stay available or "optional" isn't true.
+    """
+    unknown = [f for f in (incoming or {}) if f not in ALLOWED_FIELDS]
+    if unknown:
+        return f"Unknown qualification field(s): {unknown}"
+    for field, entry in (incoming or {}).items():
+        value = (str((entry or {}).get("value") or "")).strip()
+        if not value or value == (stored or {}).get(field):
+            continue
+        problem = validate_qual_value(field, value)
+        if problem:
+            return problem
+    return None
 
 
 def build_directory(
@@ -90,7 +231,7 @@ def build_directory(
 
     quals_by_person = {}
     for a in attr_rows or []:
-        if a.get("field") not in QUAL_FIELDS:
+        if a.get("field") not in ALLOWED_FIELDS:
             continue
         quals_by_person.setdefault(a["employee_id"], {})[a["field"]] = {
             "value": a.get("value"),
@@ -207,6 +348,9 @@ def build_directory(
         },
         "unidentified": unidentified or {"rows": 0, "contracts": 0},
         "merge_suggestions": merge_candidates(manual_people, facts),
+        # The closed vocabularies, so the editor renders the same ladder the check
+        # will read rather than a second list that drifted.
+        "qual_vocab": QUAL_VOCAB,
     }
 
 

@@ -752,13 +752,19 @@ def save_person_quals(employee_id: str, body: QualsIn):
     This is the floor of the feature and is never gated behind anything — no import,
     no setup. Unknown fields are rejected rather than stored, so the attrs table
     can't become arbitrary key-value storage.
+
+    Values are checked too, not only field names (#98). A dropdown constrains one
+    client; this is the contract #66 will trust when it compares a person's
+    credentials against a category's floor.
     """
-    unknown = [f for f in (body.quals or {}) if f not in people.QUAL_FIELDS]
-    if unknown:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown qualification field(s): {unknown}"
-        )
-    attrs = db.save_person_attrs(employee_id, body.quals or {}, body.authored_by)
+    incoming = body.quals or {}
+    # What is already on file, so a value predating the vocabularies isn't a trap —
+    # see people.validate_quals for why an unchanged one is let through.
+    stored = {a["field"]: a["value"] for a in db.list_person_attrs(employee_id)}
+    problem = people.validate_quals(incoming, stored)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    attrs = db.save_person_attrs(employee_id, incoming, body.authored_by)
     quals = {
         a["field"]: {
             "value": a["value"],
@@ -767,7 +773,7 @@ def save_person_quals(employee_id: str, body: QualsIn):
             "authored_at": a["authored_at"],
         }
         for a in attrs
-        if a["field"] in people.QUAL_FIELDS
+        if a["field"] in people.ALLOWED_FIELDS
     }
     return {
         "employee_id": employee_id,
