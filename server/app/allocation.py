@@ -233,6 +233,15 @@ def compute_allocation(
             # fetch, and without restating the default in JSX.
             "utilization_target": caps["target"],
             "expected_hours": capacity.resolve(capacity=caps),
+            # #85's holiday calendar and per-person absences, plus the calendar date
+            # week 1 begins on. The matrix walks weeks client-side, so it needs the
+            # same date→week mapping the engine used, or the two views place the same
+            # absence in different weeks and disagree about the runway. Read off the
+            # burn payload rather than re-derived, for the reason everything else in
+            # this dict is.
+            "pop_start": bc["pop_start"],
+            "pop_end": bc["pop_end"],
+            "absence": bc["absence"],
         },
         "clins": clin_cards,
         "employees": emp_list,

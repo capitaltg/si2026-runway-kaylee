@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from . import (
+    absence,
     allocation,
     ask,
     burn,
@@ -452,6 +453,60 @@ def set_contract_capacity(contract_id: int, body: CapacityIn):
     if updated is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
     return updated
+
+
+class AbsenceIn(BaseModel):
+    """A contract's holiday calendar and per-person dated absences (#85).
+
+    Each list is replaced wholesale; omitting one leaves it alone and sending an
+    empty one clears it, the same convention `CapacityIn` uses. `seed_federal_year`
+    is a convenience the editor calls instead of typing eleven dates — it *appends*
+    to whatever holidays the request carries, so the seeded calendar is ordinary
+    editable data from the moment it lands rather than a hidden built-in.
+    """
+
+    holidays: Optional[list] = None
+    absences: Optional[list] = None
+    seed_federal_year: Optional[int] = None
+
+
+@app.get("/api/contracts/{contract_id}/absence")
+def get_contract_absence(contract_id: int):
+    """A contract's holiday calendar and per-person absences (#85)."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return absence.contract_absence(contract)
+
+
+@app.put("/api/contracts/{contract_id}/absence")
+def set_contract_absence(contract_id: int, body: AbsenceIn):
+    """Set a contract's holidays and absences (#85).
+
+    Returns the refreshed absence settings rather than an ack, for the reason the
+    capacity endpoint does: entering an absence bends the forward projection, and
+    the caller has to be able to show the number move.
+    """
+    for entry in body.absences or []:
+        problem = absence.validate_absence(entry)
+        if problem:
+            raise HTTPException(status_code=400, detail=problem)
+
+    holidays = body.holidays
+    if body.seed_federal_year is not None:
+        year = int(body.seed_federal_year)
+        if not (1900 <= year <= 2200):
+            raise HTTPException(
+                status_code=400, detail=f"{year} is not a plausible calendar year."
+            )
+        holidays = list(holidays or []) + absence.federal_holidays(year)
+
+    updated = db.set_contract_absence(
+        contract_id, holidays=holidays, absences=body.absences
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return absence.contract_absence(updated)
 
 
 class LcatAliasIn(BaseModel):

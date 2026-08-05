@@ -78,16 +78,45 @@ export default function BurnChart({ clin, contract }) {
     ? Math.max(cw, Math.min(exhaustWeek ?? tot, tot))
     : cw;
   const projEndVal = spent + weekly * (projEndWeek - cw);
+
+  // The projection bends around known absence (#85) — but only when the server
+  // sent a per-week series for this CLIN, which it does only when there is absence
+  // in the weeks still ahead. `bend` is null on every other contract, and when it's
+  // null every line below is the exact straight-line geometry this chart has always
+  // drawn. That is the whole safety story: the series is additive, and the fallback
+  // is the original. It is also withheld server-side in the states this file already
+  // special-cases (paused, over budget, past PoP), so a bent line can never appear
+  // where the straight one refused to draw.
+  const bend = (() => {
+    const p = clin.projection;
+    if (!projects || !p || !(p.points?.length > 1)) return null;
+    const pts = p.points.map((q) => [mx(q.week), my(q.spent)]);
+    return {
+      d: pts
+        .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`)
+        .join(" "),
+      endX: pts[pts.length - 1][0].toFixed(1),
+      endVal: p.points[p.points.length - 1].spent,
+      exhaustWeek: p.exhaust_week,
+      weeksGained: p.weeks_gained,
+      weeksAffected: p.weeks_affected,
+    };
+  })();
+
+  // The week the money runs out on whichever line is actually being drawn. The
+  // marker has to sit on the end of the line the user is looking at, or the chart
+  // says one thing and the dot says another.
+  const runOutWeek = bend?.exhaustWeek ?? exhaustWeek;
   const exhaustShow =
-    projects && exhaustWeek != null && exhaustWeek <= tot && exhaustWeek >= cw;
-  const exX = mx(Math.min(exhaustWeek ?? tot, tot));
+    projects && runOutWeek != null && runOutWeek <= tot && runOutWeek >= cw;
+  const exX = mx(Math.min(runOutWeek ?? tot, tot));
   // Where the burn would land if a funding mod arrived: same weekly rate carried
   // on from the exhaust point, capped at the ceiling and at PoP end.
   const ghost = (() => {
     if (!exhaustShow || weekly <= 0 || ceiling - budget <= 0) return null;
-    const week = Math.min(exhaustWeek + (ceiling - budget) / weekly, tot);
-    if (week - exhaustWeek < 0.5) return null;
-    return { week, val: budget + weekly * (week - exhaustWeek) };
+    const week = Math.min(runOutWeek + (ceiling - budget) / weekly, tot);
+    if (week - runOutWeek < 0.5) return null;
+    return { week, val: budget + weekly * (week - runOutWeek) };
   })();
 
   const projColor = overBudget
@@ -168,14 +197,28 @@ export default function BurnChart({ clin, contract }) {
               dash: "dotted",
               color: projColor,
               label: "Projected",
-              value: `funds exhaust wk ${Math.round(exhaustWeek)}`,
+              value: `funds exhaust wk ${Math.round(runOutWeek)}`,
             }
           : {
               dash: "dotted",
               color: projColor,
               label: "Projected",
-              value: `${moneyM(projEndVal)} by wk ${tot}`,
+              value: `${moneyM(bend ? bend.endVal : projEndVal)} by wk ${tot}`,
             },
+    // Say that the line bends and why (#85). A kink in the projection with nothing
+    // explaining it reads as a rendering bug, and an accountant checking the
+    // arithmetic by hand needs to know the projection is not hrs/wk x weeks. The
+    // gain is stated in whole days because that is the unit runway is read in.
+    bend && {
+      dash: "dotted",
+      color: projColor,
+      label: "Includes absence",
+      value:
+        `${bend.weeksAffected} wk${bend.weeksAffected === 1 ? "" : "s"} affected` +
+        (bend.weeksGained
+          ? ` · ${bend.weeksGained > 0 ? "+" : ""}${Math.round(bend.weeksGained * 7)} days runway`
+          : ""),
+    },
     ghost && {
       dash: "dotted",
       color: "var(--dim)",
@@ -341,7 +384,11 @@ export default function BurnChart({ clin, contract }) {
         />
         {projects && (
           <path
-            d={`M${xc},${yc} L${pe},${pv} L${pe},${baseY.toFixed(1)} L${xc},${baseY.toFixed(1)} Z`}
+            d={
+              bend
+                ? `${bend.d} L${bend.endX},${baseY.toFixed(1)} L${xc},${baseY.toFixed(1)} Z`
+                : `M${xc},${yc} L${pe},${pv} L${pe},${baseY.toFixed(1)} L${xc},${baseY.toFixed(1)} Z`
+            }
             fill="url(#rwProjFill)"
           />
         )}
@@ -388,11 +435,12 @@ export default function BurnChart({ clin, contract }) {
         />
         {projects && (
           <path
-            d={`M${xc},${yc} L${pe},${pv}`}
+            d={bend ? bend.d : `M${xc},${yc} L${pe},${pv}`}
             fill="none"
             stroke={projColor}
             strokeWidth="3.5"
             strokeLinecap="round"
+            strokeLinejoin="round"
             strokeDasharray="2 7"
             style={{ animation: "rwdash 1s linear infinite" }}
           />

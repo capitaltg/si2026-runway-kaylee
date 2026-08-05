@@ -188,6 +188,25 @@ export async function setContractCapacity(contractId, body) {
   return r.json();
 }
 
+// A contract's holiday calendar and per-person dated absences (#85). Contract-level
+// rather than plan-level: a holiday is a fact about the calendar, and the burn engine
+// can only bend the Flight Deck's projection around data it can read. Each list is
+// replaced wholesale, so sending [] clears it; omitting one leaves it alone.
+// `seed_federal_year` appends that year's eleven federal holidays, after which they
+// are ordinary editable entries.
+export async function setContractAbsence(contractId, body) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/absence`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail || `Saving absence failed (${r.status})`);
+  }
+  return r.json();
+}
+
 // Indirect-rate model (#77): the fringe/OH/G&A pools and direct labor rates in
 // force, plus the derived buildup. `contractId` null reads/writes the company-wide
 // default that every contract inherits per pool. All of it is optional — with none
