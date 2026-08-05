@@ -1,461 +1,181 @@
-employee,employee_id,week_ending,contract_no,charge_code,labor_category,reg_hours,ot_hours,leave_hours,total_hours,approved_by
-Christine Hicks,E-00431,2025-12-05,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,0.0,8.0,40.0,Rachel Meyer
-Joseph Walton,E-25848,2026-01-30,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Jennifer Shea
-Molly Moses,E-84896,2026-05-22,7025GMLQJC0000818,0001,Business Analyst,40.0,2.0,0.0,42.0,Charles Green
-Taylor Savage,E-32071,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Garrett Adams
-Sheila Green,E-76555,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Gabriel Collins
-Scott Rivera,E-18769,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Christina Jones
-Ivan Stewart,E-57950,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Joshua Price
-Donald Madden,E-60227,2026-06-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Regina Perry
-Kristen Mckinney,E-81096,2025-11-28,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Nicholas Campos
-Michael Austin,E-38804,2026-06-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Matthew Evans
-David Martinez,E-72174,2026-01-23,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Sandra Conner
-Lauren Gomez,E-13425,2026-01-16,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Crystal Gardner
-Justin Peters,E-40971,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,6.0,16.0,46.0,Rebecca Myers
-Lisa Snyder,E-68475,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,2.0,8.0,42.0,Mark Garcia
-Jody Fox,E-09348,2026-01-23,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Adriana Gibson
-Richard Butler,E-28327,2026-04-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Bryan Castillo
-Lawrence Miller,E-67919,2026-05-29,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Jackie Kemp
-Tonya Rodgers,E-14372,2026-06-12,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Stephanie Sanchez
-Jennifer Rasmussen,E-60212,2026-07-24,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,James Wilson
-Christine Hicks,E-00431,2026-06-05,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Deborah Anderson
-Joseph Walton,E-25848,2025-12-12,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Jamie Moss
-Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Business Analyst,40.0,4.0,0.0,44.0,Eric Byrd
-Taylor Savage,E-32071,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Daniel Mcdaniel
-Sheila Green,E-76555,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Ashley Jones
-Scott Rivera,E-18769,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Mary Smith
-Ivan Stewart,E-57950,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Donald Miller
-Donald Madden,E-60227,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Dustin Owens
-Kristen Mckinney,E-81096,2026-05-15,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Manuel Koch
-Michael Austin,E-38804,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Andrea Wong
-David Martinez,E-72174,2026-06-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Alexa Cruz
-Lauren Gomez,E-13425,2026-01-23,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,2.0,0.0,42.0,Tiffany Hickman
-Justin Peters,E-40971,2026-06-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Leah Mullen
-Lisa Snyder,E-68475,2026-07-17,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Jordan Brown
-Jody Fox,E-09348,2026-03-27,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Martha Clark
-Richard Butler,E-28327,2026-05-29,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Joseph Walton
-Lawrence Miller,E-67919,2026-03-20,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Frank Hunt
-Tonya Rodgers,E-14372,2026-05-01,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Stephen Hardy
-Jennifer Rasmussen,E-60212,2026-06-26,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Margaret Maldonado
-Christine Hicks,E-00431,2026-07-24,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Jonathan Patterson
-Joseph Walton,E-25848,2026-07-10,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,2.0,0.0,42.0,Antonio Atkinson
-Molly Moses,E-84896,2026-04-03,7025GMLQJC0000818,0001,Business Analyst,40.0,4.0,0.0,44.0,Jimmy Conrad
-Taylor Savage,E-32071,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Sheila Green
-Sheila Green,E-76555,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,James Nguyen
-Scott Rivera,E-18769,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,2.0,16.0,42.0,Jeremy Wilkinson
-Ivan Stewart,E-57950,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Anna Contreras
-Donald Madden,E-60227,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Jennifer Williams
-Kristen Mckinney,E-81096,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Evan Richardson
-Michael Austin,E-38804,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,2.0,16.0,42.0,Holly Phillips
-David Martinez,E-72174,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,William Myers
-Lauren Gomez,E-13425,2025-12-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Carol Beck
-Justin Peters,E-40971,2026-05-22,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Michelle Robertson
-Lisa Snyder,E-68475,2026-06-05,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Laurie Williams
-Jody Fox,E-09348,2026-04-03,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Lisa Sanchez
-Richard Butler,E-28327,2026-02-06,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,8.0,8.0,48.0,Sara Ramirez
-Lawrence Miller,E-67919,2026-02-27,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,4.0,8.0,44.0,Dylan Lawrence
-Tonya Rodgers,E-14372,2026-01-09,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Benjamin Cole
-Jennifer Rasmussen,E-60212,2026-06-12,7025GMLQJC0000818,0002,Business Analyst,24.0,4.0,16.0,44.0,Lauren Gomez
-Christine Hicks,E-00431,2026-01-23,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,8.0,8.0,48.0,Megan Green
-Joseph Walton,E-25848,2026-02-13,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Timothy Walker
-Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Business Analyst,40.0,4.0,0.0,44.0,Eric Aguilar
-Taylor Savage,E-32071,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Becky Lee
-Sheila Green,E-76555,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Cameron Meyer
-Scott Rivera,E-18769,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Tony Chavez MD
-Ivan Stewart,E-57950,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Darin Parker
-Donald Madden,E-60227,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Richard Butler
-Kristen Mckinney,E-81096,2026-07-10,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Joseph Moore
-Michael Austin,E-38804,2026-07-10,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Lawrence Miller
-David Martinez,E-72174,2026-03-06,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Jessica Brown
-Lauren Gomez,E-13425,2026-03-27,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Tonya Rodgers
-Justin Peters,E-40971,2026-04-10,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Teresa Nelson
-Lisa Snyder,E-68475,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Dr. James Rasmussen
-Jody Fox,E-09348,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Alex Davis
-Richard Butler,E-28327,2026-04-17,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Albert Bishop
-Lawrence Miller,E-67919,2026-04-10,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Tasha Hatfield MD
-Tonya Rodgers,E-14372,2026-02-20,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Benjamin Galvan
-Jennifer Rasmussen,E-60212,2025-11-21,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Benjamin Contreras
-Christine Hicks,E-00431,2026-07-03,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,2.0,0.0,42.0,Kimberly Brown
-Joseph Walton,E-25848,2026-06-05,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Robert Barker
-Molly Moses,E-84896,2025-12-19,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,William Campbell
-Taylor Savage,E-32071,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Vincent Brown
-Sheila Green,E-76555,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Christopher Bowman
-Scott Rivera,E-18769,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,David Burton Jr.
-Ivan Stewart,E-57950,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Dr. Christine Carlson
-Donald Madden,E-60227,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Kenneth Edwards
-Kristen Mckinney,E-81096,2026-01-30,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,John Jones
-Michael Austin,E-38804,2025-11-28,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Rachel Perez DDS
-David Martinez,E-72174,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Christopher Reyes
-Lauren Gomez,E-13425,2026-06-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Andrea Mayer
-Justin Peters,E-40971,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Christopher Freeman
-Lisa Snyder,E-68475,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Jennifer Herrera
-Jody Fox,E-09348,2026-04-10,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Ms. Hannah Lopez
-Richard Butler,E-28327,2026-03-27,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Lynn Vargas
-Lawrence Miller,E-67919,2026-05-15,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Adam Sheppard
-Tonya Rodgers,E-14372,2026-04-03,7025GMLQJC0000818,0002,Business Analyst,32.0,6.0,8.0,46.0,Sarah Skinner
-Jennifer Rasmussen,E-60212,2026-07-17,7025GMLQJC0000818,0002,Business Analyst,40.0,6.0,0.0,46.0,Cody Stuart
-Christine Hicks,E-00431,2026-05-08,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Andrea Soto
-Joseph Walton,E-25848,2026-03-27,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Allison Carroll
-Molly Moses,E-84896,2026-02-27,7025GMLQJC0000818,0001,Business Analyst,40.0,8.0,0.0,48.0,Jill Scott
-Taylor Savage,E-32071,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Megan Ramirez
-Sheila Green,E-76555,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Susan Hughes
-Scott Rivera,E-18769,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Anna Anderson
-Ivan Stewart,E-57950,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Tina Velazquez
-Donald Madden,E-60227,2026-06-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Michael Long
-Kristen Mckinney,E-81096,2026-02-06,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Steven Davis
-Michael Austin,E-38804,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,8.0,8.0,48.0,Gregory Thomas
-David Martinez,E-72174,2026-03-27,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Mark Robertson
-Lauren Gomez,E-13425,2026-07-03,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Karen Thomas
-Justin Peters,E-40971,2026-05-08,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,Allison Keller
-Lisa Snyder,E-68475,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,John Gonzales
-Jody Fox,E-09348,2026-01-02,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,2.0,0.0,42.0,Bethany Campbell
-Richard Butler,E-28327,2026-07-10,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Joseph Hughes
-Lawrence Miller,E-67919,2026-03-27,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Dr. Terri Caldwell
-Tonya Rodgers,E-14372,2026-03-06,7025GMLQJC0000818,0002,Business Analyst,24.0,6.0,16.0,46.0,Krista Harris
-Jennifer Rasmussen,E-60212,2025-11-28,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Collin Saunders
-Christine Hicks,E-00431,2026-07-17,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Amanda Carter
-Joseph Walton,E-25848,2026-04-17,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,8.0,8.0,48.0,Joseph Peterson
-Molly Moses,E-84896,2026-05-08,7025GMLQJC0000818,0001,Business Analyst,32.0,0.0,8.0,40.0,Mr. Jamie Gibson
-Taylor Savage,E-32071,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Andrea Chang
-Sheila Green,E-76555,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,0.0,8.0,40.0,Rebecca Moore
-Scott Rivera,E-18769,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Terry Benjamin
-Ivan Stewart,E-57950,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,8.0,8.0,48.0,James Rogers
-Donald Madden,E-60227,2026-04-24,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Travis Shaw
-Kristen Mckinney,E-81096,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Steven Reid
-Michael Austin,E-38804,2026-05-01,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Marie Ramos
-David Martinez,E-72174,2026-05-01,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Jonathan Boyd
-Lauren Gomez,E-13425,2026-04-03,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Sarah Diaz
-Justin Peters,E-40971,2026-01-16,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,2.0,16.0,42.0,Samantha Herring
-Lisa Snyder,E-68475,2025-11-28,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Deborah Holloway
-Jody Fox,E-09348,2025-12-12,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Emily Tran
-Richard Butler,E-28327,2026-04-03,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Rhonda Sanchez
-Lawrence Miller,E-67919,2026-01-09,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Matthew Jackson DDS
-Tonya Rodgers,E-14372,2025-11-21,7025GMLQJC0000818,0002,Business Analyst,24.0,6.0,16.0,46.0,Lauren Sosa
-Jennifer Rasmussen,E-60212,2025-12-26,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Douglas Bonilla
-Christine Hicks,E-00431,2026-05-22,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,6.0,0.0,46.0,Abigail Hamilton
-Joseph Walton,E-25848,2026-04-24,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,6.0,0.0,46.0,Ronald Kaufman
-Molly Moses,E-84896,2026-06-19,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Michael Foley
-Taylor Savage,E-32071,2026-05-22,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,4.0,16.0,44.0,Jeremy Johnson
-Sheila Green,E-76555,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Kevin Erickson
-Scott Rivera,E-18769,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,0.0,8.0,40.0,Matthew Spencer
-Ivan Stewart,E-57950,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Jonathan Solis
-Donald Madden,E-60227,2025-12-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Jennifer Mcguire
-Kristen Mckinney,E-81096,2025-12-19,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,John Perez
-Michael Austin,E-38804,2026-03-27,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Mr. Ryan Wood MD
-David Martinez,E-72174,2026-02-27,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Melissa Gibson
-Lauren Gomez,E-13425,2026-02-06,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Linda Valencia
-Justin Peters,E-40971,2026-02-06,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Richard Meza
-Lisa Snyder,E-68475,2026-04-17,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Philip Dickson
-Jody Fox,E-09348,2026-02-13,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Nicole Rodriguez
-Richard Butler,E-28327,2026-07-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Rodney Carrillo
-Lawrence Miller,E-67919,2026-07-10,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Ricky Thomas
-Tonya Rodgers,E-14372,2026-06-26,7025GMLQJC0000818,0002,Business Analyst,32.0,2.0,8.0,42.0,Tara Schmidt
-Jennifer Rasmussen,E-60212,2025-12-26,7025GMLQJC0000818,0002,Business Analyst,40.0,4.0,0.0,44.0,Philip Camacho
-Christine Hicks,E-00431,2025-11-28,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,4.0,8.0,44.0,John Banks
-Joseph Walton,E-25848,2026-01-02,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,6.0,0.0,46.0,Alexis Lara
-Molly Moses,E-84896,2026-06-26,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Samantha Anderson
-Taylor Savage,E-32071,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,4.0,16.0,44.0,Mario Hurst
-Sheila Green,E-76555,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Todd Moreno
-Scott Rivera,E-18769,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Vanessa Miller
-Ivan Stewart,E-57950,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Ethan Ferguson
-Donald Madden,E-60227,2026-03-06,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Linda Reed
-Kristen Mckinney,E-81096,2026-01-16,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Jeffrey Braun
-Michael Austin,E-38804,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Christopher Ryan
-David Martinez,E-72174,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Robert Woods
-Lauren Gomez,E-13425,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,John Graves
-Justin Peters,E-40971,2026-04-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Courtney Case
-Lisa Snyder,E-68475,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Alexander Sanchez
-Jody Fox,E-09348,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Kelly Sandoval
-Richard Butler,E-28327,2026-03-06,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,2.0,16.0,42.0,Ian Gonzales
-Lawrence Miller,E-67919,2025-12-19,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Kristopher Edwards
-Tonya Rodgers,E-14372,2026-05-15,7025GMLQJC0000818,0002,Business Analyst,24.0,0.0,16.0,40.0,Peggy Lopez
-Jennifer Rasmussen,E-60212,2026-04-24,7025GMLQJC0000818,0002,Business Analyst,24.0,8.0,16.0,48.0,Barbara Frost
-Christine Hicks,E-00431,2026-03-13,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,2.0,0.0,42.0,Ronnie Fox
-Joseph Walton,E-25848,2026-01-16,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,4.0,0.0,44.0,Hunter Elliott
-Molly Moses,E-84896,2025-12-05,7025GMLQJC0000818,0001,Business Analyst,40.0,4.0,0.0,44.0,Barbara Mendoza
-Taylor Savage,E-32071,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Dr. Christopher Lee
-Sheila Green,E-76555,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,James Butler
-Scott Rivera,E-18769,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Brandon Bradshaw
-Ivan Stewart,E-57950,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Michael Robinson
-Donald Madden,E-60227,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Mr. Jonathan Garcia
-Kristen Mckinney,E-81096,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Brandon Padilla
-Michael Austin,E-38804,2026-01-23,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Michael Nelson
-David Martinez,E-72174,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Russell Reese
-Lauren Gomez,E-13425,2026-01-02,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,David Goodman
-Justin Peters,E-40971,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,Patrick Hart
-Lisa Snyder,E-68475,2025-12-05,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Elaine Moreno
-Jody Fox,E-09348,2026-02-13,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,0.0,16.0,40.0,Ann Webb
-Richard Butler,E-28327,2026-01-09,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Adrian Campbell II
-Lawrence Miller,E-67919,2026-04-10,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Melanie Mccoy
-Tonya Rodgers,E-14372,2026-05-22,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Robert Summers
-Jennifer Rasmussen,E-60212,2026-04-03,7025GMLQJC0000818,0002,Business Analyst,24.0,0.0,16.0,40.0,Amy Lopez
-Christine Hicks,E-00431,2026-01-30,7025GMLQJC0000818,0001,Senior Cyber SME,24.0,6.0,16.0,46.0,Christine Greene
-Joseph Walton,E-25848,2026-05-15,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,6.0,8.0,46.0,Elizabeth Wallace
-Molly Moses,E-84896,2026-06-05,7025GMLQJC0000818,0001,Business Analyst,24.0,0.0,16.0,40.0,Joshua Gomez
-Taylor Savage,E-32071,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Trevor Gray
-Sheila Green,E-76555,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,4.0,16.0,44.0,Jessica Thomas
-Scott Rivera,E-18769,2026-02-06,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Jason Archer
-Ivan Stewart,E-57950,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,8.0,16.0,48.0,Brian Diaz
-Donald Madden,E-60227,2026-05-22,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Kevin Thomas
-Kristen Mckinney,E-81096,2025-12-19,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Bruce Murphy
-Michael Austin,E-38804,2025-11-28,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Rebecca Anderson
-David Martinez,E-72174,2026-05-29,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Carlos Myers
-Lauren Gomez,E-13425,2026-01-23,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,6.0,16.0,46.0,Victoria Kennedy
-Justin Peters,E-40971,2025-12-05,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Emily Richardson
-Lisa Snyder,E-68475,2025-12-12,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Jose Walker
-Jody Fox,E-09348,2026-03-06,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Priscilla Thornton
-Richard Butler,E-28327,2026-02-20,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Felicia Morris
-Lawrence Miller,E-67919,2026-04-10,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Jackie Willis
-Tonya Rodgers,E-14372,2026-01-30,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Kevin Foley
-Jennifer Rasmussen,E-60212,2026-05-08,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Elizabeth Phillips
-Christine Hicks,E-00431,2026-01-09,7025GMLQJC0000818,0001,Senior Cyber SME,24.0,8.0,16.0,48.0,George Wilkins
-Joseph Walton,E-25848,2025-12-26,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Larry Clark
-Molly Moses,E-84896,2026-01-09,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Michelle Hamilton
-Taylor Savage,E-32071,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Kevin Morris
-Sheila Green,E-76555,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Morgan Nguyen
-Scott Rivera,E-18769,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Laura Hicks
-Ivan Stewart,E-57950,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Daniel Phelps
-Donald Madden,E-60227,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Casey Smith
-Kristen Mckinney,E-81096,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Dana Haynes
-Michael Austin,E-38804,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Mark Perkins
-David Martinez,E-72174,2026-02-20,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,James Winters
-Lauren Gomez,E-13425,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,Brandy Franco
-Justin Peters,E-40971,2025-12-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Aaron Ryan
-Lisa Snyder,E-68475,2026-02-13,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Linda Nelson
-Jody Fox,E-09348,2026-05-15,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,0.0,16.0,40.0,Angela Miller
-Richard Butler,E-28327,2026-06-19,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Joshua Ryan
-Lawrence Miller,E-67919,2026-01-30,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,6.0,16.0,46.0,Mario Lewis
-Tonya Rodgers,E-14372,2026-02-20,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Casey Jenkins DDS
-Jennifer Rasmussen,E-60212,2026-07-03,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,William Jones
-Christine Hicks,E-00431,2025-12-19,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Andrea Webb
-Joseph Walton,E-25848,2025-12-12,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,4.0,0.0,44.0,Lisa Robinson
-Molly Moses,E-84896,2026-03-13,7025GMLQJC0000818,0001,Business Analyst,24.0,0.0,16.0,40.0,Cassandra White
-Taylor Savage,E-32071,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Maria Gray
-Sheila Green,E-76555,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Kimberly Clark
-Scott Rivera,E-18769,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Daniel Whitehead
-Ivan Stewart,E-57950,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Brandy West
-Donald Madden,E-60227,2026-04-03,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Michael Cuevas
-Kristen Mckinney,E-81096,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Melvin Carter
-Michael Austin,E-38804,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Jose Henry
-David Martinez,E-72174,2026-03-20,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Kimberly Arnold
-Lauren Gomez,E-13425,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Stephanie Walker
-Justin Peters,E-40971,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Rhonda Mayer
-Lisa Snyder,E-68475,2026-03-20,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,David Park
-Jody Fox,E-09348,2026-03-13,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Cassandra Carter
-Richard Butler,E-28327,2026-06-12,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Betty Nelson
-Lawrence Miller,E-67919,2026-07-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Eric Rice
-Tonya Rodgers,E-14372,2026-03-13,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Christopher Cummings
-Jennifer Rasmussen,E-60212,2026-02-13,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Pamela Miller
-Christine Hicks,E-00431,2026-02-20,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,2.0,8.0,42.0,Jessica Dominguez
-Joseph Walton,E-25848,2026-06-26,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Tonya Sheppard
-Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Business Analyst,40.0,8.0,0.0,48.0,Jennifer Smith
-Taylor Savage,E-32071,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,0.0,8.0,40.0,Christopher Logan
-Sheila Green,E-76555,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Casey Byrd
-Scott Rivera,E-18769,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Charles Gutierrez
-Ivan Stewart,E-57950,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Erin Rose
-Donald Madden,E-60227,2026-05-22,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Alexis Mitchell
-Kristen Mckinney,E-81096,2026-05-08,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,David Turner
-Michael Austin,E-38804,2026-05-22,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Jerry Ellis
-David Martinez,E-72174,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Christopher Johnson
-Lauren Gomez,E-13425,2026-05-29,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Kelsey Lewis
-Justin Peters,E-40971,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Adam Hancock
-Lisa Snyder,E-68475,2026-04-03,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Joyce Gray
-Jody Fox,E-09348,2026-04-17,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,Roy Moore
-Richard Butler,E-28327,2026-01-30,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Steven Orr
-Lawrence Miller,E-67919,2026-04-17,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Eric Luna
-Tonya Rodgers,E-14372,2026-03-06,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Gabriela Riley
-Jennifer Rasmussen,E-60212,2026-02-13,7025GMLQJC0000818,0002,Business Analyst,24.0,4.0,16.0,44.0,Stephen Kline
-Christine Hicks,E-00431,2026-05-01,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,6.0,0.0,46.0,Michelle Valdez
-Joseph Walton,E-25848,2026-03-20,7025GMLQJC0000818,0001,Senior Cyber SME,24.0,0.0,16.0,40.0,Brittany Little
-Molly Moses,E-84896,2026-03-06,7025GMLQJC0000818,0001,Business Analyst,40.0,2.0,0.0,42.0,Jerry Carter MD
-Taylor Savage,E-32071,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Stephen Bright
-Sheila Green,E-76555,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Joshua Burnett
-Scott Rivera,E-18769,2026-01-16,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Zachary Rice
-Ivan Stewart,E-57950,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Glenn Dean
-Donald Madden,E-60227,2026-03-06,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Gina Foster
-Kristen Mckinney,E-81096,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,4.0,16.0,44.0,Carlos Smith
-Michael Austin,E-38804,2025-12-19,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Angela Stevenson
-David Martinez,E-72174,2026-05-29,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Savannah Smith
-Lauren Gomez,E-13425,2026-01-02,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Alexis Wilson
-Justin Peters,E-40971,2026-05-29,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,4.0,0.0,44.0,Joel Wood
-Lisa Snyder,E-68475,2026-02-06,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,2.0,0.0,42.0,Jerry Vega
-Jody Fox,E-09348,2026-05-29,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,4.0,8.0,44.0,Michael Edwards
-Richard Butler,E-28327,2026-01-23,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,6.0,16.0,46.0,Melissa Wells
-Lawrence Miller,E-67919,2026-03-27,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Edward Walker
-Tonya Rodgers,E-14372,2025-12-05,7025GMLQJC0000818,0002,Business Analyst,40.0,2.0,0.0,42.0,Jose Blair
-Jennifer Rasmussen,E-60212,2026-06-19,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,John Ayers
-Christine Hicks,E-00431,2026-07-03,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Jason Suarez
-Joseph Walton,E-25848,2025-11-28,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Candice Sullivan
-Molly Moses,E-84896,2026-05-08,7025GMLQJC0000818,0001,Business Analyst,40.0,6.0,0.0,46.0,Deborah Harrington
-Taylor Savage,E-32071,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Amanda Garza
-Sheila Green,E-76555,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Jonathan Smith
-Scott Rivera,E-18769,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Anna Williams
-Ivan Stewart,E-57950,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Amy Gomez
-Donald Madden,E-60227,2026-07-17,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Kenneth Hall
-Kristen Mckinney,E-81096,2026-04-24,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Michael Dunn
-Michael Austin,E-38804,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Sally Lopez
-David Martinez,E-72174,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Clinton Mcbride
-Lauren Gomez,E-13425,2025-11-28,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Christy Hall
-Justin Peters,E-40971,2026-01-16,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Joel Sanchez
-Lisa Snyder,E-68475,2026-05-08,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Joseph Lyons
-Jody Fox,E-09348,2026-05-29,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,0.0,16.0,40.0,Julie Hill
-Richard Butler,E-28327,2026-07-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Caroline Walker
-Lawrence Miller,E-67919,2025-12-26,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Zachary Jackson
-Tonya Rodgers,E-14372,2026-05-22,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Sierra House
-Jennifer Rasmussen,E-60212,2025-12-12,7025GMLQJC0000818,0002,Business Analyst,40.0,6.0,0.0,46.0,Michelle Thomas
-Christine Hicks,E-00431,2025-12-05,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Randy Robbins
-Joseph Walton,E-25848,2025-11-21,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,6.0,0.0,46.0,Donna Kane
-Molly Moses,E-84896,2026-04-17,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Justin Herman
-Taylor Savage,E-32071,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Melvin Watson
-Sheila Green,E-76555,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Sheila Johnson
-Scott Rivera,E-18769,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,William Haney
-Ivan Stewart,E-57950,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Audrey Hernandez
-Donald Madden,E-60227,2026-06-19,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Maria Taylor
-Kristen Mckinney,E-81096,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Amy Nguyen
-Michael Austin,E-38804,2026-05-15,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Alexandria Castro
-David Martinez,E-72174,2026-04-24,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Molly Perry
-Lauren Gomez,E-13425,2026-04-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Karen Clark
-Justin Peters,E-40971,2025-11-28,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Heather Powers
-Lisa Snyder,E-68475,2026-07-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Nicole Osborne
-Jody Fox,E-09348,2025-12-19,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Ronald Gibbs
-Richard Butler,E-28327,2026-01-30,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Elizabeth Davis
-Lawrence Miller,E-67919,2026-05-29,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Melissa Rodriguez
-Tonya Rodgers,E-14372,2026-06-12,7025GMLQJC0000818,0002,Business Analyst,40.0,6.0,0.0,46.0,Lori Hall
-Jennifer Rasmussen,E-60212,2026-01-23,7025GMLQJC0000818,0002,Business Analyst,24.0,0.0,16.0,40.0,William Scott
-Christine Hicks,E-00431,2025-12-05,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,4.0,0.0,44.0,Lee Russell
-Joseph Walton,E-25848,2026-07-24,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Marvin Martinez
-Molly Moses,E-84896,2026-05-22,7025GMLQJC0000818,0001,Business Analyst,40.0,2.0,0.0,42.0,Kenneth Goodman
-Taylor Savage,E-32071,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Angela Wilson
-Sheila Green,E-76555,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Casey Brown
-Scott Rivera,E-18769,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Devin Hardy
-Ivan Stewart,E-57950,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Justin Osborn
-Donald Madden,E-60227,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Brian Mason
-Kristen Mckinney,E-81096,2026-01-23,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Emily Wright
-Michael Austin,E-38804,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Gina Sanders
-David Martinez,E-72174,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Jennifer Butler
-Lauren Gomez,E-13425,2026-06-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Tiffany Archer
-Justin Peters,E-40971,2026-01-02,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Barry Douglas
-Lisa Snyder,E-68475,2026-06-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,John Bartlett Jr.
-Jody Fox,E-09348,2026-01-09,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,2.0,0.0,42.0,Regina Valencia
-Richard Butler,E-28327,2026-02-27,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Lauren Foster
-Lawrence Miller,E-67919,2026-04-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Daniel Brown MD
-Tonya Rodgers,E-14372,2026-04-03,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Rebecca Warren
-Jennifer Rasmussen,E-60212,2026-02-13,7025GMLQJC0000818,0002,Business Analyst,32.0,0.0,8.0,40.0,Angel Marshall
-Christine Hicks,E-00431,2025-12-19,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Brooke Perez MD
-Joseph Walton,E-25848,2026-03-20,7025GMLQJC0000818,0001,Senior Cyber SME,24.0,8.0,16.0,48.0,Lauren Olson
-Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Business Analyst,40.0,2.0,0.0,42.0,John Chase
-Taylor Savage,E-32071,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Sarah Daniel
-Sheila Green,E-76555,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Alyssa Lara
-Scott Rivera,E-18769,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Dr. Michael Pineda DVM
-Ivan Stewart,E-57950,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Courtney Hicks
-Donald Madden,E-60227,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Toni Mccoy
-Kristen Mckinney,E-81096,2025-12-19,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Martha Henderson
-Michael Austin,E-38804,2026-06-19,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,April Barker
-David Martinez,E-72174,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Laura Peters
-Lauren Gomez,E-13425,2026-07-24,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,2.0,16.0,42.0,Shannon Cole
-Justin Peters,E-40971,2026-03-20,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Mrs. Michelle Thompson DDS
-Lisa Snyder,E-68475,2026-03-27,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,David Graham
-Jody Fox,E-09348,2025-12-26,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Phillip Becker
-Richard Butler,E-28327,2026-03-13,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Rachel Willis
-Lawrence Miller,E-67919,2026-02-27,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Juan Sanchez
-Tonya Rodgers,E-14372,2026-03-06,7025GMLQJC0000818,0002,Business Analyst,32.0,0.0,8.0,40.0,Kelly Vazquez
-Jennifer Rasmussen,E-60212,2025-12-26,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Melissa Harvey
-Christine Hicks,E-00431,2025-12-12,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,4.0,0.0,44.0,Daniel Collins
-Joseph Walton,E-25848,2026-07-17,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Kathy Clark
-Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Mike Alvarado
-Taylor Savage,E-32071,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Wayne Mitchell
-Sheila Green,E-76555,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Nicholas Patterson MD
-Scott Rivera,E-18769,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Jessica Howell
-Ivan Stewart,E-57950,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Anthony Anderson
-Donald Madden,E-60227,2026-07-10,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Tammy Briggs
-Kristen Mckinney,E-81096,2025-12-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Erica Mejia
-Michael Austin,E-38804,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,David Smith
-David Martinez,E-72174,2026-07-03,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Elizabeth Lawson
-Lauren Gomez,E-13425,2026-02-20,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Cheryl Johnson
-Justin Peters,E-40971,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,John Collins
-Lisa Snyder,E-68475,2026-01-23,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Edward Aguilar
-Jody Fox,E-09348,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Wesley Andrews
-Richard Butler,E-28327,2026-03-20,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Samantha Walker
-Lawrence Miller,E-67919,2026-04-24,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Timothy Strickland
-Tonya Rodgers,E-14372,2026-01-30,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Elizabeth Richardson
-Jennifer Rasmussen,E-60212,2026-01-02,7025GMLQJC0000818,0002,Business Analyst,40.0,2.0,0.0,42.0,Andrew Harrison
-Christine Hicks,E-00431,2026-01-23,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Robert Smith
-Joseph Walton,E-25848,2025-12-05,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,0.0,8.0,40.0,Donald Duran
-Molly Moses,E-84896,2026-03-27,7025GMLQJC0000818,0001,Business Analyst,40.0,8.0,0.0,48.0,Michael Liu
-Taylor Savage,E-32071,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Robert Hawkins
-Sheila Green,E-76555,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Denise Clayton
-Scott Rivera,E-18769,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Ronald Armstrong
-Ivan Stewart,E-57950,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,6.0,8.0,46.0,Deborah Small
-Donald Madden,E-60227,2026-05-22,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Elizabeth Robbins
-Kristen Mckinney,E-81096,2026-02-06,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Kimberly Arnold
-Michael Austin,E-38804,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,4.0,16.0,44.0,Linda Carpenter
-David Martinez,E-72174,2026-01-30,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Christopher Irwin
-Lauren Gomez,E-13425,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,4.0,16.0,44.0,Theresa Perkins
-Justin Peters,E-40971,2025-11-28,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Jennifer Cline
-Lisa Snyder,E-68475,2025-11-21,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Paul Wells
-Jody Fox,E-09348,2026-07-17,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,6.0,16.0,46.0,Melissa Sandoval
-Richard Butler,E-28327,2026-06-05,7025GMLQJC0000818,0002,Program Manager (PMP),32.0,6.0,8.0,46.0,Anthony Alexander
-Lawrence Miller,E-67919,2026-06-05,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Russell Sanchez
-Tonya Rodgers,E-14372,2026-05-29,7025GMLQJC0000818,0002,Business Analyst,40.0,4.0,0.0,44.0,Rebecca Green
-Jennifer Rasmussen,E-60212,2026-01-02,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Jamie Maynard
-Christine Hicks,E-00431,2026-07-24,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Michelle Montgomery
-Joseph Walton,E-25848,2026-05-15,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Amanda Robinson
-Molly Moses,E-84896,2025-12-26,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Jessica Brown
-Taylor Savage,E-32071,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Renee Wallace
-Sheila Green,E-76555,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,4.0,16.0,44.0,Paul Williams
-Scott Rivera,E-18769,2026-07-03,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Kelly Mejia
-Ivan Stewart,E-57950,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,6.0,16.0,46.0,Stephen Davis
-Donald Madden,E-60227,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Mark Watts
-Kristen Mckinney,E-81096,2026-06-12,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Ricardo Green
-Michael Austin,E-38804,2026-04-17,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Jill Beck
-David Martinez,E-72174,2026-01-23,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Jeremy Peterson
-Lauren Gomez,E-13425,2026-03-13,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,2.0,16.0,42.0,Erica Reynolds
-Justin Peters,E-40971,2026-02-06,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,6.0,8.0,46.0,Fernando Bryant
-Lisa Snyder,E-68475,2026-06-05,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Angelica Davis
-Jody Fox,E-09348,2026-04-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Travis Anderson
-Richard Butler,E-28327,2026-03-06,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Rhonda Roberts
-Lawrence Miller,E-67919,2026-06-05,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Dr. Anita Owens
-Tonya Rodgers,E-14372,2026-05-29,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Dr. John James Jr.
-Jennifer Rasmussen,E-60212,2026-02-20,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Leah Mcclain
-Christine Hicks,E-00431,2026-05-29,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,2.0,0.0,42.0,Sarah Blake
-Joseph Walton,E-25848,2026-01-16,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,4.0,0.0,44.0,Brandon Moore
-Molly Moses,E-84896,2026-06-05,7025GMLQJC0000818,0001,Business Analyst,40.0,0.0,0.0,40.0,Dr. Christopher Moore
-Taylor Savage,E-32071,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,John Daniels
-Sheila Green,E-76555,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Martha Collins
-Scott Rivera,E-18769,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,6.0,16.0,46.0,Angela Sawyer
-Ivan Stewart,E-57950,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Victoria King
-Donald Madden,E-60227,2026-01-30,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Blake Torres
-Kristen Mckinney,E-81096,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Robert Barajas
-Michael Austin,E-38804,2025-12-26,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Ashley Vega
-David Martinez,E-72174,2026-01-16,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Paul Callahan
-Lauren Gomez,E-13425,2026-01-30,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,0.0,16.0,40.0,Joann Lozano
-Justin Peters,E-40971,2026-04-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,8.0,0.0,48.0,Collin Mitchell
-Lisa Snyder,E-68475,2026-02-20,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Jesse Gardner
-Jody Fox,E-09348,2026-02-27,7025GMLQJC0000818,0002,Software Engineer (Mid),24.0,0.0,16.0,40.0,Christina Riley
-Richard Butler,E-28327,2026-04-03,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Monica Wilson
-Lawrence Miller,E-67919,2026-04-17,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Laura Williams
-Tonya Rodgers,E-14372,2026-07-17,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Miranda Frey
-Jennifer Rasmussen,E-60212,2026-05-08,7025GMLQJC0000818,0002,Business Analyst,40.0,2.0,0.0,42.0,Brittany Weaver
-Christine Hicks,E-00431,2026-07-17,7025GMLQJC0000818,0001,Senior Cyber SME,32.0,0.0,8.0,40.0,Joshua Black
-Joseph Walton,E-25848,2026-03-20,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Christopher Rodriguez
-Molly Moses,E-84896,2026-04-17,7025GMLQJC0000818,0001,Business Analyst,32.0,0.0,8.0,40.0,Brian Jones
-Taylor Savage,E-32071,2025-11-21,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Brady Keith
-Sheila Green,E-76555,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),32.0,6.0,8.0,46.0,Laura Herman
-Scott Rivera,E-18769,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Tiffany Gonzalez
-Ivan Stewart,E-57950,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Tonya Taylor
-Donald Madden,E-60227,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,24.0,2.0,16.0,42.0,Mary Bell
-Kristen Mckinney,E-81096,2025-11-21,7025GMLQJC0000818,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Kristen Walker
-Michael Austin,E-38804,2026-06-05,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Catherine Davis
-David Martinez,E-72174,2026-04-10,7025GMLQJC0000818,0001,Senior Software Engineer,32.0,6.0,8.0,46.0,Carl Davis
-Lauren Gomez,E-13425,2026-07-24,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Kenneth Wright
-Justin Peters,E-40971,2026-01-16,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,6.0,0.0,46.0,Katherine Holder
-Lisa Snyder,E-68475,2026-05-29,7025GMLQJC0000818,0002,Software Engineer (Mid),32.0,0.0,8.0,40.0,Travis Ellis
-Jody Fox,E-09348,2025-12-05,7025GMLQJC0000818,0002,Software Engineer (Mid),40.0,0.0,0.0,40.0,Kayla Glenn
-Richard Butler,E-28327,2026-04-03,7025GMLQJC0000818,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Michael Perry
-Lawrence Miller,E-67919,2026-03-13,7025GMLQJC0000818,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Whitney Hardy
-Tonya Rodgers,E-14372,2026-04-24,7025GMLQJC0000818,0002,Business Analyst,40.0,0.0,0.0,40.0,Craig Ross
-Jennifer Rasmussen,E-60212,2026-01-16,7025GMLQJC0000818,0002,Business Analyst,40.0,8.0,0.0,48.0,Nichole Glenn
-Christine Hicks,E-00431,2026-03-20,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,0.0,0.0,40.0,Michael Ryan
-Joseph Walton,E-25848,2026-01-16,7025GMLQJC0000818,0001,Senior Cyber SME,40.0,8.0,0.0,48.0,Amanda Russell
-Molly Moses,E-84896,2026-04-10,7025GMLQJC0000818,0001,Business Analyst,32.0,4.0,8.0,44.0,Jennifer Fuentes
-Taylor Savage,E-32071,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),24.0,6.0,16.0,46.0,Christopher Burnett
+employee,employee_id,week_ending,contract_no,charge_code,labor_category,reg_hours,ot_hours,holiday_hours,leave_hours,total_hours,paid_hours,approved_by
+Brent Harrison,E-79631,2025-11-28,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,8.0,0.0,27.0,35.0,Rachel Meyer
+Christine Hicks,E-00431,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Jennifer Shea
+Joseph Walton,E-25848,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,6.0,8.0,0.0,33.0,41.0,Charles Green
+Molly Moses,E-84896,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Garrett Adams
+Taylor Savage,E-32071,2025-11-28,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,6.0,8.0,0.0,33.0,41.0,Gabriel Collins
+Brent Harrison,E-79631,2025-12-05,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Christina Jones
+Christine Hicks,E-00431,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Joshua Price
+Joseph Walton,E-25848,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Regina Perry
+Molly Moses,E-84896,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Nicholas Campos
+Taylor Savage,E-32071,2025-12-05,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Matthew Evans
+Brent Harrison,E-79631,2025-12-12,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Sandra Conner
+Christine Hicks,E-00431,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Crystal Gardner
+Joseph Walton,E-25848,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Rebecca Myers
+Molly Moses,E-84896,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Mark Garcia
+Taylor Savage,E-32071,2025-12-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Adriana Gibson
+Brent Harrison,E-79631,2025-12-19,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Bryan Castillo
+Christine Hicks,E-00431,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Jackie Kemp
+Joseph Walton,E-25848,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Stephanie Sanchez
+Molly Moses,E-84896,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,James Wilson
+Taylor Savage,E-32071,2025-12-19,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Deborah Anderson
+Brent Harrison,E-79631,2025-12-26,7025GMLQJC0000818,0001,Senior Software Engineer,19.0,8.0,8.0,8.0,27.0,43.0,Jamie Moss
+Christine Hicks,E-00431,2025-12-26,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,0.0,8.0,8.0,19.0,35.0,Eric Byrd
+Joseph Walton,E-25848,2025-12-26,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,0.0,8.0,8.0,19.0,35.0,Daniel Mcdaniel
+Molly Moses,E-84896,2025-12-26,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,0.0,8.0,8.0,19.0,35.0,Ashley Jones
+Taylor Savage,E-32071,2025-12-26,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Mary Smith
+Brent Harrison,E-79631,2026-01-02,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,8.0,8.0,0.0,35.0,43.0,Donald Miller
+Christine Hicks,E-00431,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Dustin Owens
+Joseph Walton,E-25848,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Manuel Koch
+Molly Moses,E-84896,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,8.0,8.0,8.0,27.0,43.0,Andrea Wong
+Taylor Savage,E-32071,2026-01-02,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Alexa Cruz
+Brent Harrison,E-79631,2026-01-09,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,0.0,8.0,27.0,35.0,Tiffany Hickman
+Christine Hicks,E-00431,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Leah Mullen
+Joseph Walton,E-25848,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,6.0,0.0,0.0,41.0,41.0,Jordan Brown
+Molly Moses,E-84896,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Martha Clark
+Taylor Savage,E-32071,2026-01-09,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Joseph Walton
+Brent Harrison,E-79631,2026-01-16,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,6.0,0.0,0.0,41.0,41.0,Frank Hunt
+Christine Hicks,E-00431,2026-01-16,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Stephen Hardy
+Joseph Walton,E-25848,2026-01-16,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Margaret Maldonado
+Molly Moses,E-84896,2026-01-16,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Jonathan Patterson
+Taylor Savage,E-32071,2026-01-16,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Antonio Atkinson
+Brent Harrison,E-79631,2026-01-23,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,8.0,8.0,0.0,35.0,43.0,Jimmy Conrad
+Christine Hicks,E-00431,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Sheila Green
+Joseph Walton,E-25848,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,James Nguyen
+Molly Moses,E-84896,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Jeremy Wilkinson
+Taylor Savage,E-32071,2026-01-23,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,6.0,8.0,0.0,33.0,41.0,Anna Contreras
+Brent Harrison,E-79631,2026-01-30,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,6.0,0.0,0.0,41.0,41.0,Jennifer Williams
+Christine Hicks,E-00431,2026-01-30,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,6.0,0.0,0.0,41.0,41.0,Evan Richardson
+Joseph Walton,E-25848,2026-01-30,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Holly Phillips
+Molly Moses,E-84896,2026-01-30,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,William Myers
+Taylor Savage,E-32071,2026-01-30,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Carol Beck
+Brent Harrison,E-79631,2026-02-06,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Michelle Robertson
+Christine Hicks,E-00431,2026-02-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Laurie Williams
+Joseph Walton,E-25848,2026-02-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Lisa Sanchez
+Molly Moses,E-84896,2026-02-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Sara Ramirez
+Taylor Savage,E-32071,2026-02-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Dylan Lawrence
+Brent Harrison,E-79631,2026-02-13,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Benjamin Cole
+Christine Hicks,E-00431,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Lauren Gomez
+Joseph Walton,E-25848,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Megan Green
+Molly Moses,E-84896,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Timothy Walker
+Taylor Savage,E-32071,2026-02-13,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Eric Aguilar
+Brent Harrison,E-79631,2026-02-20,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,8.0,0.0,27.0,35.0,Becky Lee
+Christine Hicks,E-00431,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Cameron Meyer
+Joseph Walton,E-25848,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,0.0,8.0,8.0,19.0,35.0,Tony Chavez MD
+Molly Moses,E-84896,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Darin Parker
+Taylor Savage,E-32071,2026-02-20,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,6.0,8.0,0.0,33.0,41.0,Richard Butler
+Brent Harrison,E-79631,2026-02-27,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,0.0,8.0,27.0,35.0,Joseph Moore
+Christine Hicks,E-00431,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,6.0,0.0,0.0,41.0,41.0,Lawrence Miller
+Joseph Walton,E-25848,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Jessica Brown
+Molly Moses,E-84896,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Tonya Rodgers
+Taylor Savage,E-32071,2026-02-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Teresa Nelson
+Brent Harrison,E-79631,2026-03-06,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Dr. James Rasmussen
+Christine Hicks,E-00431,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Alex Davis
+Joseph Walton,E-25848,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Albert Bishop
+Molly Moses,E-84896,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Tasha Hatfield MD
+Taylor Savage,E-32071,2026-03-06,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Benjamin Galvan
+Brent Harrison,E-79631,2026-03-13,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,8.0,0.0,0.0,43.0,43.0,Benjamin Contreras
+Christine Hicks,E-00431,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Kimberly Brown
+Joseph Walton,E-25848,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Robert Barker
+Molly Moses,E-84896,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,William Campbell
+Taylor Savage,E-32071,2026-03-13,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Vincent Brown
+Brent Harrison,E-79631,2026-03-20,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,8.0,0.0,0.0,43.0,43.0,Christopher Bowman
+Christine Hicks,E-00431,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,David Burton Jr.
+Joseph Walton,E-25848,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Dr. Christine Carlson
+Molly Moses,E-84896,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Kenneth Edwards
+Taylor Savage,E-32071,2026-03-20,7025GMLQJC0000818,0001,Software Engineer (Mid),11.0,0.0,0.0,24.0,11.0,35.0,John Jones
+Brent Harrison,E-79631,2026-03-27,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Rachel Perez DDS
+Christine Hicks,E-00431,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Christopher Reyes
+Joseph Walton,E-25848,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,8.0,0.0,8.0,35.0,43.0,Andrea Mayer
+Molly Moses,E-84896,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Christopher Freeman
+Taylor Savage,E-32071,2026-03-27,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Jennifer Herrera
+Brent Harrison,E-79631,2026-04-03,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Ms. Hannah Lopez
+Christine Hicks,E-00431,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Lynn Vargas
+Joseph Walton,E-25848,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Adam Sheppard
+Molly Moses,E-84896,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,8.0,0.0,8.0,35.0,43.0,Sarah Skinner
+Taylor Savage,E-32071,2026-04-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Cody Stuart
+Brent Harrison,E-79631,2026-04-10,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Andrea Soto
+Christine Hicks,E-00431,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Allison Carroll
+Joseph Walton,E-25848,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Jill Scott
+Molly Moses,E-84896,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Megan Ramirez
+Taylor Savage,E-32071,2026-04-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Susan Hughes
+Brent Harrison,E-79631,2026-04-17,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,8.0,0.0,0.0,43.0,43.0,Anna Anderson
+Christine Hicks,E-00431,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Tina Velazquez
+Joseph Walton,E-25848,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Michael Long
+Molly Moses,E-84896,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Steven Davis
+Taylor Savage,E-32071,2026-04-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Gregory Thomas
+Brent Harrison,E-79631,2026-04-24,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Mark Robertson
+Christine Hicks,E-00431,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Karen Thomas
+Joseph Walton,E-25848,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Allison Keller
+Molly Moses,E-84896,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,John Gonzales
+Taylor Savage,E-32071,2026-04-24,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,6.0,0.0,8.0,33.0,41.0,Bethany Campbell
+Brent Harrison,E-79631,2026-05-01,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Joseph Hughes
+Christine Hicks,E-00431,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Dr. Terri Caldwell
+Joseph Walton,E-25848,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Krista Harris
+Molly Moses,E-84896,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Collin Saunders
+Taylor Savage,E-32071,2026-05-01,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Amanda Carter
+Brent Harrison,E-79631,2026-05-08,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,4.0,0.0,8.0,31.0,39.0,Joseph Peterson
+Christine Hicks,E-00431,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Mr. Jamie Gibson
+Joseph Walton,E-25848,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Andrea Chang
+Molly Moses,E-84896,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Rebecca Moore
+Taylor Savage,E-32071,2026-05-08,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Terry Benjamin
+Brent Harrison,E-79631,2026-05-15,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,James Rogers
+Christine Hicks,E-00431,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,4.0,0.0,8.0,31.0,39.0,Travis Shaw
+Joseph Walton,E-25848,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Steven Reid
+Molly Moses,E-84896,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Marie Ramos
+Taylor Savage,E-32071,2026-05-15,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Jonathan Boyd
+Brent Harrison,E-79631,2026-05-22,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,4.0,0.0,0.0,39.0,39.0,Sarah Diaz
+Christine Hicks,E-00431,2026-05-22,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Samantha Herring
+Joseph Walton,E-25848,2026-05-22,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Deborah Holloway
+Molly Moses,E-84896,2026-05-22,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Emily Tran
+Taylor Savage,E-32071,2026-05-22,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Rhonda Sanchez
+Brent Harrison,E-79631,2026-05-29,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,8.0,0.0,27.0,35.0,Matthew Jackson DDS
+Christine Hicks,E-00431,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Lauren Sosa
+Joseph Walton,E-25848,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Douglas Bonilla
+Molly Moses,E-84896,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Abigail Hamilton
+Taylor Savage,E-32071,2026-05-29,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Ronald Kaufman
+Brent Harrison,E-79631,2026-06-05,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Michael Foley
+Christine Hicks,E-00431,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Jeremy Johnson
+Joseph Walton,E-25848,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Kevin Erickson
+Molly Moses,E-84896,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),11.0,0.0,0.0,24.0,11.0,35.0,Matthew Spencer
+Taylor Savage,E-32071,2026-06-05,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Jonathan Solis
+Brent Harrison,E-79631,2026-06-12,7025GMLQJC0000818,0001,Senior Software Engineer,0.0,0.0,0.0,35.0,0.0,35.0,Jennifer Mcguire
+Christine Hicks,E-00431,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,John Perez
+Joseph Walton,E-25848,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Mr. Ryan Wood MD
+Molly Moses,E-84896,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Melissa Gibson
+Taylor Savage,E-32071,2026-06-12,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Linda Valencia
+Brent Harrison,E-79631,2026-06-19,7025GMLQJC0000818,0001,Senior Software Engineer,0.0,0.0,8.0,27.0,0.0,35.0,Richard Meza
+Christine Hicks,E-00431,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Philip Dickson
+Joseph Walton,E-25848,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,2.0,8.0,8.0,21.0,37.0,Nicole Rodriguez
+Molly Moses,E-84896,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,8.0,8.0,8.0,27.0,43.0,Rodney Carrillo
+Taylor Savage,E-32071,2026-06-19,7025GMLQJC0000818,0001,Software Engineer (Mid),19.0,6.0,8.0,8.0,25.0,41.0,Ricky Thomas
+Brent Harrison,E-79631,2026-06-26,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Tara Schmidt
+Christine Hicks,E-00431,2026-06-26,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Philip Camacho
+Joseph Walton,E-25848,2026-06-26,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,John Banks
+Molly Moses,E-84896,2026-06-26,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Alexis Lara
+Taylor Savage,E-32071,2026-06-26,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Samantha Anderson
+Brent Harrison,E-79631,2026-07-03,7025GMLQJC0000818,0001,Senior Software Engineer,27.0,0.0,8.0,0.0,27.0,35.0,Mario Hurst
+Christine Hicks,E-00431,2026-07-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,4.0,8.0,0.0,31.0,39.0,Todd Moreno
+Joseph Walton,E-25848,2026-07-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Vanessa Miller
+Molly Moses,E-84896,2026-07-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Ethan Ferguson
+Taylor Savage,E-32071,2026-07-03,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,8.0,0.0,27.0,35.0,Linda Reed
+Brent Harrison,E-79631,2026-07-10,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Jeffrey Braun
+Christine Hicks,E-00431,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),0.0,0.0,0.0,35.0,0.0,35.0,Christopher Ryan
+Joseph Walton,E-25848,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,6.0,0.0,0.0,41.0,41.0,Robert Woods
+Molly Moses,E-84896,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,6.0,0.0,0.0,41.0,41.0,John Graves
+Taylor Savage,E-32071,2026-07-10,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Courtney Case
+Brent Harrison,E-79631,2026-07-17,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Alexander Sanchez
+Christine Hicks,E-00431,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),0.0,0.0,0.0,35.0,0.0,35.0,Kelly Sandoval
+Joseph Walton,E-25848,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Ian Gonzales
+Molly Moses,E-84896,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Kristopher Edwards
+Taylor Savage,E-32071,2026-07-17,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Peggy Lopez
+Brent Harrison,E-79631,2026-07-24,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,Barbara Frost
+Christine Hicks,E-00431,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,2.0,0.0,0.0,37.0,37.0,Ronnie Fox
+Joseph Walton,E-25848,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),11.0,0.0,0.0,24.0,11.0,35.0,Hunter Elliott
+Molly Moses,E-84896,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Barbara Mendoza
+Taylor Savage,E-32071,2026-07-24,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Dr. Christopher Lee
+Brent Harrison,E-79631,2026-07-31,7025GMLQJC0000818,0001,Senior Software Engineer,35.0,0.0,0.0,0.0,35.0,35.0,James Butler
+Christine Hicks,E-00431,2026-07-31,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,4.0,0.0,0.0,39.0,39.0,Brandon Bradshaw
+Joseph Walton,E-25848,2026-07-31,7025GMLQJC0000818,0001,Software Engineer (Mid),27.0,0.0,0.0,8.0,27.0,35.0,Michael Robinson
+Molly Moses,E-84896,2026-07-31,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,8.0,0.0,0.0,43.0,43.0,Mr. Jonathan Garcia
+Taylor Savage,E-32071,2026-07-31,7025GMLQJC0000818,0001,Software Engineer (Mid),35.0,0.0,0.0,0.0,35.0,35.0,Brandon Padilla

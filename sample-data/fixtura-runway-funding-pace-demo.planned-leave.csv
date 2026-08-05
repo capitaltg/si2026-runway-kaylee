@@ -1,0 +1,7 @@
+employee,employee_id,labor_category,contract_no,charge_code,week_ending,leave_hours,leave_type,status
+Brent Harrison,E-79631,Senior Software Engineer,7025GMLQJC0000818,0001,2026-08-14,32.0,Vacation,Approved
+Molly Moses,E-84896,Software Engineer (Mid),7025GMLQJC0000818,0001,2026-08-14,24.0,Vacation,Requested
+Christine Hicks,E-00431,Software Engineer (Mid),7025GMLQJC0000818,0001,2026-10-16,24.0,Vacation,Approved
+Taylor Savage,E-32071,Software Engineer (Mid),7025GMLQJC0000818,0001,2026-12-25,40.0,Personal,Approved
+Joseph Walton,E-25848,Software Engineer (Mid),7025GMLQJC0000818,0001,2027-01-15,24.0,Vacation,Approved
+Joseph Walton,E-25848,Software Engineer (Mid),7025GMLQJC0000818,0001,2027-01-22,24.0,Vacation,Approved

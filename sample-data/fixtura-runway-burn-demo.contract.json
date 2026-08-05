@@ -1,186 +1,283 @@
 {
-  "piid": "7026HEXDVC0001043",
-  "solicitation_no": "701928R",
-  "effective_date": "2026-03-06",
-  "solicitation_issue_date": "2025-12-14",
-  "offer_due_date": "2026-02-16",
-  "naics_code": "541330",
-  "naics_title": "Engineering Services",
-  "size_standard": "$25.5M",
-  "set_aside": "Unrestricted",
-  "discount_terms": "1% 10, Net 30",
-  "agency": "Department of Homeland Security",
-  "issuing_office": "DHS OPO",
-  "issuing_office_code": "K1VRJN",
-  "admin_office_code": "VGFYGW",
-  "payment": {
-    "paying_office": "Defense Finance and Accounting Service (DFAS)",
-    "voucher_no": "PV-55940781",
-    "check_no": "6184959310",
-    "sr_account_no": "SR-3413-16475",
-    "disbursing_officer": "Henry Santiago"
-  },
-  "contractor": {
-    "name": "Mcclain, Miller and Henderson",
-    "uei": "TRQJGF3CBFPQ",
-    "cage": "6B9M8",
-    "address": "89083 Robinson Radial, Lisatown, WV 21427",
-    "phone": "(654) 235-1161"
-  },
-  "contracting_officer": "Carla Gray",
-  "co_phone": "(835) 030-5641",
-  "gov_representative": "Tommy Walter",
-  "gov_rep_address": "7242 Julie Plain Suite 969, Coxberg, NY 65187",
-  "gov_rep_phone": "(101) 226-9166",
-  "signer_title": "Contracts Manager",
-  "acceptance_date": "2026-04-12",
-  "contract_type": "T&M",
-  "total_ceiling": 8701569.6,
-  "total_obligated": 5608002.71,
-  "unfunded_balance": 3093566.89,
-  "obligation_history": [
+ "piid": "7026HEXDVC0001043",
+ "solicitation_no": "701928R",
+ "effective_date": "2026-01-21",
+ "solicitation_issue_date": "2025-11-20",
+ "offer_due_date": "2026-01-07",
+ "naics_code": "541712",
+ "naics_title": "Research and Development in the Physical, Engineering and Life Sciences",
+ "size_standard": "1,000 employees",
+ "set_aside": "Small Business",
+ "discount_terms": "Net 30",
+ "agency": "Department of Homeland Security",
+ "issuing_office": "DHS OPO",
+ "issuing_office_code": "FYGWWQ",
+ "admin_office_code": "C38HYF",
+ "payment": {
+  "paying_office": "Defense Finance and Accounting Service (DFAS)",
+  "voucher_no": "PV-55940781",
+  "check_no": "6184959310",
+  "sr_account_no": "SR-3413-16475",
+  "disbursing_officer": "Henry Santiago"
+ },
+ "contractor": {
+  "name": "Mcclain, Miller and Henderson",
+  "uei": "RQJGF3CBFPQ8",
+  "cage": "B9M80",
+  "address": "89083 Robinson Radial, Lisatown, WV 21427",
+  "phone": "(654) 235-1161",
+  "indirect_rates": {
+   "fringe": 0.2831,
+   "overhead": 0.4768,
+   "g_and_a": 0.1609,
+   "profit": 0.0703,
+   "variance": 0.0,
+   "wrap_rate": 2.199769
+  }
+ },
+ "contracting_officer": "Carla Gray",
+ "co_phone": "(835) 030-5641",
+ "gov_representative": "Tommy Walter",
+ "gov_rep_address": "7242 Julie Plain Suite 969, Coxberg, NY 65187",
+ "gov_rep_phone": "(101) 226-9166",
+ "signer_title": "COO",
+ "acceptance_date": "2026-03-30",
+ "contract_type": "T&M",
+ "pricing": {
+  "type": "T&M",
+  "label": "Time-and-Materials",
+  "far": "16.601",
+  "order_pricing": "T&M",
+  "priced_as": "T&M",
+  "cost_elements": [
+   "ceiling_price",
+   "loaded_labor",
+   "reimbursable_materials"
+  ],
+  "fee_element": null,
+  "fee_rate": 0.0,
+  "fixed_price": false,
+  "cost_reimbursement": false,
+  "dod": false,
+  "fee_clauses": [],
+  "fee_clause_text": [],
+  "fully_funded": false,
+  "funding_clause": "FAR 52.232-22, Limitation of Funds",
+  "funding_clause_cite": "FAR 52.232-22",
+  "funding_clause_title": "Limitation of Funds",
+  "ceiling_clause": "FAR 52.232-7, Payments under Time-and-Materials and Labor-Hour Contracts",
+  "ceiling_clause_cite": "FAR 52.232-7"
+ },
+ "fully_funded": false,
+ "total_ceiling": 4677562.4,
+ "total_obligated": 2925000.0,
+ "unfunded_balance": 1752562.4,
+ "obligation_history": [
+  {
+   "mod": "Award",
+   "date": "2026-01-21",
+   "action": "Initial award / base-period funding",
+   "amount": 800000.0,
+   "cumulative_obligated": 800000.0,
+   "funding_lines": [
     {
-      "mod": "Award",
-      "date": "2026-03-06",
-      "action": "Initial award / base-period funding",
-      "amount": 2439000.0,
-      "cumulative_obligated": 2439000.0
+     "clin": "0001",
+     "acrn": "AA",
+     "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
+     "amount": 800000.0
+    }
+   ]
+  },
+  {
+   "mod": "P00001",
+   "date": "2026-03-27",
+   "action": "Incremental funding (FAR 52.232-22)",
+   "amount": 950000.0,
+   "cumulative_obligated": 1750000.0,
+   "funding_lines": [
+    {
+     "clin": "0001",
+     "acrn": "AA",
+     "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
+     "amount": 950000.0
+    }
+   ]
+  },
+  {
+   "mod": "P00002",
+   "date": "2026-05-31",
+   "action": "Incremental funding (FAR 52.232-22)",
+   "amount": 1175000.0,
+   "cumulative_obligated": 2925000.0,
+   "funding_lines": [
+    {
+     "clin": "0001",
+     "acrn": "AA",
+     "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
+     "amount": 1050000.0
     },
     {
-      "mod": "P00001",
-      "date": "2026-07-24",
-      "action": "Incremental funding (FAR 52.232-22)",
-      "amount": 1477000.0,
-      "cumulative_obligated": 3916000.0
+     "clin": "0002",
+     "acrn": "AB",
+     "loa": "57 2626 2035 5Z3J 255 25X 146413 2D P98Q1Z",
+     "amount": 90000.0
     },
     {
-      "mod": "P00002",
-      "date": "2026-07-24",
-      "action": "Incremental funding (FAR 52.232-22)",
-      "amount": 1692002.71,
-      "cumulative_obligated": 5608002.71
+     "clin": "0003",
+     "acrn": "AC",
+     "loa": "17 2626 4930 5FDH 252 25X 657924 2D K1EYY3",
+     "amount": 35000.0
     }
-  ],
-  "periods": [
+   ]
+  }
+ ],
+ "periods": [
+  {
+   "name": "Base Year",
+   "pop_start": "2026-01-21",
+   "pop_end": "2027-01-20",
+   "exercised": true,
+   "ceiling": 4677562.4,
+   "clins": [
     {
-      "name": "Base Year",
-      "pop_start": "2026-03-06",
-      "pop_end": "2027-03-05",
-      "exercised": true,
-      "ceiling": 8701569.6,
-      "clins": [
-        {
-          "clin": "0001",
-          "period_index": 0,
-          "title": "Professional Services - Operations & Maintenance",
-          "type": "T&M",
-          "is_labor": true,
-          "ceiling": 3491404.8,
-          "est_hours": 16640,
-          "labor_rates": [
-            {
-              "lcat": "Senior Software Engineer",
-              "clearance": "TS/SCI",
-              "min_education": "Bachelor's",
-              "min_experience_yrs": 8,
-              "base_salary": 202661,
-              "wrap_rate": 2.24,
-              "loaded_rate": 242.04,
-              "est_hours": 10400,
-              "amount": 2517216.0
-            },
-            {
-              "lcat": "Software Engineer (Mid)",
-              "clearance": "Secret",
-              "min_education": "Bachelor's",
-              "min_experience_yrs": 5,
-              "base_salary": 141186,
-              "wrap_rate": 2.13,
-              "loaded_rate": 156.12,
-              "est_hours": 6240,
-              "amount": 974188.8
-            }
-          ]
-        },
-        {
-          "clin": "0002",
-          "period_index": 0,
-          "title": "Professional Services - Cybersecurity Support",
-          "type": "T&M",
-          "is_labor": true,
-          "ceiling": 4642164.8,
-          "est_hours": 33280,
-          "labor_rates": [
-            {
-              "lcat": "Business Analyst",
-              "clearance": "Secret",
-              "min_education": "Bachelor's",
-              "min_experience_yrs": 3,
-              "base_salary": 125388,
-              "wrap_rate": 2.3,
-              "loaded_rate": 150.59,
-              "est_hours": 4160,
-              "amount": 626454.4
-            },
-            {
-              "lcat": "Senior Software Engineer",
-              "clearance": "TS/SCI",
-              "min_education": "Bachelor's",
-              "min_experience_yrs": 8,
-              "base_salary": 156400,
-              "wrap_rate": 2.39,
-              "loaded_rate": 204.24,
-              "est_hours": 6240,
-              "amount": 1274457.6
-            },
-            {
-              "lcat": "Administrative Support",
-              "clearance": "None",
-              "min_education": "HS Diploma",
-              "min_experience_yrs": 1,
-              "base_salary": 55929,
-              "wrap_rate": 2.07,
-              "loaded_rate": 55.66,
-              "est_hours": 12480,
-              "amount": 694636.8
-            },
-            {
-              "lcat": "Program Manager (PMP)",
-              "clearance": "Secret",
-              "min_education": "Bachelor's",
-              "min_experience_yrs": 8,
-              "base_salary": 182687,
-              "wrap_rate": 2.12,
-              "loaded_rate": 196.79,
-              "est_hours": 10400,
-              "amount": 2046616.0
-            }
-          ]
-        },
-        {
-          "clin": "0003",
-          "period_index": 0,
-          "title": "Travel (Cost-Reimbursable, No Fee)",
-          "type": "COST",
-          "is_labor": false,
-          "ceiling": 336000.0,
-          "labor_rates": []
-        },
-        {
-          "clin": "0004",
-          "period_index": 0,
-          "title": "Other Direct Costs / Materials (Cost, No Fee)",
-          "type": "COST",
-          "is_labor": false,
-          "ceiling": 232000.0,
-          "labor_rates": []
-        }
-      ]
+     "clin": "0001",
+     "period_index": 0,
+     "title": "Professional Services (Labor)",
+     "type": "T&M",
+     "is_labor": true,
+     "ceiling": 4314562.4,
+     "est_hours": 20680,
+     "labor_rates": [
+      {
+       "lcat": "Program Manager (PMP)",
+       "clearance": "Secret",
+       "min_education": "Bachelor's",
+       "min_experience_yrs": 8,
+       "base_salary": 162053,
+       "direct_hours_per_year": 1880,
+       "direct_rate": 77.91,
+       "wrap_rate": 2.2,
+       "loaded_rate": 183.43,
+       "derived_loaded_rate": 183.43,
+       "est_hours": 3760,
+       "direct_amount": 292941.6,
+       "amount": 689696.8
+      },
+      {
+       "lcat": "Systems Engineer",
+       "clearance": "Secret",
+       "min_education": "Bachelor's",
+       "min_experience_yrs": 3,
+       "base_salary": 123053,
+       "direct_hours_per_year": 1880,
+       "direct_rate": 59.16,
+       "wrap_rate": 2.2,
+       "loaded_rate": 139.29,
+       "derived_loaded_rate": 139.29,
+       "est_hours": 3760,
+       "direct_amount": 222441.6,
+       "amount": 523730.4
+      },
+      {
+       "lcat": "Senior Cyber SME",
+       "clearance": "TS/SCI",
+       "min_education": "Master's",
+       "min_experience_yrs": 10,
+       "base_salary": 268819,
+       "direct_hours_per_year": 1880,
+       "direct_rate": 129.24,
+       "wrap_rate": 2.2,
+       "loaded_rate": 304.28,
+       "derived_loaded_rate": 304.28,
+       "est_hours": 7520,
+       "direct_amount": 971884.8,
+       "amount": 2288185.6
+      },
+      {
+       "lcat": "Business Analyst",
+       "clearance": "Secret",
+       "min_education": "Bachelor's",
+       "min_experience_yrs": 3,
+       "base_salary": 127338,
+       "direct_hours_per_year": 1880,
+       "direct_rate": 61.22,
+       "wrap_rate": 2.2,
+       "loaded_rate": 144.14,
+       "derived_loaded_rate": 144.14,
+       "est_hours": 5640,
+       "direct_amount": 345280.8,
+       "amount": 812949.6
+      }
+     ],
+     "ceiling_price": 4314562.4,
+     "profit_in_rates": true,
+     "direct_labor": 1832548.8,
+     "cost_buildup": [
+      {
+       "key": "fringe",
+       "label": "Fringe Benefits",
+       "base_label": "Direct Labor",
+       "rate": 0.2831,
+       "amount": 518794.57000000007,
+       "subtotal": 2351343.37
+      },
+      {
+       "key": "overhead",
+       "label": "Overhead",
+       "base_label": "Direct Labor + Fringe",
+       "rate": 0.4768,
+       "amount": 1121120.5099999998,
+       "subtotal": 3472463.88
+      },
+      {
+       "key": "g_and_a",
+       "label": "G&A",
+       "base_label": "Total Cost Input",
+       "rate": 0.1609,
+       "amount": 558707.19,
+       "subtotal": 4031171.07
+      }
+     ],
+     "total_cost_input": 4031171.07,
+     "funded": 2800000.0,
+     "acrn": "AA",
+     "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
+     "funded_at_award": 800000.0
+    },
+    {
+     "clin": "0002",
+     "period_index": 0,
+     "title": "Travel (Cost-Reimbursable, No Fee)",
+     "type": "COST",
+     "is_labor": false,
+     "ceiling": 202000.0,
+     "cost_element": "travel",
+     "labor_rates": [],
+     "funded": 90000.0,
+     "acrn": "AB",
+     "loa": "57 2626 2035 5Z3J 255 25X 146413 2D P98Q1Z",
+     "funded_at_award": 0.0
+    },
+    {
+     "clin": "0003",
+     "period_index": 0,
+     "title": "Other Direct Costs / Materials (Cost, No Fee)",
+     "type": "COST",
+     "is_labor": false,
+     "ceiling": 161000.0,
+     "cost_element": "reimbursable_materials",
+     "labor_rates": [],
+     "funded": 35000.0,
+     "acrn": "AC",
+     "loa": "17 2626 4930 5FDH 252 25X 657924 2D K1EYY3",
+     "funded_at_award": 0.0
     }
-  ],
-  "cdrls": [
-    "A001 - Monthly Status Report",
-    "A002 - Monthly Financial / Burn Report",
-    "A003 - Quarterly Progress Review"
-  ]
+   ]
+  }
+ ],
+ "cdrls": [
+  "A001 - Monthly Status Report",
+  "A002 - Monthly Financial / Burn Report",
+  "A003 - Quarterly Progress Review"
+ ]
 }
