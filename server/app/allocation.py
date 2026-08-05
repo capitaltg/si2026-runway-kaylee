@@ -122,7 +122,10 @@ def compute_allocation(
             emp = r.get("employee_id")
             if not emp:
                 continue
-            h = float(r.get("total_hours") or 0)
+            # Billable only (#85) — the matrix's starting hrs/wk has to reconcile
+            # with what burn.py priced, and a week with PTO in it billed fewer
+            # hours than it paid.
+            h = burn.billable_hours(r)
             hrs_by_emp[emp] = hrs_by_emp.get(emp, 0.0) + h
             lc = (r.get("labor_category") or "").strip()
             lcat_hrs.setdefault(emp, {})[lc] = lcat_hrs.get(emp, {}).get(lc, 0.0) + h

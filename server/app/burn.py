@@ -69,6 +69,41 @@ _FUNDING_DUE_DAYS = 60
 _PACE_MIN_WEEKS = 4
 
 
+def billable_hours(row: dict) -> float:
+    """The hours on a timesheet row that may be charged to a CLIN (#85).
+
+    Leave and holidays are not direct charges. They are indirect costs recovered
+    through the fringe pool (FAR 31.205-6), and every loaded rate on a rate table
+    already carries that fringe. Pricing paid-but-not-worked hours against a CLIN
+    therefore bills the same cost twice and overstates burn by the leave share.
+
+    Three cases, and the ordering matters:
+
+    1. `reg_hours` present — the source sends the split, so regular + overtime IS
+       the billable figure and is used directly. This is the only authoritative case.
+    2. `reg_hours` absent but `leave_hours` present — a row synced before the split
+       existed, where `total_hours` was defined as reg + ot + leave. Back the leave
+       out. Absence of `reg_hours` is the version signal; there is no other one.
+    3. Neither present — nothing to subtract, so `total_hours` stands. A source that
+       reports no leave at all is taken at its word rather than guessed at.
+
+    Case 2 is not hypothetical: a `runway.db` that synced before this landed keeps
+    its cached rows, and `_add_missing_columns` leaves their new columns NULL. Those
+    rows stay slightly overstated (as they are today) until the next sync, instead of
+    silently reading 0 and zeroing the burn.
+    """
+    reg = row.get("reg_hours")
+    if reg is not None:
+        return float(reg) + float(row.get("ot_hours") or 0)
+    total = float(row.get("total_hours") or 0)
+    leave = row.get("leave_hours")
+    if leave is not None:
+        # Never below zero: a malformed row claiming more leave than total should
+        # contribute nothing, not a credit against the CLIN.
+        return max(0.0, total - float(leave))
+    return total
+
+
 def _d(s: Optional[str]) -> Optional[date]:
     try:
         return date.fromisoformat(s[:10]) if s else None
@@ -514,7 +549,7 @@ def _compute_clin(
     # a cost-measured pace, or `remaining / weekly` divides one quantity by another.
     weekly_cost = {}
     for r in clin_rows:
-        hours = float(r.get("total_hours") or 0)
+        hours = billable_hours(r)
         name = r.get("labor_category")
         res = resolve(name)
         label = (name or "").strip()
