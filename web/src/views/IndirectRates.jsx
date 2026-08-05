@@ -34,7 +34,7 @@ const LEVELS = [
   {
     n: 3,
     title: "Per-person direct rates",
-    body: "True cost-to-complete, per person. Opt-in, and it arrives with the people directory (#69) — the engine already prefers a person's own rate wherever one exists.",
+    body: "True cost-to-complete, per person. Not available yet (#96): the engine already prefers a person's own rate wherever one exists, so all it needs is a way to enter one here, against a name picked from your people directory. Level 2 below is a complete, supported state in the meantime.",
   },
 ];
 

@@ -294,8 +294,12 @@ class CostModel:
     # rate entered as "Sr. Cyber SME" answers for a timesheet's "Senior Cyber SME",
     # exactly as the billing side resolves (#64).
     lcat_direct: Dict[str, float] = field(default_factory=dict)
-    # employee_id -> direct $/hr (Level 3). Empty until #69 supplies a roster; the
-    # ladder already reads it, so that ticket adds no engine work.
+    # employee_id -> direct $/hr (Level 3). Empty until #96 gives these rows an entry
+    # point in the rates view; the ladder already reads them, so that ticket adds no
+    # engine work. Note it is #96 and deliberately NOT the people directory (#69):
+    # a direct rate is a fiscal-year-scoped pricing input that happens to be keyed
+    # per person, not a property of the person, and Runway does not keep
+    # compensation on a person's record.
     employee_direct: Dict[str, float] = field(default_factory=dict)
 
     @property
