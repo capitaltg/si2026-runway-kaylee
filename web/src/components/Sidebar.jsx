@@ -1,9 +1,9 @@
 import React from "react";
 
 // Global sidebar, built to match docs/design/Runway.dc.html (issue #3).
-// Two scopes: "All contracts" (Portfolio) and "Current contract" — the latter
+// Two scopes: app-wide (Portfolio, People) and "Current contract" — the latter
 // is a boxed card (name · number · health · Switch↗) whose bottom edge flows
-// straight into the four contract-scoped nav items, so they read as one unit.
+// straight into the contract-scoped nav items, so they read as one unit.
 
 const ICONS = {
   portfolio: (
@@ -49,9 +49,20 @@ const ICONS = {
       <path d="M8 13h8M8 17h5" strokeLinecap="round" />
     </svg>
   ),
+  people: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0111 0" strokeLinecap="round" />
+      <path d="M16 5.6a3.2 3.2 0 010 4.8M17.5 14.4A5.5 5.5 0 0120.5 19.4" strokeLinecap="round" opacity=".55" />
+    </svg>
+  ),
 };
 
+// The two app-wide scopes. People is global for the same reason Portfolio is: a
+// person's degree is not a fact about a contract, so it does not belong under
+// "Current contract" — and putting it here is the nav expressing that.
 const PORTFOLIO = { key: "portfolio", label: "Portfolio", sub: "All contracts" };
+const PEOPLE = { key: "people", label: "People", sub: "Directory & quals" };
 const CONTRACT_NAV = [
   { key: "flightdeck", label: "Flight Deck", sub: "Live burn & runway" },
   { key: "allocate", label: "Allocation Matrix", sub: "Staff → CLINs" },
@@ -176,9 +187,10 @@ export default function Sidebar({ view, setView, contract, hero }) {
         </div>
       </div>
 
-      {/* All contracts */}
+      {/* App-wide */}
       <div style={{ padding: "8px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
         {NavItem(PORTFOLIO)}
+        {NavItem(PEOPLE)}
       </div>
 
       <div style={{ margin: "16px 16px 11px", height: 1, background: "var(--border)" }} />

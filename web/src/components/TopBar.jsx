@@ -8,6 +8,8 @@ import React from "react";
 // and period-of-performance bar (only ever when a contract is actually loaded).
 const HEADERS = {
   portfolio: { main: "Portfolio", sub: "All active contracts", meta: false },
+  // App-wide, so no contract meta: a person's record is not scoped to an award.
+  people: { main: "People", sub: "Directory & qualifications", meta: false },
   flightdeck: { main: null, sub: "Flight Deck · Live burn & runway", meta: true },
   allocate: { main: "Allocation Matrix", sub: "Staff → CLINs", meta: true },
   expenses: { main: "Expenses", sub: "Non-labor CLINs", meta: true },

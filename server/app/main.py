@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import allocation, ask, burn, db, draft, extract, lcat, rates, sources
+from . import allocation, ask, burn, db, draft, extract, lcat, people, rates, sources
 from .schemas import Extraction, ExpenseIn
 
 # The bundled award the "Ingest sample with AI" button reads when no file is
@@ -634,50 +634,181 @@ def remove_plan(contract_id: int, plan_id: int):
     return {"deleted": plan_id}
 
 
+def _all_allocations() -> list:
+    """One allocation payload per contract. The expensive sweep — a burn pass each —
+    behind both portfolio utilisation and conflicts."""
+    return [
+        allocation.compute_allocation(
+            c, db.get_timesheets(c["id"]), db.list_expenses(c["id"])
+        )
+        for c in db.list_contracts()
+    ]
+
+
 @app.get("/api/allocation/conflicts")
 def allocation_conflicts():
     """Portfolio resource conflicts: people booked past a full 40-hr week once
     their hours are summed across every contract. Matches on employee_id, so it
     only surfaces real overlaps (e.g. a shared roster) — never double-counts one
-    person on one contract."""
-    people = {}
-    for c in db.list_contracts():
-        alloc = allocation.compute_allocation(
-            c, db.get_timesheets(c["id"]), db.list_expenses(c["id"])
-        )
-        cname = alloc["contract"]["name"]
-        for e in alloc["employees"]:
-            hrs = sum(cell["hours"] for cell in e.get("cells", {}).values())
-            if hrs <= 0:
-                continue
-            p = people.setdefault(
-                e["id"],
-                {
-                    "employee_id": e["id"],
-                    "name": e["name"],
-                    "total_hours": 0.0,
-                    "assignments": [],
-                },
-            )
-            p["total_hours"] += hrs
-            p["assignments"].append(
-                {
-                    "contract_id": alloc["contract"]["id"],
-                    "contract": cname,
-                    "hours": round(hrs, 1),
-                }
-            )
-    conflicts = [
-        {
-            **p,
-            "total_hours": round(p["total_hours"], 1),
-            "utilization": round(p["total_hours"] / 40, 2),
-        }
-        for p in people.values()
-        if len(p["assignments"]) >= 2 and p["total_hours"] > 40
-    ]
-    conflicts.sort(key=lambda p: -p["total_hours"])
+    person on one contract.
+
+    Now a filter over `people.utilization` (#69) rather than its own walk — it was
+    computing everyone's cross-contract hours and discarding all the non-conflicts.
+    Payload is unchanged.
+    """
+    rows = people.utilization(_all_allocations())["people"]
+    conflicts = people.conflicts(rows)
     return {"count": len(conflicts), "conflicts": conflicts}
+
+
+# --- People directory (#69) -------------------------------------------------
+
+
+class PersonIn(BaseModel):
+    """A person added by hand.
+
+    `employee_id` is optional but wanted: give Runway the real payroll id and this
+    person links up to their own timesheets automatically the first time a feed
+    carries them, instead of forking into a second profile. Left blank, Runway mints
+    a visibly provisional RW-#### id so not knowing it can't block the add.
+    """
+
+    name: str
+    employee_id: Optional[str] = None
+
+
+class QualsIn(BaseModel):
+    """One person's qualification assertions, as `{field: {value, source_note}}`.
+
+    Partial: only the fields present are touched. A blank value clears that field
+    back to `unknown`, which has to stay reachable or "optional" isn't true.
+    """
+
+    quals: dict
+    authored_by: Optional[str] = None
+
+
+class MergeIn(BaseModel):
+    """Fold a provisional hand-added person into a real employee id."""
+
+    into: str
+
+
+@app.get("/api/people")
+def people_directory():
+    """The app-wide people directory.
+
+    Populated on day one with no setup: identity and charging history are derived
+    live from the timesheet cache, so everyone who has ever charged is already here.
+    Quals are the only authored part and are always optional — `unknown` is a normal,
+    supported state, not a prompt to go find a file.
+
+    Carries no hours and no money. Utilisation needs a burn pass per contract, so it
+    lives at /api/people/utilization and the view asks for it only when wanted.
+    """
+    return people.build_directory(
+        facts=db.people_charging_facts(),
+        contracts=db.list_contracts(),
+        manual_people=db.list_manual_people(),
+        attr_rows=db.list_person_attrs(),
+        unidentified=db.unidentified_timesheet_rows(),
+    )
+
+
+@app.get("/api/people/utilization")
+def people_utilization():
+    """Everyone's hours summed across every contract they charge. On demand — this
+    is the costly half of the directory (a burn pass per contract)."""
+    return people.utilization(_all_allocations())
+
+
+@app.post("/api/people")
+def add_person(body: PersonIn):
+    """Add a person by hand — someone with no charges yet, e.g. a planned hire.
+
+    They are labelled `manual` and, per this feature's invariant, appear only as a
+    pickable candidate: a person with no timesheet hours on a contract never shows
+    up on that contract's allocation matrix.
+    """
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="A name is required.")
+    typed = (body.employee_id or "").strip()
+    if typed and typed in db.person_charged_ids():
+        raise HTTPException(
+            status_code=409,
+            detail=f"{typed} already charges time — they're already in the directory.",
+        )
+    row = db.add_manual_person(typed, name)
+    if row is None:
+        raise HTTPException(status_code=409, detail=f"{typed} is already in use.")
+    return row
+
+
+@app.put("/api/people/{employee_id}/quals")
+def save_person_quals(employee_id: str, body: QualsIn):
+    """Type in (or clear) one person's qualifications.
+
+    This is the floor of the feature and is never gated behind anything — no import,
+    no setup. Unknown fields are rejected rather than stored, so the attrs table
+    can't become arbitrary key-value storage.
+    """
+    unknown = [f for f in (body.quals or {}) if f not in people.QUAL_FIELDS]
+    if unknown:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown qualification field(s): {unknown}"
+        )
+    attrs = db.save_person_attrs(employee_id, body.quals or {}, body.authored_by)
+    quals = {
+        a["field"]: {
+            "value": a["value"],
+            "source_note": a["source_note"],
+            "authored_by": a["authored_by"],
+            "authored_at": a["authored_at"],
+        }
+        for a in attrs
+        if a["field"] in people.QUAL_FIELDS
+    }
+    return {
+        "employee_id": employee_id,
+        "quals": quals,
+        "quals_status": people.quals_status(quals),
+    }
+
+
+@app.post("/api/people/{employee_id}/merge")
+def merge_provisional_person(employee_id: str, body: MergeIn):
+    """Fold a provisional hand-added person into the real employee id a feed now carries.
+
+    Only ever offered as a suggestion the user confirms — the match behind it is on
+    name, and a name match is not an identity match.
+    """
+    into = (body.into or "").strip()
+    if not into:
+        raise HTTPException(status_code=400, detail="A target employee id is required.")
+    if not db.merge_person(employee_id, into):
+        raise HTTPException(
+            status_code=404,
+            detail="No provisional person with that id to merge.",
+        )
+    return {"merged": employee_id, "into": into}
+
+
+@app.delete("/api/people/{employee_id}")
+def remove_person(employee_id: str):
+    """Remove a manually-added person and their quals.
+
+    Refuses anyone with timesheet hours: their presence in the directory is a fact
+    about the feed, and the directory has no authority to overrule it.
+    """
+    if employee_id in db.person_charged_ids():
+        raise HTTPException(
+            status_code=409,
+            detail="This person charges time — the timesheet feed owns their record.",
+        )
+    if not db.delete_manual_person(employee_id):
+        raise HTTPException(status_code=404, detail="Person not found.")
+    return {"deleted": employee_id}
 
 
 @app.get("/api/portfolio")

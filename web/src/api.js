@@ -291,3 +291,70 @@ export async function draftProse({ contractId = null, docType }, onChunk) {
   }
   return full;
 }
+
+// --- People directory (#69) -------------------------------------------------
+// Identity and charging history are derived from timesheets server-side, so this
+// is populated on day one with no setup. Carries no hours: utilisation costs a
+// burn pass per contract and is fetched separately, only when asked for.
+export async function getPeople() {
+  const r = await fetch(`${BASE}/api/people`);
+  if (!r.ok) throw new Error(`People failed (${r.status})`);
+  return r.json();
+}
+
+// The expensive half — everyone's hours summed across every contract they charge.
+export async function getPeopleUtilization() {
+  const r = await fetch(`${BASE}/api/people/utilization`);
+  if (!r.ok) throw new Error(`Utilization failed (${r.status})`);
+  return r.json();
+}
+
+// Add a person by hand. A typed employee_id is preferred: give Runway the real
+// payroll id and they link up to their own timesheets the first time a feed
+// carries them, instead of forking into a second profile.
+export async function addPerson(name, employeeId) {
+  const r = await fetch(`${BASE}/api/people`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, employee_id: employeeId || null }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `Add failed (${r.status})`);
+  return body;
+}
+
+// Type in (or clear) one person's quals. Partial — only the fields sent are
+// touched, and a blank value returns that field to `unknown`.
+export async function savePersonQuals(employeeId, quals, authoredBy) {
+  const r = await fetch(`${BASE}/api/people/${encodeURIComponent(employeeId)}/quals`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quals, authored_by: authoredBy || null }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `Save failed (${r.status})`);
+  return body;
+}
+
+// Fold a provisional hand-added person into the real employee id a feed now carries.
+export async function mergePerson(employeeId, into) {
+  const r = await fetch(`${BASE}/api/people/${encodeURIComponent(employeeId)}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ into }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `Merge failed (${r.status})`);
+  return body;
+}
+
+// Remove a manually-added person. Refused for anyone with timesheet hours — the feed owns
+// their record.
+export async function deletePerson(employeeId) {
+  const r = await fetch(`${BASE}/api/people/${encodeURIComponent(employeeId)}`, {
+    method: "DELETE",
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `Delete failed (${r.status})`);
+  return body;
+}
