@@ -1498,18 +1498,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                               disabled={holidayBusy}
                               title="Commit to the contract — this is what makes the Flight Deck's burn chart bend around it"
                               style={{
-                                border: "1px solid var(--accent)",
-                                borderRadius: 6,
-                                background: "none",
-                                color: "var(--accent)",
-                                cursor: holidayBusy ? "not-allowed" : "pointer",
-                                fontSize: 10,
-                                fontWeight: 700,
-                                lineHeight: 1,
-                                padding: "2px 5px",
+                                ...commitBtn,
+                                ...(holidayBusy ? disabledBtn : null),
                               }}
                             >
-                              COMMIT
+                              Commit
                             </button>
                             <button
                               onClick={() => removeAbsence(a)}
@@ -2563,6 +2556,22 @@ const disabledBtn = {
   color: "var(--faint)",
   boxShadow: "none",
   cursor: "not-allowed",
+};
+// Commit is the one action in the chip strip that writes to the server and moves
+// what everyone else sees, so it has to read as a button rather than as another
+// label sitting among labels. Same visual language as `primaryBtn` — accent fill,
+// white text, a shadow to lift it off the chip — shrunk to chip scale.
+const commitBtn = {
+  border: "none",
+  borderRadius: 6,
+  background: "var(--accent)",
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: 10.5,
+  fontWeight: 700,
+  lineHeight: 1,
+  padding: "4px 8px",
+  boxShadow: "0 2px 6px rgba(67,97,238,.32)",
 };
 const dateInput = {
   height: 34,
