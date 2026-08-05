@@ -105,6 +105,52 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # People (#69) — the *authored* half of the directory, and only that.
+    #
+    # This table holds manually-added people and nothing else. Everyone who
+    # has ever charged is derived live from `timesheets` on every read (see
+    # `people_charging_facts`) rather than upserted into a row here. That is a
+    # deliberate structural choice, not a shortcut: an existing install is fully
+    # populated the moment this endpoint exists with no backfill step, and the
+    # ticket's central invariant stops being something a test has to defend. A
+    # directory with nowhere to store "who charges what" cannot drift from the
+    # timesheets that own that question.
+    #
+    # `id_provisional` marks a Runway-minted id (RW-0001) given to a manually-added person
+    # the user added without one. It is not a payroll id and will never match a
+    # timesheet feed, so those are the rows `people.merge_candidates` offers to fold
+    # into a real person once one shows up.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS people (
+            employee_id TEXT PRIMARY KEY,
+            name TEXT,
+            id_provisional INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
+    # Qualification assertions — one row per (person, field), NOT columns on a
+    # person row (#69).
+    #
+    # Narrow because every qual carries its own provenance, and because years of
+    # experience is not a fact: GovCon quals read "BS + 10 years *relevant*
+    # experience", and "relevant" is what a proposal argues. `12 yrs — per proposal
+    # resume, 2026-03` is defensible in an audit; a bare `12` is a number someone
+    # will dispute. A wide table needs four columns to say that per qual, plus a
+    # schema change per new field; here #84's utilisation target is one more allowed
+    # `field` and no migration. Absence of a row is `unknown`, which keeps it
+    # distinguishable from a typed-in blank.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS person_attrs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id TEXT,
+            field TEXT,
+            value TEXT,
+            source_note TEXT,
+            authored_by TEXT,
+            authored_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (employee_id, field)
+        )"""
+    )
     conn.commit()
     conn.close()
 
@@ -519,3 +565,255 @@ def delete_expense(contract_id: int, expense_id: int) -> bool:
     deleted = cur.rowcount > 0
     conn.close()
     return deleted
+
+
+# --- People directory (#69) -------------------------------------------------
+#
+# Two halves, kept apart on purpose. `people_charging_facts` is a plain group-by
+# over the timesheet cache — no burn, no rate resolution — because listing who
+# exists must stay a cheap read. Utilisation is the expensive question (it needs a
+# burn pass per contract) and is served separately, on demand, by
+# /api/people/utilization.
+
+
+def people_charging_facts() -> list:
+    """One row per (contract, person, CLIN, LCAT) they have ever charged.
+
+    This grain is chosen for #66: the compliance check runs per (person, contract,
+    CLIN) against one global set of credentials, because the same person can
+    legitimately bill different categories on different contracts.
+
+    Deliberately reports no hours or money. `weeks` is a row count, so the caller
+    can tell a one-week blip from a standing assignment without pricing anything —
+    which keeps this query out of the billable-vs-paid hours question entirely
+    (that belongs to burn, and to the utilisation endpoint that reads it).
+
+    Blank employee ids are excluded rather than collapsed together; see
+    `unidentified_timesheet_rows` for how they stay visible.
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT contract_id,
+                  employee_id,
+                  MAX(employee) AS employee,
+                  charge_code,
+                  labor_category,
+                  COUNT(DISTINCT week_ending) AS weeks,
+                  MIN(week_ending) AS first_week,
+                  MAX(week_ending) AS last_week
+           FROM timesheets
+           WHERE employee_id IS NOT NULL AND TRIM(employee_id) <> ''
+           GROUP BY contract_id, employee_id, charge_code, labor_category"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def unidentified_timesheet_rows() -> dict:
+    """Timesheet rows with no usable employee id — a data-quality figure, surfaced
+    rather than silently dropped.
+
+    "Malformed" is deliberately read as blank/whitespace only. Runway does not know
+    what a given customer's employee-id format looks like, so anything stricter
+    would invent a rule and quietly discard real people.
+    """
+    conn = get_conn()
+    r = conn.execute(
+        """SELECT COUNT(*) AS rows,
+                  COUNT(DISTINCT contract_id) AS contracts
+           FROM timesheets
+           WHERE employee_id IS NULL OR TRIM(employee_id) = ''"""
+    ).fetchone()
+    conn.close()
+    return {"rows": r["rows"] or 0, "contracts": r["contracts"] or 0}
+
+
+def person_charged_ids() -> set:
+    """Every employee_id that appears in any timesheet. The authority for whether a
+    person is derived or manually added, and the guard on deleting one."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT DISTINCT employee_id FROM timesheets
+           WHERE employee_id IS NOT NULL AND TRIM(employee_id) <> ''"""
+    ).fetchall()
+    conn.close()
+    return {r["employee_id"] for r in rows}
+
+
+def list_manual_people() -> list:
+    """The hand-added people. Everyone else in the directory is derived."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT employee_id, name, id_provisional, created_at
+           FROM people ORDER BY created_at DESC, employee_id"""
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "employee_id": r["employee_id"],
+            "name": r["name"],
+            "id_provisional": bool(r["id_provisional"]),
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
+def _next_provisional_id(conn) -> str:
+    """Mint the next RW-#### id for a manually-added person with no id.
+
+    Visibly provisional by design: the user was offered the real payroll id and
+    didn't have it, so this id cannot silently pass for one. When the person later
+    turns up in a feed under their real id, `people.merge_candidates` spots the
+    pair by name and offers a merge — it never joins them automatically, because a
+    name match is not an identity match and merging is the destructive direction.
+    """
+    rows = conn.execute(
+        "SELECT employee_id FROM people WHERE employee_id LIKE 'RW-%'"
+    ).fetchall()
+    used = []
+    for r in rows:
+        try:
+            used.append(int(str(r["employee_id"]).split("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"RW-{(max(used) + 1) if used else 1:04d}"
+
+
+def add_manual_person(employee_id: Optional[str], name: str) -> Optional[dict]:
+    """Add a person by hand. Returns the new row, or None if that id is already taken.
+
+    A typed-in employee id is preferred and is the whole point: give Runway the real
+    payroll id and the person links up to their own timesheets automatically the
+    first time a feed carries them, instead of forking into a second profile. The
+    minted fallback exists so not knowing the id can't block adding someone.
+    """
+    clean_name = (name or "").strip()
+    typed = (employee_id or "").strip()
+    conn = get_conn()
+    if typed:
+        taken = conn.execute(
+            "SELECT 1 FROM people WHERE employee_id = ?", (typed,)
+        ).fetchone()
+        if taken:
+            conn.close()
+            return None
+        eid, provisional = typed, 0
+    else:
+        eid, provisional = _next_provisional_id(conn), 1
+    conn.execute(
+        "INSERT INTO people (employee_id, name, id_provisional) VALUES (?, ?, ?)",
+        (eid, clean_name, provisional),
+    )
+    conn.commit()
+    conn.close()
+    return {
+        "employee_id": eid,
+        "name": clean_name,
+        "id_provisional": bool(provisional),
+    }
+
+
+def delete_manual_person(employee_id: str) -> bool:
+    """Remove a manually-added person and their quals. True if a row went.
+
+    Only ever reaches a `people` row, so a person with timesheet hours cannot be
+    deleted out of the directory — their presence is a fact about the feed, not
+    something the directory is allowed an opinion on. The caller checks that first
+    and returns a 409; this is the second line of the same rule.
+    """
+    conn = get_conn()
+    cur = conn.execute("DELETE FROM people WHERE employee_id = ?", (employee_id,))
+    conn.execute("DELETE FROM person_attrs WHERE employee_id = ?", (employee_id,))
+    conn.commit()
+    deleted = cur.rowcount > 0
+    conn.close()
+    return deleted
+
+
+def list_person_attrs(employee_id: Optional[str] = None) -> list:
+    """Qualification assertions, for everyone or for one person."""
+    conn = get_conn()
+    if employee_id is None:
+        rows = conn.execute(
+            """SELECT employee_id, field, value, source_note, authored_by, authored_at
+               FROM person_attrs"""
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT employee_id, field, value, source_note, authored_by, authored_at
+               FROM person_attrs WHERE employee_id = ?""",
+            (employee_id,),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def save_person_attrs(
+    employee_id: str, attrs: dict, authored_by: Optional[str] = None
+) -> list:
+    """Upsert one person's quals. Partial by design — only the fields present in
+    `attrs` are touched, so saving a clearance never disturbs a years-of-experience
+    assertion someone sourced separately.
+
+    A field whose value comes in blank is deleted rather than stored empty, because
+    `unknown` has to be reachable again after a mistake or "optional" isn't true.
+    """
+    conn = get_conn()
+    for field, entry in (attrs or {}).items():
+        entry = entry or {}
+        value = (str(entry.get("value") or "")).strip()
+        if not value:
+            conn.execute(
+                "DELETE FROM person_attrs WHERE employee_id = ? AND field = ?",
+                (employee_id, field),
+            )
+            continue
+        conn.execute(
+            """INSERT INTO person_attrs
+               (employee_id, field, value, source_note, authored_by, authored_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT (employee_id, field) DO UPDATE SET
+                 value = excluded.value,
+                 source_note = excluded.source_note,
+                 authored_by = excluded.authored_by,
+                 authored_at = excluded.authored_at""",
+            (
+                employee_id,
+                field,
+                value,
+                (str(entry.get("source_note") or "")).strip() or None,
+                (authored_by or "").strip() or None,
+            ),
+        )
+    conn.commit()
+    conn.close()
+    return list_person_attrs(employee_id)
+
+
+def merge_person(from_id: str, into_id: str) -> bool:
+    """Fold a provisional manually-added person into a real employee id.
+
+    Carries their quals across (keeping any the target already has — an assertion
+    someone sourced against the real person wins over one typed against a
+    placeholder) and drops the provisional row. Only ever moves authored data;
+    timesheet history is untouched because the provisional id never had any.
+    """
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM people WHERE employee_id = ? AND id_provisional = 1",
+        (from_id,),
+    ).fetchone()
+    if row is None:
+        conn.close()
+        return False
+    conn.execute(
+        """UPDATE OR IGNORE person_attrs SET employee_id = ?
+           WHERE employee_id = ?""",
+        (into_id, from_id),
+    )
+    conn.execute("DELETE FROM person_attrs WHERE employee_id = ?", (from_id,))
+    conn.execute("DELETE FROM people WHERE employee_id = ?", (from_id,))
+    conn.commit()
+    conn.close()
+    return True

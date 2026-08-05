@@ -10,6 +10,7 @@ import IndirectRates from "./views/IndirectRates.jsx";
 import AskRunway from "./views/AskRunway.jsx";
 import AllocationMatrix from "./views/AllocationMatrix.jsx";
 import Drafts from "./views/Drafts.jsx";
+import People from "./views/People.jsx";
 import { applyTheme } from "./theme.js";
 import { getBurn, renameContract } from "./api.js";
 
@@ -156,6 +157,8 @@ export default function App() {
             <Ingest onSaved={openContract} />
           ) : view === "portfolio" ? (
             <Portfolio onOpen={openContract} />
+          ) : view === "people" ? (
+            <People onOpenContract={openContract} />
           ) : view === "flightdeck" ? (
             <FlightDeck
               contractId={activeId}
