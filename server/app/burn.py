@@ -23,6 +23,7 @@ carried on the payload and nothing here reads it to produce a dollar figure.
 from datetime import date, timedelta
 from typing import List, Optional
 
+from . import absence as absence_mod
 from . import lcat as lcat_match
 from . import pricing, rates
 
@@ -454,6 +455,98 @@ def _pill(
     }.get(status, "—")
 
 
+# A runaway guard on the week walk below, not a policy. A CLIN burning a rounding
+# error a week would otherwise walk forever looking for an exhaust point; ten years
+# past PoP end is far beyond any answer worth reporting.
+_MAX_PROJECTION_WEEKS = 520
+
+
+def _absence_projection(
+    spent: float,
+    remaining: float,
+    weekly: float,
+    budget: float,
+    current_week: int,
+    total_weeks: int,
+    factors: List[dict],
+    exhaust_week: float,
+) -> Optional[dict]:
+    """The forward projection as a per-week series, bent around known absence (#85).
+
+    **Strictly additive.** `weekly`, `weeks_left`, `exhaust_week`, `runway_days`, the
+    status, the tripwires and the hero tile all keep the flat-pace figures they have
+    always had, and this is a *new* key alongside them. Every existing consumer of
+    the burn payload — Flight Deck cards, tripwires, suggests, Portfolio, Ask Runway
+    — therefore reads exactly what it read before. Returns `None` whenever there is
+    no absence in the remaining weeks, so a contract nobody has entered absence for
+    produces no series at all and `BurnChart` keeps its straight-line geometry byte
+    for byte. That fallback is the safety property: the bend is opt-in per contract.
+
+    The reduction is proportional. `weekly` is a trailing *dollar* pace, and each
+    week's factor is the share of the team's workdays that survive absence, so
+    `weekly x factor` stays in the same dollars without this needing a rate or an
+    hours figure. Weeks past PoP end are walked at factor 1.0 — the holiday calendar
+    and the entered absences only describe the period we can see — so the exhaust
+    point stays honest for a CLIN that outlives its own PoP.
+    """
+    if weekly <= 0 or remaining <= 0 or not absence_mod.has_effect(factors):
+        return None
+
+    by_week = {f["week"]: f.get("factor", 1.0) for f in factors}
+    points = [{"week": current_week, "spent": round(spent, 2)}]
+    cum = 0.0
+    bent_exhaust = None
+    week = current_week
+    limit = total_weeks + _MAX_PROJECTION_WEEKS
+    while week < limit:
+        week += 1
+        step = weekly * by_week.get(week, 1.0)
+        if step > 0 and cum + step >= remaining:
+            # Land the exhaust point inside the week it happens rather than at the
+            # week boundary, so a bend that buys three days shows three days.
+            bent_exhaust = (week - 1) + (remaining - cum) / step
+            if bent_exhaust <= total_weeks:
+                points.append(
+                    {"week": round(bent_exhaust, 2), "spent": round(budget, 2)}
+                )
+            break
+        cum += step
+        if week <= total_weeks:
+            points.append({"week": week, "spent": round(spent + cum, 2)})
+
+    # What gets *reported* as bending the line: weeks still ahead of us, and no
+    # further out than the money reaches. Absence behind us is history and Part 1
+    # owns it; absence after the funds run out never happens on this CLIN's dime, and
+    # naming it would print "1 week affected" beside a gain of zero.
+    horizon = bent_exhaust if bent_exhaust is not None else total_weeks
+    ahead = [
+        f
+        for f in factors
+        if current_week < f["week"] <= horizon and f.get("factor", 1.0) < 1
+    ]
+    if not ahead:
+        # Absence exists, but all of it falls after the funds run out, so the bent
+        # line is the straight line. Withhold the series rather than ship one that
+        # draws identically — an unexplained second geometry is a regression risk
+        # for no gain.
+        return None
+    return {
+        "points": points,
+        # The bent line's exhaust week, next to the flat-pace one the rest of the
+        # payload reports, so a reader can see the difference rather than infer it.
+        "exhaust_week": round(bent_exhaust, 2) if bent_exhaust is not None else None,
+        "flat_exhaust_week": round(exhaust_week, 2),
+        # Positive means absence buys runway, which is the sentence this feature
+        # exists to let someone say out loud: "the August dip buys you two weeks".
+        "weeks_gained": (
+            round(bent_exhaust - exhaust_week, 2) if bent_exhaust is not None else None
+        ),
+        "weeks_affected": len(ahead),
+        "holidays": sorted({d for f in ahead for d in f.get("holidays") or []}),
+        "people": sorted({p for f in ahead for p in f.get("people") or []}),
+    }
+
+
 def _compute_clin(
     clin: dict,
     rows: List[dict],
@@ -469,6 +562,8 @@ def _compute_clin(
     rate_index=None,
     aliases=None,
     cost_model: Optional[rates.CostModel] = None,
+    pop_start: Optional[date] = None,
+    absence: Optional[dict] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -518,7 +613,12 @@ def _compute_clin(
     contract's confirmed LCAT mappings, and this function only sees one CLIN (#64).
     Both default to empty, in which case resolution behaves exactly as it did: an
     unmatched LCAT is still reported, just without naming which of the three causes
-    it is."""
+    it is.
+
+    `pop_start` and `absence` drive the bent forward projection (#85) and nothing
+    else. Both default to nothing, and with nothing every figure on the payload is
+    identical to what it was before that ticket — the series is an extra key, never
+    a replacement (see `_absence_projection`)."""
     policy = policy or pricing.policy_for(clin, None)
     resolve, blended, source = _rate_resolver(clin, rate_index, aliases)
     clin_rows = _rows_for_clin(clin, rows, window)
@@ -548,6 +648,12 @@ def _compute_clin(
     # The same weeks under the same keys, in cost dollars. A cost-measured CLIN needs
     # a cost-measured pace, or `remaining / weekly` divides one quantity by another.
     weekly_cost = {}
+    # Who those weekly dollars belong to, for #85's absence weighting: the same weeks
+    # again, split by person. Accumulated in both quantities so the shares are read
+    # off whichever one the policy ends up measuring — sharing a billings-weighted
+    # split across a cost-measured CLIN would weight absence by the wrong dollars.
+    by_person = {}  # week_ending -> {employee_id -> billings}
+    cost_by_person = {}  # week_ending -> {employee_id -> cost}
     for r in clin_rows:
         hours = billable_hours(r)
         name = r.get("labor_category")
@@ -570,6 +676,10 @@ def _compute_clin(
         billings += amt
         wk = r.get("week_ending") or ""
         weekly_totals[wk] = weekly_totals.get(wk, 0.0) + amt
+        emp = (r.get("employee_id") or "").strip()
+        if emp:
+            by_person.setdefault(wk, {})
+            by_person[wk][emp] = by_person[wk].get(emp, 0.0) + amt
 
         # What the same hour cost us, down the fallback ladder (#77). Accumulated
         # alongside billings, never mixed into them.
@@ -577,6 +687,11 @@ def _compute_clin(
         if cr.rate is not None:
             cost += hours * cr.rate
             weekly_cost[wk] = weekly_cost.get(wk, 0.0) + hours * cr.rate
+            if emp:
+                cost_by_person.setdefault(wk, {})
+                cost_by_person[wk][emp] = (
+                    cost_by_person[wk].get(emp, 0.0) + hours * cr.rate
+                )
         cost_hours[cr.source] = cost_hours.get(cr.source, 0.0) + hours
         if label and cr.known and label not in cost_by_lcat:
             cost_by_lcat[label] = (cr, res.rate)
@@ -645,6 +760,16 @@ def _compute_clin(
         else 0.0
     )
 
+    # Each person's share of that pace (#85). The same trailing window, in the same
+    # quantity, so an absence removes the dollars that person is actually observed to
+    # put on this CLIN. Someone who has not charged here has no share and therefore
+    # cannot reduce the pace — see absence.week_factors.
+    measured_by_person = cost_by_person if on_cost else by_person
+    pace_shares = {}
+    for wk in recent_weeks:
+        for emp, amt in (measured_by_person.get(wk) or {}).items():
+            pace_shares[emp] = pace_shares.get(emp, 0.0) + amt
+
     ceiling = float(clin.get("ceiling") or 0)
     # The dollars this CLIN can actually spend before it stalls: the funded
     # amount when incrementally funded, otherwise the full ceiling. Runway is
@@ -709,6 +834,38 @@ def _compute_clin(
         # payload for the same reason; both stay live as locals because the margin
         # projection below is the same forward pace, aimed at the price.
         runway_days = None
+
+    # The bent projection (#85). Withheld in exactly the states where the straight
+    # line is already withheld, so this can never draw a projection into a place the
+    # existing geometry refuses to: paused/unpriced (no pace), margin-managed (no
+    # funding wall to run into), past PoP (nothing left to project into), and already
+    # over budget (the exhaust week is behind us and a forward line would run
+    # backwards across the plot — the case BurnChart special-cases).
+    projection = None
+    # `weekly > 0` is the same test that produces `paused` / `unpriced` below, said
+    # here because the status has not been resolved yet at this point.
+    projects = weekly > 0 and not margin_managed and not past_pop and remaining > 0
+    if projects and pop_start and absence:
+        projection = _absence_projection(
+            spent=spent,
+            remaining=remaining,
+            weekly=weekly,
+            budget=budget,
+            current_week=current_week,
+            total_weeks=total_weeks,
+            factors=absence_mod.week_factors(
+                pop_start,
+                # From *next* week. The current week is already charged, and its
+                # actuals are leave-free courtesy of Part 1 — reducing it here would
+                # subtract the same absence twice.
+                current_week + 1,
+                total_weeks,
+                holidays=absence.get("holidays"),
+                absences=absence.get("absences"),
+                shares=pace_shares,
+            ),
+            exhaust_week=exhaust_week,
+        )
 
     # Funding-pace context (#22). When the binding budget is the funded slice
     # (not the full ceiling), the slice running out early is routine incremental
@@ -922,6 +1079,12 @@ def _compute_clin(
             else round(exhaust_week, 2)
         ),
         "runway_days": runway_days,
+        # The forward projection as a per-week series, bent around known absence
+        # (#85). **Null unless this contract has absence in its remaining weeks** —
+        # every figure above is the flat-pace one it has always been, and a reader
+        # that ignores this key sees precisely the pre-#85 payload. `BurnChart` draws
+        # the polyline when it's here and its original straight line when it isn't.
+        "projection": projection,
         # Hard-stop forecast (#23): the date charging gets blocked, which limit
         # produces it, and whether that date is already today or behind us.
         "stop_date": stop_date,
@@ -1190,6 +1353,15 @@ def compute(
     # is dated off the identical clock the week math uses.
     anchor = _anchor_date(rows)
 
+    # Absence settings for the bent projection (#85), read once for the whole sweep.
+    # `pop_start` is the calendar date week 1 begins on — the same one `_clock` numbers
+    # weeks from — because absence is entered as dates while the engine thinks in week
+    # indices, and this is the only place the two are reconciled. A period carrying no
+    # PoP dates has no calendar to hang absence off, so `pop_start` stays None and
+    # every CLIN falls back to the flat projection it had before this ticket.
+    pop_start = _d(clk.get("pop_start"))
+    absence_settings = absence_mod.contract_absence(contract)
+
     # Only the active period's CLINs — never the whole award's option years.
     # See _period_clins for why (over-counting ceiling breaks every downstream
     # stat). Consistent with _clock, which runs the week clock off the same period.
@@ -1302,6 +1474,8 @@ def compute(
             rate_index=rate_index,
             aliases=aliases,
             cost_model=cost_model,
+            pop_start=pop_start,
+            absence=absence_settings,
         )
         for c in labor
     ]
@@ -1328,6 +1502,8 @@ def compute(
                 rate_index=rate_index,
                 aliases=aliases,
                 cost_model=cost_model,
+                pop_start=pop_start,
+                absence=absence_settings,
             )
             for c in labor
         ]
@@ -1421,6 +1597,9 @@ def compute(
                 "exhaust_week": None,
                 "runway_days": None,
                 "weeks_left": None,
+                # No pace to bend either (#85). Present-and-null so a reader can
+                # test one key across labor and non-labor rows alike.
+                "projection": None,
                 # No pace → no dated hard stop either (#23). Present-but-null for
                 # the same reason the runway fields are: the tripwire lists below
                 # mix labor and non-labor rows and read these keys off both.
@@ -1694,6 +1873,11 @@ def compute(
             "pop_scoped": window_applied,
             "past_pop": past_pop,
             "weeks_overrun": clk["weeks_overrun"],
+            # The contract's holiday calendar and per-person absences (#85). Echoed
+            # on the payload so the Flight Deck can *name* what bent a CLIN's line
+            # rather than showing an unexplained kink, and so the allocation matrix
+            # seeds its simulator from the same list the engine projected against.
+            "absence": absence_settings,
             # How funding pace was judged: from ingested SF-30 obligation history
             # (dollars landing vs. burned) or the funded-vs-elapsed proxy.
             "funding_pace_source": (

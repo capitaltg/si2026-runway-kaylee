@@ -3,6 +3,7 @@ import os
 import sqlite3
 from typing import Optional
 
+from . import absence as absence_mod
 from . import lcat
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
@@ -399,6 +400,48 @@ def set_contract_capacity(
             blob["lcat_expected_hours"] = clean
         else:
             blob.pop("lcat_expected_hours", None)
+
+    update_contract(cid, blob)
+    return get_contract(cid)
+
+
+def set_contract_absence(cid: int, holidays=None, absences=None) -> Optional[dict]:
+    """Set (or clear) a contract's holiday calendar and per-person absences (#85).
+
+    Same storage and the same conventions as `set_contract_capacity` above: on the
+    data blob so no migration is needed, None leaves a list alone, and an empty list
+    clears it — a contract that observes no holidays has to be expressible, and
+    deleting the last absence has to actually delete it rather than leaving the
+    previous list in place.
+
+    Both lists are replaced wholesale rather than merged, for the reason
+    `lcat_expected_hours` is: the editor sends the whole list, and a merge would make
+    removing one entry impossible.
+
+    **Contract-level on purpose.** A holiday is a fact about the calendar rather than
+    about one what-if, and the burn engine cannot read plan data — so absence stored
+    in a plan could never bend the Flight Deck's chart. See `absence.contract_absence`
+    for the consequence this accepts: editing the calendar changes what every saved
+    plan projects.
+    """
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+
+    if holidays is not None:
+        clean = absence_mod.normalize_holidays(holidays)
+        if clean:
+            blob["holidays"] = clean
+        else:
+            blob.pop("holidays", None)
+
+    if absences is not None:
+        clean = absence_mod.normalize_absences(absences)
+        if clean:
+            blob["absences"] = clean
+        else:
+            blob.pop("absences", None)
 
     update_contract(cid, blob)
     return get_contract(cid)

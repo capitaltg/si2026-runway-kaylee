@@ -9,7 +9,15 @@ import {
   setLcatAlias,
   deleteLcatAlias,
   setContractCapacity,
+  setContractAbsence,
 } from "../api.js";
+import {
+  buildAbsenceModel,
+  walkRunway,
+  absencesFor,
+  absenceWorkdays,
+  shiftDate,
+} from "../absence.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 
@@ -175,6 +183,16 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [removed, setRemoved] = useState([]);
   const [newPerson, setNewPerson] = useState(null); // the open "add person" form
   const addSeq = useRef(0);
+  // #85 — dated absence. Two tiers, deliberately:
+  //   `absences` is the what-if list: PTO, start and roll-off dates typed into *this*
+  //   plan. Client-side and saved into `plans.data`, like `added` / `removed`.
+  //   The contract's own committed absences and its holiday calendar live server-side
+  //   (they are what bends the Flight Deck's chart, which cannot read plan data) and
+  //   are edited through the panel below.
+  const [absences, setAbsences] = useState([]);
+  const [absenceFor, setAbsenceFor] = useState(null); // person whose editor is open
+  const [holidaysOpen, setHolidaysOpen] = useState(false);
+  const [holidayBusy, setHolidayBusy] = useState(false);
   // Saved plans (persisted server-side): the list, the open save-name form, and
   // which plan is currently loaded.
   const [plans, setPlans] = useState([]);
@@ -214,6 +232,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     setDraft(null);
     setAdded([]);
     setRemoved([]);
+    setAbsences([]);
     setLoadedPlan(null);
     getAllocation(contractId)
       .then((d) => {
@@ -268,6 +287,81 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       setError(e.message);
     } finally {
       setTargetBusy(false);
+    }
+  }
+
+  // #85 — the contract's holiday calendar. Saved server-side and refetched through
+  // the same path a target change uses, for the same reason: a holiday changes what
+  // the forward projection *is*, not who is working which hours, so an in-progress
+  // what-if survives it and every runway figure on screen moves visibly.
+  async function saveHolidays(body) {
+    if (!contractId) return;
+    setHolidayBusy(true);
+    try {
+      await setContractAbsence(contractId, body);
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setHolidayBusy(false);
+    }
+  }
+
+  // Plan-level absence: a what-if, so it lives in React state and rides into
+  // `plans.data` on save. Nothing here writes to the server — a typed "what if Priya
+  // takes August off" is a question, not a fact about the contract, and it must not
+  // bend the Flight Deck's chart for everyone who opens it on the strength of a
+  // question. Committing it is a separate, deliberate act; see `commitAbsence`.
+  function addAbsence(entry) {
+    setAbsences((list) => [...list, entry]);
+  }
+  function removeAbsence(target) {
+    setAbsences((list) => list.filter((a) => a !== target));
+  }
+
+  // Promote a what-if into a fact about the contract. This is the *only* path by
+  // which a person's absence reaches the burn engine — the engine cannot read plan
+  // data, so an uncommitted absence bends this view's runway and nothing else. Once
+  // committed it moves the Flight Deck's projection for everyone.
+  //
+  // It leaves the plan on the way out: leaving it in both lists would show the same
+  // range twice in the chip strip. The projection would still be right (the day sets
+  // are unioned, never summed) but the UI would be lying about how many entries exist.
+  async function commitAbsence(entry) {
+    setHolidayBusy(true);
+    try {
+      await setContractAbsence(contractId, {
+        absences: [...contractAbsence.absences, entry],
+      });
+      removeAbsence(entry);
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setHolidayBusy(false);
+    }
+  }
+
+  // And back out again. A committed absence is contract data, so withdrawing it is a
+  // server write too — it must not silently become a plan-local what-if again.
+  async function withdrawAbsence(entry) {
+    setHolidayBusy(true);
+    try {
+      await setContractAbsence(contractId, {
+        absences: contractAbsence.absences.filter(
+          (a) =>
+            !(
+              a.person_id === entry.person_id &&
+              a.start === entry.start &&
+              a.end === entry.end
+            )
+        ),
+      });
+      await reloadRates();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setHolidayBusy(false);
     }
   }
 
@@ -351,6 +445,61 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   // terminates in a labelled 40-hr fallback.
   const contractExpected = data?.contract?.expected_hours || null;
 
+  // #85's contract-level absence: the holiday calendar and any committed absences,
+  // resolved server-side so the matrix and the Flight Deck's chart bend around the
+  // same list. Always present in shape, empty on a contract nobody has configured.
+  const contractAbsence = useMemo(
+    () => data?.contract?.absence || { holidays: [], absences: [] },
+    [data]
+  );
+
+  // The active period's calendar edges. A "starts on" absence runs from the period
+  // start to the day before they arrive and a "rolls off" one runs from their last
+  // day to the period end, so both reduce to the same dated range PTO uses and the
+  // projection keeps a single code path (#85).
+  const periodBounds = {
+    start: data?.contract?.pop_start || "",
+    end: data?.contract?.pop_end || "",
+  };
+
+  // The dated range the open entry would store, and why it can't be stored yet.
+  // Derived rather than validated at click time, so the button can be disabled *and*
+  // say what is missing — a disabled button with no explanation reads as broken.
+  const absenceRange = (() => {
+    if (!absenceFor) return null;
+    const { kind, start, end } = absenceFor;
+    if (kind === "start")
+      // Away from the period's start until the day before they arrive.
+      return { start: periodBounds.start, end: start ? shiftDate(start, -1) : "" };
+    if (kind === "roll_off")
+      // Away from the day after their last day until the period's end.
+      return { start: start ? shiftDate(start, 1) : "", end: periodBounds.end };
+    return { start, end };
+  })();
+  const absenceProblem = (() => {
+    if (!absenceFor || !absenceRange) return null;
+    const single = absenceFor.kind !== "pto";
+    if (single && !absenceFor.start) return "Pick a date.";
+    if (!single && !absenceFor.start) return "Pick the first day out.";
+    if (!single && !absenceFor.end) return "Pick the last day out.";
+    if (!absenceRange.start || !absenceRange.end)
+      return "This contract's period has no dates, so absence can't be placed on a week.";
+    if (absenceRange.end < absenceRange.start)
+      return single
+        ? `That date is outside the period (${periodBounds.start} – ${periodBounds.end}).`
+        : "The last day is before the first day.";
+    if (!absenceWorkdays(absenceRange))
+      return "That range is all weekend — nobody charges those days.";
+    return null;
+  })();
+
+  // Everything the simulator scored against: the contract's committed absences plus
+  // this plan's what-ifs. The two are stored differently and scored identically.
+  const allAbsences = useMemo(
+    () => [...contractAbsence.absences, ...absences],
+    [contractAbsence, absences]
+  );
+
   // One person's expected week. Synced people carry their own resolution (which may
   // be their personal override); a planned add inherits the contract's.
   const expectedOf = (e) =>
@@ -378,8 +527,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     };
   };
 
-  // Score a plan state ({draft, added, removed}) into per-CLIN runway + totals —
-  // the whole point of the view, and reused to compare saved plans.
+  // Score a plan state ({draft, added, removed, absences}) into per-CLIN runway +
+  // totals — the whole point of the view, and reused to compare saved plans.
   const evalPlan = (state) => {
     const dr = state.draft || {};
     const rost = [
@@ -387,18 +536,46 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       ...(state.added || []),
     ];
     const rate = makeRate(state.added);
+    // #85 — dated absence for this plan state. The contract's committed absences and
+    // holidays are scored alongside the plan's what-ifs, because the arithmetic is
+    // identical and only the storage differs (see server/app/absence.py). Built per
+    // plan state rather than once, so the compare panel scores each side against its
+    // own saved absences instead of both against the live ones.
+    const model = buildAbsenceModel({
+      popStart: data?.contract?.pop_start,
+      fromWeek: cw,
+      totalWeeks: tw,
+      holidays: contractAbsence.holidays,
+      absences: [...contractAbsence.absences, ...(state.absences || [])],
+    });
     const clin = {};
     let totalWeekly = 0;
     let totalHrs = 0;
     for (const c of clins) {
       let weekly = 0;
-      for (const e of rost) weekly += (dr[e.id]?.[c.id] || 0) * rate(e.id, c.id);
+      // Per-person contributions, kept apart from the total because absence is per
+      // person: one charger being out reduces only their share of the week.
+      const perPerson = [];
+      for (const e of rost) {
+        const amt = (dr[e.id]?.[c.id] || 0) * rate(e.id, c.id);
+        weekly += amt;
+        if (amt > 0) perPerson.push([e.id, amt]);
+      }
       let exhaustWeek = null;
       let runwayDays = null;
       if (weekly > 0) {
-        const weeksLeft = c.remaining / weekly;
-        exhaustWeek = cw + weeksLeft;
-        runwayDays = Math.max(0, Math.round(weeksLeft * 7));
+        // With no absence ahead, keep the original closed-form arithmetic rather
+        // than a week walk that agrees to within a rounding error. One code path has
+        // been producing correct numbers since #21; a second one that *usually*
+        // matches is a worse trade than the branch.
+        const walked = model.active
+          ? walkRunway({ perPerson, remaining: c.remaining, currentWeek: cw, model })
+          : null;
+        const weeksLeft = walked ? walked.weeksLeft : c.remaining / weekly;
+        if (weeksLeft != null) {
+          exhaustWeek = cw + weeksLeft;
+          runwayDays = Math.max(0, Math.round(weeksLeft * 7));
+        }
       }
       clin[c.id] = {
         weekly,
@@ -416,13 +593,23 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     // Summing across *people* is sound; the thing that isn't is summing one person's
     // expectations across contracts (see capacity.portfolio_expected).
     const totalExpected = rost.reduce((s, e) => s + (expectedOf(e).hours || 0), 0);
-    return { clin, totalWeekly, totalHrs, totalExpected, headcount: rost.length };
+    return {
+      clin,
+      totalWeekly,
+      totalHrs,
+      totalExpected,
+      headcount: rost.length,
+      // Carried out so every runway figure this scored can say it is not
+      // `hrs/wk × weeks`. An accountant checks that by hand, and a projection that
+      // quietly differs from it reads as an arithmetic bug (#85's last criterion).
+      absence: model,
+    };
   };
 
   const rateFor = useMemo(() => makeRate(added), [clins, employees, added]);
   const current = useMemo(
-    () => evalPlan({ draft, added, removed }),
-    [draft, added, removed, employees, clins, cw, tw]
+    () => evalPlan({ draft, added, removed, absences }),
+    [draft, added, removed, absences, contractAbsence, employees, clins, cw, tw]
   );
   const sim = current.clin;
   const totalWeekly = current.totalWeekly;
@@ -431,8 +618,9 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     () =>
       (data && JSON.stringify(draft) !== JSON.stringify(buildDraft(data))) ||
       added.length > 0 ||
-      removed.length > 0,
-    [draft, data, added, removed]
+      removed.length > 0 ||
+      absences.length > 0,
+    [draft, data, added, removed, absences]
   );
 
   // Per-person avatar hue keyed to roster order, so a person keeps their color
@@ -584,6 +772,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     if (data) setDraft(buildDraft(data));
     setAdded([]);
     setRemoved([]);
+    setAbsences([]);
     setNewPerson(null);
     setLoadedPlan(null);
   }
@@ -592,7 +781,12 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   async function doSavePlan() {
     const nm = (planName || "").trim() || "Untitled plan";
     try {
-      const saved = await savePlan(contractId, nm, { draft, added, removed });
+      const saved = await savePlan(contractId, nm, {
+        draft,
+        added,
+        removed,
+        absences,
+      });
       setPlanName(null);
       setLoadedPlan(saved.id);
       refreshPlans();
@@ -609,6 +803,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     setDraft(d.draft || buildDraft(data));
     setAdded(d.added || []);
     setRemoved(d.removed || []);
+    // A plan saved before #85 has no `absences` key, and it must load as "no
+    // absences" and score exactly as it scored when it was saved — never inheriting
+    // whatever what-if absences are on screen right now. Same staleness trap #67
+    // item 5 names: a plan scored against assumptions it never had is worse than no
+    // plan. (The contract's *committed* absences and holidays do apply to every
+    // plan, old and new — those are facts about the contract, not about the plan.)
+    setAbsences(d.absences || []);
     // Keep new-add ids from colliding with the reloaded plan's.
     const maxSeq = (d.added || []).reduce((m, a) => {
       const n = parseInt(String(a.id).replace("added-", ""), 10);
@@ -678,10 +879,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoBalance, data, draft]);
 
-  // The sim state behind a compare slot ("current" or a saved plan id).
+  // The sim state behind a compare slot ("current" or a saved plan id). A saved
+  // plan's `data` is passed through untouched, `absences` included — and a pre-#85
+  // plan has no such key, so it compares with none rather than borrowing whatever is
+  // on screen now (#67 item 5).
   const planStateFor = (sel) =>
     sel === "current"
-      ? { draft, added, removed }
+      ? { draft, added, removed, absences }
       : plans.find((p) => String(p.id) === String(sel))?.data || { draft: {} };
   const cmpLabel = (sel) =>
     sel === "current" ? "Current plan" : plans.find((p) => String(p.id) === String(sel))?.name || "—";
@@ -861,6 +1065,51 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
             ))}
           </div>
 
+          {/* #85's last acceptance bullet: when a projection includes absence, say so.
+              A runway that quietly differs from hrs/wk x weeks reads as an arithmetic
+              bug to anyone checking it by hand, and an accountant will check it by
+              hand. Shown only when absence actually moved something. */}
+          {current.absence?.active && (
+            <div
+              style={{
+                ...panelStyle,
+                padding: "9px 13px",
+                marginBottom: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                borderColor: "var(--accent)",
+                fontSize: 12.5,
+                color: "var(--dim)",
+              }}
+            >
+              <span style={{ color: "var(--accent)" }}>☂</span>
+              <span>
+                These runway figures include dated absence — they are{" "}
+                <b style={{ color: "var(--text)" }}>not</b> hrs/wk × weeks.{" "}
+                <b style={{ color: "var(--text)" }}>{current.absence.weeksAffected}</b>{" "}
+                of the remaining {Math.max(0, (tw || 0) - (cw || 0))} weeks are reduced
+                {current.absence.peopleAffected.length > 0 && (
+                  <>
+                    {" "}
+                    for{" "}
+                    <b style={{ color: "var(--text)" }}>
+                      {current.absence.peopleAffected.length}
+                    </b>{" "}
+                    {current.absence.peopleAffected.length === 1 ? "person" : "people"}
+                  </>
+                )}
+                {current.absence.holidayWeeks.length > 0 && (
+                  <>
+                    {" "}
+                    · {current.absence.holidayWeeks.length} with a holiday
+                  </>
+                )}
+                .
+              </span>
+            </div>
+          )}
+
           {/* single control bar: search + filter status (left) · actions (right) */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
             <input
@@ -972,6 +1221,103 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                       <button
                         onClick={() => saveTarget("")}
                         disabled={targetBusy || data.contract.utilization_target == null}
+                        style={{ ...chipBtnDim, padding: "6px 12px" }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* #85 — the holiday calendar. Contract-level, not plan-level: a
+                  holiday is a fact about the calendar rather than about one
+                  what-if, and the burn engine can only bend the Flight Deck's
+                  chart around data it can read. The trade this accepts, stated in
+                  the panel: editing it changes what every saved plan projects. */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setHolidaysOpen((v) => !v)}
+                  title="Company-wide days nobody charges. Applies to everyone on this contract."
+                  style={{
+                    ...chipBtnDim,
+                    borderColor: holidaysOpen ? "var(--accent)" : "var(--border)",
+                  }}
+                >
+                  Holidays: {contractAbsence.holidays.length || "none"}
+                </button>
+                {holidaysOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 20,
+                      width: 300,
+                      ...panelStyle,
+                      padding: 13,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 5 }}>
+                      Holiday calendar
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--faint)", lineHeight: 1.5, marginBottom: 9 }}>
+                      Entered once, applies to everyone. Saved on the contract, so it
+                      bends the Flight Deck's burn chart too — and changes what every
+                      saved plan projects.
+                    </div>
+                    {contractAbsence.holidays.length > 0 && (
+                      <div style={{ maxHeight: 168, overflowY: "auto", marginBottom: 9 }}>
+                        {contractAbsence.holidays.map((h) => (
+                          <div
+                            key={h.date}
+                            style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 0", fontSize: 11.5 }}
+                          >
+                            <span style={{ fontFamily: mono, color: "var(--dim)" }}>{h.date}</span>
+                            <span style={{ color: "var(--faint)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {h.name}
+                            </span>
+                            <button
+                              onClick={() =>
+                                saveHolidays({
+                                  holidays: contractAbsence.holidays.filter((x) => x.date !== h.date),
+                                })
+                              }
+                              disabled={holidayBusy}
+                              style={{ border: 0, background: "none", color: "var(--dim)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                      {/* A seed, never an imposition — a contractor observing a
+                          different calendar has to be able to delete these, which is
+                          why they land as ordinary editable entries. */}
+                      <button
+                        onClick={() =>
+                          saveHolidays({
+                            holidays: contractAbsence.holidays,
+                            seed_federal_year: new Date(
+                              periodBounds.start || Date.now()
+                            ).getUTCFullYear(),
+                          })
+                        }
+                        disabled={holidayBusy}
+                        style={{
+                          ...primaryBtn,
+                          padding: "6px 12px",
+                          fontSize: 12,
+                          ...(holidayBusy ? disabledBtn : null),
+                        }}
+                      >
+                        {holidayBusy ? "Saving…" : "Seed federal"}
+                      </button>
+                      <button
+                        onClick={() => saveHolidays({ holidays: [] })}
+                        disabled={holidayBusy || !contractAbsence.holidays.length}
                         style={{ ...chipBtnDim, padding: "6px 12px" }}
                       >
                         Clear
@@ -1099,6 +1445,195 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           )}
 
           {/* add-person inline form */}
+          {/* #85 — one person's dated absence. Inline above the grid, like the
+              add-person form, so the row it belongs to stays visible while typing. */}
+          {absenceFor && (
+            <div style={{ ...panelStyle, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                  Absence · {absenceFor.name}
+                </span>
+                <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
+                  Reduces this plan's projection in those weeks. Commit one to move the
+                  Flight Deck's burn chart too — until then it rides with the plan.
+                </span>
+                <button onClick={() => setAbsenceFor(null)} style={{ ...chipBtnDim, marginLeft: "auto" }}>
+                  ✕ Close
+                </button>
+              </div>
+
+              {/* What is already booked, committed and what-if together. A committed
+                  entry is the contract's and can't be deleted from a plan. */}
+              {absencesFor(allAbsences, absenceFor.id).length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 11 }}>
+                  {absencesFor(allAbsences, absenceFor.id).map((a, i) => {
+                    const planned = absences.includes(a);
+                    return (
+                      <span
+                        key={`${a.start}-${a.end}-${i}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 11.5,
+                          fontFamily: mono,
+                          padding: "4px 8px",
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          background: "var(--panel2)",
+                          color: "var(--dim)",
+                        }}
+                      >
+                        {a.start} → {a.end}
+                        <b style={{ color: "var(--text)" }}>{absenceWorkdays(a)}d</b>
+                        <span style={{ color: "var(--faint)" }}>
+                          {a.kind === "start" ? "start" : a.kind === "roll_off" ? "roll-off" : "PTO"}
+                        </span>
+                        {planned ? (
+                          <>
+                            {/* The only route by which a person's absence reaches the
+                                burn engine, and therefore the Flight Deck's chart. */}
+                            <button
+                              onClick={() => commitAbsence(a)}
+                              disabled={holidayBusy}
+                              title="Commit to the contract — this is what makes the Flight Deck's burn chart bend around it"
+                              style={{
+                                border: "1px solid var(--accent)",
+                                borderRadius: 6,
+                                background: "none",
+                                color: "var(--accent)",
+                                cursor: holidayBusy ? "not-allowed" : "pointer",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                lineHeight: 1,
+                                padding: "2px 5px",
+                              }}
+                            >
+                              COMMIT
+                            </button>
+                            <button
+                              onClick={() => removeAbsence(a)}
+                              title="Remove from this plan"
+                              style={{ border: 0, background: "none", color: "var(--dim)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
+                            >
+                              ×
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span
+                              title="Committed on the contract — the Flight Deck's chart bends around this one"
+                              style={{ color: "var(--accent)", fontSize: 10, fontWeight: 700 }}
+                            >
+                              ON CONTRACT
+                            </span>
+                            <button
+                              onClick={() => withdrawAbsence(a)}
+                              disabled={holidayBusy}
+                              title="Withdraw from the contract"
+                              style={{ border: 0, background: "none", color: "var(--dim)", cursor: holidayBusy ? "not-allowed" : "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}
+                            >
+                              ×
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Kind</div>
+                  <select
+                    value={absenceFor.kind}
+                    onChange={(ev) => setAbsenceFor((f) => ({ ...f, kind: ev.target.value }))}
+                    style={{ height: 34, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                  >
+                    <option value="pto">PTO / leave</option>
+                    <option value="start">Starts on…</option>
+                    <option value="roll_off">Rolls off after…</option>
+                  </select>
+                </div>
+                {/* PTO is a range; a start or roll-off date is a single date whose
+                    other end is the period boundary. Asking for one field instead of
+                    two disabled-and-mislabelled ones — the range is still what gets
+                    stored, so the projection keeps one code path for all three. */}
+                {absenceFor.kind === "pto" ? (
+                  <>
+                    <div>
+                      <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>
+                        First day out
+                      </div>
+                      <input
+                        type="date"
+                        value={absenceFor.start}
+                        onChange={(ev) => setAbsenceFor((f) => ({ ...f, start: ev.target.value }))}
+                        style={dateInput}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>
+                        Last day out
+                      </div>
+                      <input
+                        type="date"
+                        value={absenceFor.end}
+                        onChange={(ev) => setAbsenceFor((f) => ({ ...f, end: ev.target.value }))}
+                        style={dateInput}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>
+                      {absenceFor.kind === "start" ? "Starts on" : "Last day on the contract"}
+                    </div>
+                    <input
+                      type="date"
+                      value={absenceFor.start}
+                      onChange={(ev) => setAbsenceFor((f) => ({ ...f, start: ev.target.value }))}
+                      style={dateInput}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    if (absenceProblem || !absenceRange) return;
+                    addAbsence({
+                      person_id: absenceFor.id,
+                      person: absenceFor.name,
+                      ...absenceRange,
+                      kind: absenceFor.kind,
+                    });
+                    setAbsenceFor((f) => ({ ...f, start: "", end: "" }));
+                  }}
+                  disabled={!!absenceProblem}
+                  style={{
+                    ...primaryBtn,
+                    height: 34,
+                    ...(absenceProblem ? disabledBtn : null),
+                  }}
+                >
+                  + Add
+                </button>
+                {/* Never a dead click: the button says why it can't fire yet, and once
+                    it can, it echoes the workday count — the unit a user checks the
+                    arithmetic in, since "2026-08-10 → 2026-08-21" is not one. */}
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    color: absenceProblem ? "var(--warn)" : "var(--faint)",
+                  }}
+                >
+                  {absenceProblem ||
+                    `${absenceWorkdays(absenceRange)} workdays · ${absenceRange.start} → ${absenceRange.end}`}
+                </span>
+              </div>
+            </div>
+          )}
+
           {newPerson && (
             <div
               style={{
@@ -1232,6 +1767,9 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   )}
                   {visible.map((e) => {
                     const rowWeekly = rowWeeklyOf(e);
+                    // Committed and what-if absence together — the row shows what the
+                    // projection was actually scored against, not one of the two.
+                    const away = absencesFor(allAbsences, e.id);
                     const hue = hueOf(e.id);
                     const tier = tierOf(e.lcat);
                     return (
@@ -1252,6 +1790,51 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                                 {String(e.id).startsWith("added-") ? "—" : e.id}
                               </div>
                             </div>
+                            {/* #85 — dated absence, entered from the person's row
+                                because that is where the user is already looking at
+                                their hours. Accent-coloured once they have any, so
+                                the roster shows at a glance who is out. */}
+                            <button
+                              onClick={() =>
+                                setAbsenceFor({
+                                  id: e.id,
+                                  name: e.name,
+                                  start: "",
+                                  end: "",
+                                  kind: "pto",
+                                })
+                              }
+                              title={
+                                away.length
+                                  ? away
+                                      .map(
+                                        (a) =>
+                                          `${a.start} → ${a.end} (${absenceWorkdays(a)} days)`
+                                      )
+                                      .join("\n")
+                                  : "Add PTO, a start date or a roll-off date"
+                              }
+                              style={{
+                                width: 24,
+                                height: 24,
+                                flexShrink: 0,
+                                borderRadius: 6,
+                                border: `1px solid ${
+                                  away.length
+                                    ? "var(--accent)"
+                                    : "var(--border)"
+                                }`,
+                                background: "var(--panel2)",
+                                color: away.length
+                                  ? "var(--accent)"
+                                  : "var(--dim)",
+                                cursor: "pointer",
+                                fontSize: 12,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ☂
+                            </button>
                             <button
                               onClick={() => duplicatePerson(e)}
                               title="Duplicate as a planned add"
@@ -1971,6 +2554,26 @@ const chipBtn = {
   cursor: "pointer",
 };
 const chipBtnDim = { ...chipBtn, border: "1px solid var(--border)", color: "var(--dim)" };
+// A disabled button has to *look* disabled. `primaryBtn` keeps its accent fill,
+// pointer cursor and shadow when the `disabled` attribute is set, so a button that
+// silently refuses to fire is indistinguishable from one that works — which reads
+// as "the button is broken" rather than "I haven't finished filling the form".
+const disabledBtn = {
+  background: "var(--panel2)",
+  color: "var(--faint)",
+  boxShadow: "none",
+  cursor: "not-allowed",
+};
+const dateInput = {
+  height: 34,
+  padding: "0 10px",
+  borderRadius: 10,
+  border: "1px solid var(--border)",
+  background: "var(--inputBg)",
+  color: "var(--text)",
+  fontSize: 13,
+  fontFamily: mono,
+};
 const primaryBtn = {
   display: "flex",
   alignItems: "center",
