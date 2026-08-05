@@ -16,6 +16,7 @@ and rate resolver burn uses, so the matrix reconciles with the Flight Deck.
 from typing import List, Optional
 
 from . import burn
+from . import capacity
 from . import lcat as lcat_match
 from . import rates
 
@@ -40,9 +41,17 @@ def compute_allocation(
     rows: List[dict],
     expenses: Optional[List[dict]] = None,
     cost_model: Optional[rates.CostModel] = None,
+    expected_hours_by_person: Optional[dict] = None,
 ) -> dict:
     """Employee x labor-CLIN allocation for the active period, plus the per-CLIN
-    budget/spend/clock the simulator recomputes runway against."""
+    budget/spend/clock the simulator recomputes runway against.
+
+    `expected_hours_by_person` is `{employee_id: raw stored hours}` for #84's
+    per-person override — data the *caller* read, passed in rather than looked up, so
+    this module still cannot reach the people directory (a test pins that: allocation
+    must never own a roster). Everyone in the grid is here because they charged time;
+    a person with an expected week and no hours does not appear.
+    """
     b = burn.compute(contract, rows, expenses, cost_model)
     # Level 1 when the caller supplied nothing: cost falls back to the billing rate
     # and every cell says so (#77).
@@ -180,6 +189,10 @@ def compute_allocation(
                 )(cost_model.cost_for(lcat, res.rate, emp)),
             }
 
+    # Contract- and LCAT-level expected hours, read once off the contract's blob.
+    caps = capacity.contract_capacity(contract)
+    overrides = expected_hours_by_person or {}
+
     # A person's headline LCAT/rate for the row = the CLIN they bill the most hrs on.
     emp_list = []
     for row in employees.values():
@@ -188,6 +201,18 @@ def compute_allocation(
         )
         row["lcat"] = primary["lcat"] if primary else None
         row["rate"] = primary["rate"] if primary else None
+        # #84: the matrix no longer divides by 40. Resolved here so the grid, the
+        # portfolio endpoint and the People view all read one number resolved one way
+        # — the whole reason this lives on the server.
+        row["expected"] = capacity.resolve(
+            person_hours=overrides.get(row["id"]),
+            lcat=row["lcat"],
+            capacity=caps,
+        )
+        row["hours"] = round(sum(c["hours"] for c in row["cells"].values()), 1)
+        row["utilization"] = capacity.utilization(
+            row["hours"], row["expected"]["hours"]
+        )
         emp_list.append(row)
     emp_list.sort(
         key=lambda r: (-sum(c["hours"] for c in r["cells"].values()), r["name"])
@@ -203,6 +228,11 @@ def compute_allocation(
             "total_weeks": bc["total_weeks"],
             "weeks_remaining": bc["weeks_remaining"],
             "past_pop": bc["past_pop"],
+            # #84's contract-level settings, so the matrix can show the target it is
+            # measuring against and seed a planned add from it — without a second
+            # fetch, and without restating the default in JSX.
+            "utilization_target": caps["target"],
+            "expected_hours": capacity.resolve(capacity=caps),
         },
         "clins": clin_cards,
         "employees": emp_list,

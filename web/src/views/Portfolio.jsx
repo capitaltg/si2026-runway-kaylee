@@ -212,7 +212,16 @@ export default function Portfolio({ onOpen }) {
                 }}
               >
                 <span style={{ fontWeight: 600, color: "var(--text)", minWidth: 150 }}>{p.name}</span>
+                {/* The percentage is against this person's expected week (#84), not
+                    against 40 — so a part-time person booked to a full week reads well
+                    over 100%, which is the honest reading. The row is here because the
+                    hours exceed a physical week; that check is deliberately separate. */}
                 <span
+                  title={
+                    p.expected
+                      ? `${p.total_hours} hrs/wk against ${p.expected.hours} expected — ${p.expected.label}.`
+                      : undefined
+                  }
                   style={{
                     fontFamily: "'IBM Plex Mono',monospace",
                     fontWeight: 700,
@@ -220,7 +229,8 @@ export default function Portfolio({ onOpen }) {
                     color: p.utilization > 1.5 ? "var(--bad)" : "var(--warn)",
                   }}
                 >
-                  {Math.round(p.utilization * 100)}% · {p.total_hours} hrs/wk
+                  {p.utilization != null ? `${Math.round(p.utilization * 100)}% · ` : ""}
+                  {p.total_hours} hrs/wk
                 </span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {p.assignments.map((a, i) => (

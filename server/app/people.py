@@ -36,6 +36,8 @@ apart. This module only ever knows about origin.
 
 from typing import List, Optional
 
+from . import capacity as capacity_mod
+
 # The qualification fields the directory will store, as an allowlist rather than
 # free-form keys — the attrs table would otherwise become arbitrary key-value
 # storage on the first caller that felt like inventing a field. #84's utilisation
@@ -53,7 +55,15 @@ QUAL_FIELDS = ("education", "years_experience", "clearance")
 # without making it the thing #66 compares.
 CONTEXT_FIELDS = ("education_field",)
 
-ALLOWED_FIELDS = QUAL_FIELDS + CONTEXT_FIELDS
+# Capacity, not a credential (#84). Expected hours per week is stored here because a
+# part-time or split week is a property of the *person*, which is the same argument
+# this module makes for quals — but it is deliberately not a `QUAL_FIELD`. #66 never
+# compares it against a labor category's floor, and folding it into coverage would
+# drop every person in the directory out of `complete` over a field that says nothing
+# about whether they are qualified.
+CAPACITY_FIELDS = ("expected_hours",)
+
+ALLOWED_FIELDS = QUAL_FIELDS + CONTEXT_FIELDS + CAPACITY_FIELDS
 
 # The closed vocabularies, in ascending order. Order is the point: the check is
 # "meets or exceeds", not equality, so a TS/SCI holder must clear a Secret floor and
@@ -174,6 +184,9 @@ def validate_qual_value(field: str, value: str) -> Optional[str]:
             )
         if years < 0 or years > MAX_YEARS_EXPERIENCE:
             return f"Years of experience must be between 0 and {MAX_YEARS_EXPERIENCE}."
+    if field == "expected_hours":
+        # A week, not a credential — the rule lives with the resolver that reads it.
+        return capacity_mod.validate_expected_hours(value)
     return None
 
 
@@ -229,11 +242,25 @@ def build_directory(
             or f"#{c['id']}"
         )
 
+    # Capacity settings per contract, read once. Just blob keys — no burn pass — so
+    # the directory can say "expected 32 hrs/wk, the contract's target" while staying
+    # the cheap query it promises to be.
+    contract_caps = {}
+    for c in contracts or []:
+        contract_caps[c["id"]] = capacity_mod.contract_capacity(c)
+
+    # Quals and capacity share the attrs table and are split back apart here: one is
+    # a credential #66 compares, the other is a week #84 divides by, and putting
+    # expected hours inside a key called `quals` would make every consumer of the
+    # directory read it as a qualification.
     quals_by_person = {}
+    capacity_by_person = {}
     for a in attr_rows or []:
-        if a.get("field") not in ALLOWED_FIELDS:
+        field = a.get("field")
+        if field not in ALLOWED_FIELDS:
             continue
-        quals_by_person.setdefault(a["employee_id"], {})[a["field"]] = {
+        bucket = capacity_by_person if field in CAPACITY_FIELDS else quals_by_person
+        bucket.setdefault(a["employee_id"], {})[field] = {
             "value": a.get("value"),
             "source_note": a.get("source_note"),
             "authored_by": a.get("authored_by"),
@@ -299,13 +326,27 @@ def build_directory(
 
     out = []
     for p in people.values():
+        own_capacity = capacity_by_person.get(p["employee_id"], {})
+        own_hours = (own_capacity.get("expected_hours") or {}).get("value")
         rows = []
         for row in p["contracts"].values():
+            lcats = sorted(row["lcats"])
             rows.append(
                 {
                     **row,
                     "clins": sorted(row["clins"]),
-                    "lcats": sorted(row["lcats"]),
+                    "lcats": lcats,
+                    # An LCAT default can only be looked up when there is one category
+                    # to look up. Charging two on one contract is rare and, where it
+                    # happens, no single category describes the week — so it falls
+                    # through to the contract's target rather than picking a winner.
+                    "expected": capacity_mod.resolve(
+                        person_hours=own_hours,
+                        lcat=lcats[0] if len(lcats) == 1 else None,
+                        capacity=contract_caps.get(
+                            row["contract_id"], capacity_mod.contract_capacity(None)
+                        ),
+                    ),
                 }
             )
         rows.sort(key=lambda r: (-r["weeks"], r["contract"]))
@@ -325,6 +366,14 @@ def build_directory(
                 "lcats": sorted({lc for r in rows for lc in r["lcats"]}),
                 "quals": quals,
                 "quals_status": quals_status(quals),
+                # Capacity rides alongside quals, never inside them (#84).
+                "capacity": own_capacity,
+                # Their week across the whole portfolio, for the directory row. The
+                # per-contract numbers above are what the allocation matrix shows.
+                "expected": capacity_mod.portfolio_expected(
+                    person_hours=own_hours,
+                    per_contract=[r["expected"] for r in rows],
+                ),
             }
         )
     out.sort(key=lambda p: (p["origin"] != "derived", -p["contract_count"], p["name"]))
@@ -394,6 +443,11 @@ def utilization(allocations: List[dict]) -> dict:
     This is the expensive half of the directory — a burn pass per contract via
     `allocation.compute_allocation` — which is why it is its own endpoint and the
     People view loads it on demand rather than on mount.
+
+    Utilisation here is against each person's *expected* week, not against 40 (#84).
+    The per-contract expectations arrive already resolved on each employee row,
+    because the resolution needs the contract's blob and the allocation pass is the
+    thing holding it.
     """
     people = {}
     for alloc in allocations or []:
@@ -410,29 +464,69 @@ def utilization(allocations: List[dict]) -> dict:
                     "name": e["name"],
                     "total_hours": 0.0,
                     "assignments": [],
+                    "_expected": [],
                 },
             )
             p["total_hours"] += hrs
+            expected = e.get("expected")
+            if expected:
+                p["_expected"].append(expected)
             p["assignments"].append(
-                {"contract_id": cid, "contract": cname, "hours": round(hrs, 1)}
+                {
+                    "contract_id": cid,
+                    "contract": cname,
+                    "hours": round(hrs, 1),
+                    # What this contract expects of them, so the panel can say why one
+                    # person's 34 hours is full and another's is not.
+                    "expected": expected,
+                    "utilization": capacity_mod.utilization(
+                        hrs, (expected or {}).get("hours")
+                    ),
+                }
             )
-    rows = [
-        {
-            **p,
-            "total_hours": round(p["total_hours"], 1),
-            "utilization": round(p["total_hours"] / 40, 2),
-        }
-        for p in people.values()
-    ]
+    rows = []
+    for p in people.values():
+        per_contract = p.pop("_expected")
+        # A person's own override wins outright; with none, the widest week any of
+        # their contracts assumes. See capacity.portfolio_expected for why neither
+        # summing nor averaging the contracts is defensible.
+        own = None
+        for res in per_contract:
+            if res.get("level") == capacity_mod.PERSON:
+                own = res["hours"]
+                break
+        expected = capacity_mod.portfolio_expected(
+            person_hours=own, per_contract=per_contract
+        )
+        rows.append(
+            {
+                **p,
+                "total_hours": round(p["total_hours"], 1),
+                "expected": expected,
+                "utilization": capacity_mod.utilization(
+                    p["total_hours"], expected["hours"]
+                ),
+            }
+        )
     rows.sort(key=lambda p: -p["total_hours"])
     return {"count": len(rows), "people": rows}
 
 
 def conflicts(util_rows: List[dict]) -> List[dict]:
     """People booked past a full 40-hr week once summed across contracts. Matches on
-    employee_id, so it only ever surfaces real overlaps."""
+    employee_id, so it only ever surfaces real overlaps.
+
+    Deliberately still 40, and deliberately *not* each person's expected hours (#84).
+    This is a physical-week check — the question is whether one person has been booked
+    more hours than a week holds, which is a scheduling impossibility. Someone with a
+    32-hour expected week booked to 38 across two contracts is over their expectation
+    and not double-booked, and turning that into an overbooking alert would flood the
+    Portfolio panel with every part-time person in the company. "Over their expected
+    hours" is a separate signal, and #83 is where it belongs.
+    """
     return [
         p
         for p in util_rows or []
-        if len(p.get("assignments", [])) >= 2 and p["total_hours"] > 40
+        if len(p.get("assignments", [])) >= 2
+        and p["total_hours"] > capacity_mod.PHYSICAL_WEEK_HOURS
     ]

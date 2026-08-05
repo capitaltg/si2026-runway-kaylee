@@ -168,6 +168,26 @@ export async function deleteLcatAlias(contractId, source) {
   return r.json();
 }
 
+// A contract's expected-hours settings (#84): one utilisation target, plus optional
+// per-LCAT weeks. Returns the refreshed contract, because changing the target moves
+// every utilisation figure and the forward projection with it — the caller refetches
+// the allocation and shows the change rather than just acknowledging a save.
+//
+// `utilization_target` takes a fraction (0.8) or a percentage (80); "" clears it back
+// to the app default.
+export async function setContractCapacity(contractId, body) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/capacity`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail || `Saving expected hours failed (${r.status})`);
+  }
+  return r.json();
+}
+
 // Indirect-rate model (#77): the fringe/OH/G&A pools and direct labor rates in
 // force, plus the derived buildup. `contractId` null reads/writes the company-wide
 // default that every contract inherits per pool. All of it is optional — with none
