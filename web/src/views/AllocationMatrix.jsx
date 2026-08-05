@@ -4,6 +4,7 @@ import {
   listContracts,
   listPlans,
   savePlan,
+  updatePlan,
   deletePlan,
   getLcatRates,
   setLcatAlias,
@@ -18,6 +19,7 @@ import {
   absenceWorkdays,
   shiftDate,
 } from "../absence.js";
+import { planFingerprint, isUnsaved } from "../plans.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 
@@ -178,7 +180,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState({ key: null, dir: "desc" });
   // What-if roster edits: `added` are planned new people, `removed` are ids rolled
-  // off the plan. Both live only in this simulation until Reset (nothing persists).
+  // off the plan. Both are simulation-only — they change no employee record — but they
+  // do go into `plans.data` on save, and Discard puts the roster back.
   const [added, setAdded] = useState([]);
   const [removed, setRemoved] = useState([]);
   const [newPerson, setNewPerson] = useState(null); // the open "add person" form
@@ -198,6 +201,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [plans, setPlans] = useState([]);
   const [planName, setPlanName] = useState(null);
   const [loadedPlan, setLoadedPlan] = useState(null);
+  // Its name, held alongside the id rather than looked up in `plans` — the header names
+  // the loaded plan continuously, and the list is refetched after every save, so a
+  // lookup would blank the name for the length of that round trip.
+  const [loadedPlanName, setLoadedPlanName] = useState(null);
+  // #62 — the fingerprint of the loaded plan as it sits on the server, so "unsaved
+  // changes" can mean "differs from the saved plan" instead of "differs from the
+  // actuals". Without it every loaded plan read as unsaved forever.
+  const [savedFp, setSavedFp] = useState(null);
+  const [saveBusy, setSaveBusy] = useState(false);
   // Side-by-side plan comparison.
   const [comparing, setComparing] = useState(false);
   const [cmpA, setCmpA] = useState("current");
@@ -234,6 +246,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     setRemoved([]);
     setAbsences([]);
     setLoadedPlan(null);
+    setLoadedPlanName(null);
+    setSavedFp(null);
     getAllocation(contractId)
       .then((d) => {
         setData(d);
@@ -614,14 +628,25 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const sim = current.clin;
   const totalWeekly = current.totalWeekly;
   const totalHrs = current.totalHrs;
-  const dirty = useMemo(
-    () =>
-      (data && JSON.stringify(draft) !== JSON.stringify(buildDraft(data))) ||
-      added.length > 0 ||
-      removed.length > 0 ||
-      absences.length > 0,
-    [draft, data, added, removed, absences]
+  // Two questions, not one (#62). `dirty` — is anything modelled on top of the synced
+  // actuals, i.e. does Discard have something to throw away. `unsaved` — does what's
+  // on screen differ from the plan it was loaded from, i.e. is a save pending. The
+  // old code answered the first and displayed it as though it answered the second.
+  const fingerprint = useMemo(
+    () => planFingerprint({ draft, added, removed, absences }),
+    [draft, added, removed, absences]
   );
+  const actualsFp = useMemo(
+    () => planFingerprint({ draft: data ? buildDraft(data) : {} }),
+    [data]
+  );
+  const dirty = fingerprint !== actualsFp;
+  const unsaved = isUnsaved({
+    fingerprint,
+    savedFingerprint: savedFp,
+    loadedPlanId: loadedPlan,
+    dirty,
+  });
 
   // Per-person avatar hue keyed to roster order, so a person keeps their color
   // regardless of filtering/sorting.
@@ -775,24 +800,58 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     setAbsences([]);
     setNewPerson(null);
     setLoadedPlan(null);
+    setLoadedPlanName(null);
+    setSavedFp(null);
   }
 
-  // Persist the current sim state (grid + adds + removals) under a name.
-  async function doSavePlan() {
-    const nm = (planName || "").trim() || "Untitled plan";
+  // Discarding is destructive and it was the *only* prominent affordance on a dirty
+  // grid (#62) — the discoverable way out of an edited plan was to throw it away. It
+  // stays, behind a confirm, now that Save sits next to it.
+  function discardChanges() {
+    if (!dirty) return;
+    const warning =
+      loadedPlanName && unsaved
+        ? `Discard unsaved changes to “${loadedPlanName}”? The saved plan itself is kept.`
+        : "Discard this what-if and go back to the synced actuals?";
+    if (!window.confirm(warning)) return;
+    reset();
+  }
+
+  // Persist the current sim state (grid + adds + removals + absence) under a name.
+  // A loaded plan saves over itself; `asNew` is the deliberate fork. Before #62 every
+  // save created, so editing a loaded plan and saving silently left two same-named
+  // plans and no way to tell which one was meant.
+  async function doSavePlan({ asNew = false } = {}) {
+    const typed = (planName || "").trim();
+    const updating = Boolean(loadedPlan) && !asNew;
+    const nm = typed || (updating ? loadedPlanName : "") || "Untitled plan";
+    // Snapshot what we send, not what's on screen when the response lands: an edit
+    // made mid-flight must still read as unsaved afterwards.
+    const sent = { draft, added, removed, absences };
+    const sentFp = fingerprint;
+    setSaveBusy(true);
     try {
-      const saved = await savePlan(contractId, nm, {
-        draft,
-        added,
-        removed,
-        absences,
-      });
+      const saved = updating
+        ? await updatePlan(contractId, loadedPlan, nm, sent)
+        : await savePlan(contractId, nm, sent);
       setPlanName(null);
       setLoadedPlan(saved.id);
+      setLoadedPlanName(saved.name || nm);
+      setSavedFp(sentFp);
       refreshPlans();
     } catch (e) {
       setError(e.message);
+    } finally {
+      setSaveBusy(false);
     }
+  }
+
+  // The header's Save button: a loaded plan saves straight over itself, an unnamed
+  // what-if needs a name first, which is the one thing that still opens the menu.
+  function promptSave() {
+    if (loadedPlan) return doSavePlan();
+    setPlanName("");
+    setPlansMenuOpen(true);
   }
 
   // Reload a saved plan into the simulation.
@@ -817,12 +876,21 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     }, addSeq.current);
     addSeq.current = maxSeq;
     setLoadedPlan(plan.id);
+    setLoadedPlanName(plan.name);
+    // What's on screen now IS the saved plan, so nothing is pending (#62).
+    setSavedFp(planFingerprint({ ...d, draft: d.draft || (data ? buildDraft(data) : {}) }));
   }
 
   async function deletePlanById(id) {
     try {
       await deletePlan(contractId, id);
-      if (loadedPlan === id) setLoadedPlan(null);
+      if (loadedPlan === id) {
+        // The grid keeps the deleted plan's numbers — they're still a valid what-if —
+        // but it is no longer anybody's saved plan, so Save has to name a new one.
+        setLoadedPlan(null);
+        setLoadedPlanName(null);
+        setSavedFp(null);
+      }
       refreshPlans();
     } catch (e) {
       setError(e.message);
@@ -860,6 +928,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       return nd;
     });
     setLoadedPlan(null);
+    setLoadedPlanName(null);
+    setSavedFp(null);
   }
 
   // Deep-link from a Flight Deck "Apply fix" suggestion: once the grid has
@@ -891,7 +961,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     sel === "current" ? "Current plan" : plans.find((p) => String(p.id) === String(sel))?.name || "—";
 
   // Roll someone off the plan. A planned add just disappears; a synced person is
-  // marked removed (excluded from burn) — Reset brings everyone back.
+  // marked removed (excluded from burn) — Discard brings everyone back.
   function removePerson(id) {
     if (String(id).startsWith("added-")) setAdded((a) => a.filter((p) => p.id !== id));
     else setRemoved((r) => (r.includes(id) ? r : [...r, id]));
@@ -973,11 +1043,27 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
           </h2>
           <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 4 }}>
             Model staffing on <b>{name}</b> · {data.contract.period ? `${data.contract.period}, ` : ""}
-            week {cw} of {tw} · a live what-if — nothing here is saved.
+            week {cw} of {tw} ·{" "}
+            {/* #62 — this line used to read "a live what-if — nothing here is saved",
+                which stopped being true the day plans shipped and was the first thing
+                users believed. */}
+            {loadedPlanName ? (
+              <>
+                editing <b>“{loadedPlanName}”</b>
+                {unsaved ? " · unsaved changes" : " · saved"}
+              </>
+            ) : dirty ? (
+              "an unsaved what-if on top of the synced actuals"
+            ) : (
+              "modelling from the synced actuals"
+            )}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {dirty && (
+          {/* Which plan you are in, and whether it's saved. The badge this replaces
+              said "live, not saved" whenever the grid differed from the actuals —
+              which is true of every saved plan anyone ever loads (#62). */}
+          {(loadedPlanName || dirty) && (
             <span
               style={{
                 display: "flex",
@@ -985,12 +1071,55 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 gap: 6,
                 fontSize: 11.5,
                 fontWeight: 600,
-                color: "var(--warn)",
+                color: unsaved ? "var(--warn)" : "var(--good)",
+              }}
+              title={
+                unsaved
+                  ? "This what-if has changes that are not on the server yet"
+                  : `Saved as “${loadedPlanName}”`
+              }
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: unsaved ? "var(--warn)" : "var(--good)",
+                }}
+              />
+              {loadedPlanName || "Unsaved what-if"}
+              {loadedPlanName && (
+                <span style={{ color: "var(--dim)", fontWeight: 500 }}>
+                  · {unsaved ? "unsaved changes" : "saved"}
+                </span>
+              )}
+            </span>
+          )}
+          {unsaved && (
+            <button
+              onClick={promptSave}
+              disabled={saveBusy}
+              title={
+                loadedPlanName
+                  ? `Save these changes over “${loadedPlanName}”`
+                  : "Name this what-if and save it to the contract"
+              }
+              style={{
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 10,
+                border: "none",
+                background: "var(--accent)",
+                color: "#fff",
+                fontWeight: 600,
+                fontSize: 12.5,
+                cursor: saveBusy ? "default" : "pointer",
+                opacity: saveBusy ? 0.6 : 1,
+                boxShadow: "0 4px 12px rgba(67,97,238,.28)",
               }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--warn)" }} />
-              Simulating · live, not saved
-            </span>
+              {saveBusy ? "Saving…" : loadedPlanName ? "Save plan" : "Save plan…"}
+            </button>
           )}
           {!dirty && offPaceClins.length > 0 && (
             <button
@@ -1013,8 +1142,9 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
             </button>
           )}
           <button
-            onClick={reset}
+            onClick={discardChanges}
             disabled={!dirty}
+            title="Throw this what-if away and go back to the synced actuals"
             style={{
               height: 36,
               padding: "0 14px",
@@ -1028,7 +1158,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               opacity: dirty ? 1 : 0.5,
             }}
           >
-            Reset plan
+            Discard changes
           </button>
         </div>
       </div>
@@ -1349,18 +1479,45 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               <div style={{ position: "relative" }}>
                 <button
                   onClick={() => setPlansMenuOpen((v) => !v)}
+                  title={
+                    plans.length
+                      ? `${plans.length} saved plan${plans.length === 1 ? "" : "s"} on this contract`
+                      : "Save, load and compare what-if plans"
+                  }
                   style={{ ...secondaryBtn, borderColor: plansMenuOpen ? "var(--accent)" : "var(--border)" }}
                 >
-                  Plans ▾
+                  {/* The count is the hint that this is a place things live, not just
+                      another secondary button (#62). */}
+                  Plans{plans.length ? ` · ${plans.length}` : ""} ▾
                 </button>
                 {plansMenuOpen && (
                   <>
                     <div onClick={() => setPlansMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
                     <div style={{ position: "absolute", right: 0, top: 40, zIndex: 41, width: 250, ...panelStyle, padding: 8, boxShadow: "0 16px 40px rgba(15,20,35,.24)" }}>
                       {planName == null ? (
-                        <button onClick={() => setPlanName("")} style={menuItem}>
-                          ＋ Save current plan
-                        </button>
+                        <>
+                          {/* A loaded plan saves over itself here too, so the menu and
+                              the toolbar button can't disagree about what Save does. */}
+                          {loadedPlanName && (
+                            <button
+                              onClick={() => {
+                                doSavePlan();
+                                setPlansMenuOpen(false);
+                              }}
+                              disabled={!unsaved || saveBusy}
+                              style={{
+                                ...menuItem,
+                                color: unsaved ? "var(--text)" : "var(--faint)",
+                                cursor: unsaved ? "pointer" : "default",
+                              }}
+                            >
+                              ⤓ Save to “{loadedPlanName}”
+                            </button>
+                          )}
+                          <button onClick={() => setPlanName("")} style={menuItem}>
+                            ＋ {loadedPlanName ? "Save as a new plan" : "Save current plan"}
+                          </button>
+                        </>
                       ) : (
                         <div style={{ display: "flex", gap: 6, padding: 4 }}>
                           <input
@@ -1370,13 +1527,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                             onChange={(e) => setPlanName(e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
-                                doSavePlan();
+                                // Reached from "Save as a new plan" — a typed name
+                                // always means a new plan, never an overwrite.
+                                doSavePlan({ asNew: true });
                                 setPlansMenuOpen(false);
                               } else if (e.key === "Escape") setPlanName(null);
                             }}
                             style={{ flex: 1, minWidth: 0, height: 30, padding: "0 9px", borderRadius: 8, border: "1px solid var(--accent)", background: "var(--inputBg)", color: "var(--text)", fontSize: 12.5 }}
                           />
-                          <button onClick={() => { doSavePlan(); setPlansMenuOpen(false); }} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                          <button onClick={() => { doSavePlan({ asNew: true }); setPlansMenuOpen(false); }} style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
                             Save
                           </button>
                         </div>

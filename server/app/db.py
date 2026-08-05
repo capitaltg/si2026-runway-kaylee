@@ -684,6 +684,29 @@ def save_plan(contract_id: int, name: str, data: dict) -> dict:
     return dict(row)
 
 
+def update_plan(contract_id: int, plan_id: int, name: str, data: dict):
+    """Overwrite one existing plan in place. None if it isn't this contract's.
+
+    Saving an edited plan has to update it, not fork it: a POST-only API meant that
+    "load Q3 crew-up, nudge a cell, save" left two plans with the same name and no
+    way to tell which one anybody meant (#62).
+    """
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE plans SET name = ?, data = ? WHERE id = ? AND contract_id = ?",
+        (name, json.dumps(data), plan_id, contract_id),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        conn.close()
+        return None
+    row = conn.execute(
+        "SELECT id, name, created_at FROM plans WHERE id = ?", (plan_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row)
+
+
 def list_plans(contract_id: int) -> list:
     """A contract's saved plans, newest first, with their full sim state."""
     conn = get_conn()
