@@ -1,461 +1,365 @@
-employee,employee_id,week_ending,contract_no,charge_code,labor_category,reg_hours,ot_hours,leave_hours,total_hours,approved_by
-Julie King,E-80184,2026-07-24,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Allison Hill
-Gina Carter,E-27048,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Noah Rhodes
-Katie Rodriguez,E-48932,2026-07-03,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Angie Henderson
-Christopher Ashley,E-80957,2026-03-20,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Daniel Wagner
-Timothy Koch,E-43039,2026-07-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Cristian Santos
-Angelica Tucker,E-18227,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Connie Lawrence
-Carmen Rose,E-96383,2026-03-27,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Abigail Shaffer
-Jennifer Powers,E-57871,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Gina Moore
-Austin Smith,E-83930,2026-07-24,7026HEXDVC0001043,0002,Business Analyst,40.0,2.0,0.0,42.0,Gabrielle Davis
-Mark Perez,E-05183,2026-04-24,7026HEXDVC0001043,0002,Business Analyst,24.0,0.0,16.0,40.0,Ryan Munoz
-John Ryan,E-99737,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Monica Herrera
-Cheryl Davis,E-65667,2026-07-03,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Jamie Arnold
-Amy Valdez,E-10651,2026-07-03,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Lisa Hensley
-Connor West,E-62473,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Michele Williams
-Angela Morton,E-81080,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Dylan Miller
-Tammy Allison,E-26773,2026-05-01,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Brian Ramirez
-Stephanie Martin,E-06474,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Holly Wood
-Tyler Cowan,E-87234,2026-03-20,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Derek Zuniga
-Anthony Fitzgerald,E-05009,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Lisa Jackson
-Thomas Schmidt,E-08121,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Carla Gray
-Megan Young,E-19399,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Margaret Hawkins DDS
-Bradley Sandoval,E-98543,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Patty Perez
-Emily Baker,E-24751,2026-06-19,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,4.0,8.0,44.0,Ethan Adams
-Marc Hart,E-11838,2026-06-12,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Tommy Walter
-Julie King,E-80184,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Matthew Foster
-Gina Carter,E-27048,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Judy Baker
-Katie Rodriguez,E-48932,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Justin Baker
-Christopher Ashley,E-80957,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Stephanie Ross
-Timothy Koch,E-43039,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Zachary Hicks
-Angelica Tucker,E-18227,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Anthony Rodriguez
-Carmen Rose,E-96383,2026-05-15,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Rebecca Henderson
-Jennifer Powers,E-57871,2026-07-10,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,James Ferrell
-Austin Smith,E-83930,2026-06-12,7026HEXDVC0001043,0002,Business Analyst,40.0,4.0,0.0,44.0,Tricia Valencia
-Mark Perez,E-05183,2026-05-01,7026HEXDVC0001043,0002,Business Analyst,32.0,8.0,8.0,48.0,Nathan Maldonado
-John Ryan,E-99737,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,8.0,8.0,48.0,Debra Davidson
-Cheryl Davis,E-65667,2026-06-05,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Jeffrey Chavez
-Amy Valdez,E-10651,2026-03-20,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,2.0,8.0,42.0,Sherri Baker
-Connor West,E-62473,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Cassandra Gaines
-Angela Morton,E-81080,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Elizabeth Fowler
-Tammy Allison,E-26773,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Brittany Farmer
-Stephanie Martin,E-06474,2026-06-26,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Paula Moreno
-Tyler Cowan,E-87234,2026-04-24,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Fred Smith
-Anthony Fitzgerald,E-05009,2026-05-01,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Sherry Decker
-Thomas Schmidt,E-08121,2026-04-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Anthony Humphrey
-Megan Young,E-19399,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Angelica Tucker
-Bradley Sandoval,E-98543,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,2.0,8.0,42.0,Philip Cannon
-Emily Baker,E-24751,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,John Pierce
-Marc Hart,E-11838,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Shane Henderson
-Julie King,E-80184,2026-04-03,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Joshua Blair
-Gina Carter,E-27048,2026-04-03,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Eric Carney
-Katie Rodriguez,E-48932,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Jessica Holmes
-Christopher Ashley,E-80957,2026-06-26,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Danny Morgan
-Timothy Koch,E-43039,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Crystal Robinson
-Angelica Tucker,E-18227,2026-03-13,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Mark Perez
-Carmen Rose,E-96383,2026-07-24,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Shannon Jones
-Jennifer Powers,E-57871,2026-05-22,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Michael Lewis
-Austin Smith,E-83930,2026-06-05,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Timothy Duncan
-Mark Perez,E-05183,2026-07-10,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Richard Aguirre
-John Ryan,E-99737,2026-07-10,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,8.0,8.0,48.0,Brent Jordan
-Cheryl Davis,E-65667,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,0.0,16.0,40.0,John Daniel
-Amy Valdez,E-10651,2026-03-27,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,8.0,8.0,48.0,Victoria Garcia
-Connor West,E-62473,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Gerald Hensley
-Angela Morton,E-81080,2026-06-12,7026HEXDVC0001043,0002,Administrative Support,24.0,6.0,16.0,46.0,Connor West
-Tammy Allison,E-26773,2026-05-22,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Donald Wright
-Stephanie Martin,E-06474,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Jessica Callahan
-Tyler Cowan,E-87234,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Amber Kidd
-Anthony Fitzgerald,E-05009,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Tracy House
-Thomas Schmidt,E-08121,2026-03-20,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Carol Tucker
-Megan Young,E-19399,2026-03-20,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,James Brown
-Bradley Sandoval,E-98543,2026-07-10,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,William Baker
-Emily Baker,E-24751,2026-06-05,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Jordan Henderson
-Marc Hart,E-11838,2026-05-15,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Whitney Peters
-Julie King,E-80184,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Brittney Phillips
-Gina Carter,E-27048,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,8.0,8.0,48.0,Lauren Daniels
-Katie Rodriguez,E-48932,2026-03-20,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Amy Silva
-Christopher Ashley,E-80957,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Sarah Moore
-Timothy Koch,E-43039,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Angela Lopez
-Angelica Tucker,E-18227,2026-07-03,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Megan Young
-Carmen Rose,E-96383,2026-05-08,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,6.0,8.0,46.0,Steve Sanchez
-Jennifer Powers,E-57871,2026-04-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Lisa Barnes
-Austin Smith,E-83930,2026-03-13,7026HEXDVC0001043,0002,Business Analyst,24.0,0.0,16.0,40.0,Kelly Donovan
-Mark Perez,E-05183,2026-07-17,7026HEXDVC0001043,0002,Business Analyst,32.0,0.0,8.0,40.0,Mike Allen
-John Ryan,E-99737,2026-07-03,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Michael Evans
-Cheryl Davis,E-65667,2026-06-12,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Paul Jones
-Amy Valdez,E-10651,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,8.0,0.0,48.0,Zachary Ferrell
-Connor West,E-62473,2026-05-29,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Daniel Baker
-Angela Morton,E-81080,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Shirley Suarez
-Tammy Allison,E-26773,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Christopher Bass
-Stephanie Martin,E-06474,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Lisa Archer
-Tyler Cowan,E-87234,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Aimee Montoya
-Anthony Fitzgerald,E-05009,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Matthew Mcmillan
-Thomas Schmidt,E-08121,2026-07-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Brian Rodriguez
-Megan Young,E-19399,2026-07-24,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Denise Jacobs
-Bradley Sandoval,E-98543,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Christina Walters
-Emily Baker,E-24751,2026-03-27,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,John Whitehead
-Marc Hart,E-11838,2026-06-26,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,8.0,8.0,48.0,Anna Henderson
-Julie King,E-80184,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Aaron Wise
-Gina Carter,E-27048,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Deborah Figueroa
-Katie Rodriguez,E-48932,2026-03-20,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Jessica Smith
-Christopher Ashley,E-80957,2026-07-17,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Stephen Mckee
-Timothy Koch,E-43039,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Sandra Aguilar
-Angelica Tucker,E-18227,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Cameron Parker
-Carmen Rose,E-96383,2026-03-20,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Rebecca Valencia
-Jennifer Powers,E-57871,2026-03-13,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Christine Wright
-Austin Smith,E-83930,2026-03-20,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Richard Henson
-Mark Perez,E-05183,2026-05-29,7026HEXDVC0001043,0002,Business Analyst,40.0,4.0,0.0,44.0,Marc Moore
-John Ryan,E-99737,2026-06-05,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Sharon Cherry
-Cheryl Davis,E-65667,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Sierra Johnson
-Amy Valdez,E-10651,2026-04-17,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,2.0,8.0,42.0,Evelyn Galvan
-Connor West,E-62473,2026-07-24,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Sharon Cochran
-Angela Morton,E-81080,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Richard Rodriguez
-Tammy Allison,E-26773,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Shannon Walker
-Stephanie Martin,E-06474,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Julia Torres
-Tyler Cowan,E-87234,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Crystal Johnson
-Anthony Fitzgerald,E-05009,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Garrett Lin
-Thomas Schmidt,E-08121,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,2.0,16.0,42.0,Diana May
-Megan Young,E-19399,2026-03-27,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,William Herrera
-Bradley Sandoval,E-98543,2026-06-26,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Ashley Waller
-Emily Baker,E-24751,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Victor Baker
-Marc Hart,E-11838,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Jeffrey Chandler
-Julie King,E-80184,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Larry Dixon
-Gina Carter,E-27048,2026-04-03,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Kenneth Scott
-Katie Rodriguez,E-48932,2026-07-17,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,April Frost
-Christopher Ashley,E-80957,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Michelle Harmon
-Timothy Koch,E-43039,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Helen Jones
-Angelica Tucker,E-18227,2026-03-13,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Erin Edwards
-Carmen Rose,E-96383,2026-04-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Michelle Evans
-Jennifer Powers,E-57871,2026-03-27,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Jason Powell
-Austin Smith,E-83930,2026-07-10,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Cameron Fisher
-Mark Perez,E-05183,2026-03-27,7026HEXDVC0001043,0002,Business Analyst,32.0,0.0,8.0,40.0,Megan Orr
-John Ryan,E-99737,2026-03-20,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Elizabeth Kelley
-Cheryl Davis,E-65667,2026-04-24,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Dustin Jordan
-Amy Valdez,E-10651,2026-05-22,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Mary Marshall
-Connor West,E-62473,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Daniel Kennedy
-Angela Morton,E-81080,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Rebecca Jackson
-Tammy Allison,E-26773,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Jose Schultz
-Stephanie Martin,E-06474,2026-06-05,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Robert Potter
-Tyler Cowan,E-87234,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Courtney Gonzalez
-Anthony Fitzgerald,E-05009,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,David Alvarez
-Thomas Schmidt,E-08121,2026-04-24,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,4.0,8.0,44.0,Angel Perry
-Megan Young,E-19399,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Cheyenne Horton
-Bradley Sandoval,E-98543,2026-05-01,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,David Douglas Jr.
-Emily Baker,E-24751,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Patricia Rodriguez
-Marc Hart,E-11838,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Christopher Rubio
-Julie King,E-80184,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Amber Wright
-Gina Carter,E-27048,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Joyce Solis
-Katie Rodriguez,E-48932,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Victoria Larson
-Christopher Ashley,E-80957,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Stephanie Salazar
-Timothy Koch,E-43039,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Kathy Rivas
-Angelica Tucker,E-18227,2026-07-03,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Stephanie Manning
-Carmen Rose,E-96383,2026-03-20,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,David Wright
-Jennifer Powers,E-57871,2026-07-03,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Pamela Boyd
-Austin Smith,E-83930,2026-05-08,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Denise Jones
-Mark Perez,E-05183,2026-04-24,7026HEXDVC0001043,0002,Business Analyst,32.0,4.0,8.0,44.0,Devon Flores
-John Ryan,E-99737,2026-05-01,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Brenda Hall
-Cheryl Davis,E-65667,2026-05-29,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Michelle Brown
-Amy Valdez,E-10651,2026-07-24,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Joshua Perry
-Connor West,E-62473,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Jason Stein
-Angela Morton,E-81080,2026-05-15,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Melissa Gates
-Tammy Allison,E-26773,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Jamie Smith
-Stephanie Martin,E-06474,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,32.0,2.0,8.0,42.0,Paul Castaneda
-Tyler Cowan,E-87234,2026-05-15,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Jennifer Adkins
-Anthony Fitzgerald,E-05009,2026-03-27,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Lindsey Walker
-Thomas Schmidt,E-08121,2026-04-24,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Jeffrey Johnson
-Megan Young,E-19399,2026-06-19,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,6.0,8.0,46.0,Michael Powell
-Bradley Sandoval,E-98543,2026-05-01,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,John Anderson
-Emily Baker,E-24751,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Alyssa Long
-Marc Hart,E-11838,2026-04-24,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Alyssa Day
-Julie King,E-80184,2026-04-17,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,4.0,16.0,44.0,Joel Williams
-Gina Carter,E-27048,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Daniel Murphy
-Katie Rodriguez,E-48932,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Jamie Walton
-Christopher Ashley,E-80957,2026-05-22,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Darlene Miller
-Timothy Koch,E-43039,2026-07-10,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Joshua Cooke
-Angelica Tucker,E-18227,2026-05-22,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,0.0,16.0,40.0,Matthew Harrington
-Carmen Rose,E-96383,2026-06-26,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Nicole Herring
-Jennifer Powers,E-57871,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Alex Hernandez
-Austin Smith,E-83930,2026-04-17,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Michael Elliott
-Mark Perez,E-05183,2026-05-01,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Michael Wang
-John Ryan,E-99737,2026-06-05,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Lawrence Adkins
-Cheryl Davis,E-65667,2026-07-03,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Robert Oconnell
-Amy Valdez,E-10651,2026-06-05,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,6.0,16.0,46.0,Alexander Collins
-Connor West,E-62473,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Tina Sanders
-Angela Morton,E-81080,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Angela Vaughn
-Tammy Allison,E-26773,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Ashley Barton
-Stephanie Martin,E-06474,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Lindsay Martinez
-Tyler Cowan,E-87234,2026-03-27,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Dr. Hannah Patterson
-Anthony Fitzgerald,E-05009,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Jonathan Peterson
-Thomas Schmidt,E-08121,2026-06-05,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Samantha Garcia
-Megan Young,E-19399,2026-04-03,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,2.0,16.0,42.0,Madison Poole
-Bradley Sandoval,E-98543,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Jessica Gross
-Emily Baker,E-24751,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Debra Morton
-Marc Hart,E-11838,2026-05-15,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Karen Graham
-Julie King,E-80184,2026-06-26,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Debra Christian
-Gina Carter,E-27048,2026-05-01,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Angelica Keith
-Katie Rodriguez,E-48932,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,John Bishop
-Christopher Ashley,E-80957,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Allen Rosales
-Timothy Koch,E-43039,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Daniel Salinas
-Angelica Tucker,E-18227,2026-04-24,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Spencer Haynes
-Carmen Rose,E-96383,2026-03-20,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Adam Vaughan
-Jennifer Powers,E-57871,2026-07-24,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Nathan Freeman
-Austin Smith,E-83930,2026-05-01,7026HEXDVC0001043,0002,Business Analyst,40.0,2.0,0.0,42.0,Melissa Brewer
-Mark Perez,E-05183,2026-03-27,7026HEXDVC0001043,0002,Business Analyst,24.0,6.0,16.0,46.0,Ricky Davis II
-John Ryan,E-99737,2026-04-10,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,0.0,8.0,40.0,Elizabeth Perkins
-Cheryl Davis,E-65667,2026-04-24,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Joseph Coleman
-Amy Valdez,E-10651,2026-05-01,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Erin Warner
-Connor West,E-62473,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,David Martinez
-Angela Morton,E-81080,2026-06-26,7026HEXDVC0001043,0002,Administrative Support,24.0,8.0,16.0,48.0,Bryan Herrera
-Tammy Allison,E-26773,2026-05-01,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Cathy Robinson
-Stephanie Martin,E-06474,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Dr. William Warren
-Tyler Cowan,E-87234,2026-06-26,7026HEXDVC0001043,0002,Administrative Support,32.0,6.0,8.0,46.0,Brian Lee
-Anthony Fitzgerald,E-05009,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,24.0,8.0,16.0,48.0,Christopher Smith
-Thomas Schmidt,E-08121,2026-05-01,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Denise Mccann
-Megan Young,E-19399,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Melissa Martinez
-Bradley Sandoval,E-98543,2026-05-01,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Katherine Salas
-Emily Baker,E-24751,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Julie Alexander
-Marc Hart,E-11838,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Anthony Everett
-Julie King,E-80184,2026-05-08,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Rodney Morales
-Gina Carter,E-27048,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Mark Brown
-Katie Rodriguez,E-48932,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Justin Torres
-Christopher Ashley,E-80957,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Bailey Duran DDS
-Timothy Koch,E-43039,2026-06-26,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Courtney Mills
-Angelica Tucker,E-18227,2026-03-20,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Jeremy Dalton
-Carmen Rose,E-96383,2026-05-29,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Elizabeth Oliver DDS
-Jennifer Powers,E-57871,2026-06-19,7026HEXDVC0001043,0001,Software Engineer (Mid),24.0,4.0,16.0,44.0,Theresa Clark
-Austin Smith,E-83930,2026-06-19,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Matthew Moore
-Mark Perez,E-05183,2026-03-20,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Benjamin Smith
-John Ryan,E-99737,2026-03-20,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Kirk Carter
-Cheryl Davis,E-65667,2026-05-01,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,6.0,8.0,46.0,Michael Warner
-Amy Valdez,E-10651,2026-07-10,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,0.0,8.0,40.0,Michael Bradshaw
-Connor West,E-62473,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Lori Guerrero
-Angela Morton,E-81080,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,32.0,2.0,8.0,42.0,Jessica Stephens
-Tammy Allison,E-26773,2026-03-20,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Susan Serrano
-Stephanie Martin,E-06474,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Christopher Parker
-Tyler Cowan,E-87234,2026-05-08,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Laura Roberts
-Anthony Fitzgerald,E-05009,2026-07-24,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Michael Lyons
-Thomas Schmidt,E-08121,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,6.0,16.0,46.0,Kathryn Snyder
-Megan Young,E-19399,2026-05-08,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Andrew Reynolds
-Bradley Sandoval,E-98543,2026-06-26,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,8.0,8.0,48.0,David Davis
-Emily Baker,E-24751,2026-04-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Sara Johnston
-Marc Hart,E-11838,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,2.0,8.0,42.0,Yvonne Chambers
-Julie King,E-80184,2026-04-17,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Andrew Avila
-Gina Carter,E-27048,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Matthew Moon
-Katie Rodriguez,E-48932,2026-07-10,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Kevin Walters
-Christopher Ashley,E-80957,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Brandon Bailey MD
-Timothy Koch,E-43039,2026-03-20,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Shannon Rivera
-Angelica Tucker,E-18227,2026-05-15,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Donna Landry
-Carmen Rose,E-96383,2026-05-15,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Krista Gibson
-Jennifer Powers,E-57871,2026-06-12,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Frank Cordova
-Austin Smith,E-83930,2026-05-15,7026HEXDVC0001043,0002,Business Analyst,40.0,2.0,0.0,42.0,Jose Travis
-Mark Perez,E-05183,2026-03-27,7026HEXDVC0001043,0002,Business Analyst,40.0,2.0,0.0,42.0,Kimberly Gutierrez
-John Ryan,E-99737,2026-07-10,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Isaiah Avila
-Cheryl Davis,E-65667,2026-04-10,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Olivia Harris
-Amy Valdez,E-10651,2026-04-10,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Tanya Kim
-Connor West,E-62473,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,32.0,8.0,8.0,48.0,Barbara Dudley
-Angela Morton,E-81080,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Cynthia Moore
-Tammy Allison,E-26773,2026-05-01,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Kristen Davis
-Stephanie Martin,E-06474,2026-05-22,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Susan Murray MD
-Tyler Cowan,E-87234,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Kathleen Moran
-Anthony Fitzgerald,E-05009,2026-04-24,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Denise Davenport
-Thomas Schmidt,E-08121,2026-05-08,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,4.0,8.0,44.0,Mrs. Kristen Reyes
-Megan Young,E-19399,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,8.0,8.0,48.0,Katie Suarez
-Bradley Sandoval,E-98543,2026-06-05,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Desiree Tyler
-Emily Baker,E-24751,2026-05-15,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Timothy Romero
-Marc Hart,E-11838,2026-06-12,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Diane Evans
-Julie King,E-80184,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Yvonne Burns
-Gina Carter,E-27048,2026-07-03,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Joshua Reed
-Katie Rodriguez,E-48932,2026-05-22,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Kimberly Gibson
-Christopher Ashley,E-80957,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Colin Terry
-Timothy Koch,E-43039,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Cynthia Rowe
-Angelica Tucker,E-18227,2026-07-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Patrick Thornton
-Carmen Rose,E-96383,2026-06-26,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Jasmin Alvarado
-Jennifer Powers,E-57871,2026-07-03,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,8.0,8.0,48.0,Veronica Simpson
-Austin Smith,E-83930,2026-03-20,7026HEXDVC0001043,0002,Business Analyst,24.0,0.0,16.0,40.0,Jonathan Lawrence
-Mark Perez,E-05183,2026-04-10,7026HEXDVC0001043,0002,Business Analyst,40.0,8.0,0.0,48.0,Shelly Alexander
-John Ryan,E-99737,2026-06-19,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Joyce Bowen
-Cheryl Davis,E-65667,2026-04-10,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Matthew Moore
-Amy Valdez,E-10651,2026-05-01,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Wayne Morgan
-Connor West,E-62473,2026-03-20,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Marie Christian
-Angela Morton,E-81080,2026-06-26,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Shannon James
-Tammy Allison,E-26773,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Nathan Malone
-Stephanie Martin,E-06474,2026-03-27,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Amanda Jones
-Tyler Cowan,E-87234,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,24.0,6.0,16.0,46.0,Tammie Bright
-Anthony Fitzgerald,E-05009,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Jessica Garcia
-Thomas Schmidt,E-08121,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Shelia Wallace
-Megan Young,E-19399,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Stephanie Williams
-Bradley Sandoval,E-98543,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Elaine Brooks
-Emily Baker,E-24751,2026-06-12,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Joseph Knight
-Marc Hart,E-11838,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Carolyn Miller
-Julie King,E-80184,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Lisa Allen
-Gina Carter,E-27048,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Briana Murray
-Katie Rodriguez,E-48932,2026-07-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,David Smith
-Christopher Ashley,E-80957,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Stephanie Byrd
-Timothy Koch,E-43039,2026-07-17,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Jeremy Reed
-Angelica Tucker,E-18227,2026-05-22,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Margaret Coleman
-Carmen Rose,E-96383,2026-07-10,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,8.0,8.0,48.0,Ryan Gonzalez
-Jennifer Powers,E-57871,2026-05-29,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,0.0,8.0,40.0,John Young
-Austin Smith,E-83930,2026-04-24,7026HEXDVC0001043,0002,Business Analyst,24.0,0.0,16.0,40.0,Laura Haney
-Mark Perez,E-05183,2026-03-13,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,William Barrett
-John Ryan,E-99737,2026-06-26,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Keith Jennings
-Cheryl Davis,E-65667,2026-06-19,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Amber Obrien
-Amy Valdez,E-10651,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,2.0,16.0,42.0,Tanner Mitchell DDS
-Connor West,E-62473,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,32.0,2.0,8.0,42.0,Heather Fields
-Angela Morton,E-81080,2026-05-22,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Megan Le
-Tammy Allison,E-26773,2026-05-29,7026HEXDVC0001043,0002,Administrative Support,32.0,6.0,8.0,46.0,Sara Fuller
-Stephanie Martin,E-06474,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Maria Parker
-Tyler Cowan,E-87234,2026-04-24,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Kevin Oconnor
-Anthony Fitzgerald,E-05009,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Edward Burgess
-Thomas Schmidt,E-08121,2026-07-10,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Carlos Ryan
-Megan Young,E-19399,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Kiara Mcintyre
-Bradley Sandoval,E-98543,2026-06-19,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Dawn Summers
-Emily Baker,E-24751,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Dr. Paul Morgan
-Marc Hart,E-11838,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Victor Taylor
-Julie King,E-80184,2026-07-10,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Shannon Ramsey
-Gina Carter,E-27048,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Tracy Ballard
-Katie Rodriguez,E-48932,2026-07-03,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Richard Smith
-Christopher Ashley,E-80957,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Jordan Chambers
-Timothy Koch,E-43039,2026-05-22,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Lauren Carson
-Angelica Tucker,E-18227,2026-03-27,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,6.0,8.0,46.0,Ashley Hall
-Carmen Rose,E-96383,2026-07-10,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Stephen Hoffman
-Jennifer Powers,E-57871,2026-05-15,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Connie Brown
-Austin Smith,E-83930,2026-04-03,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Susan Turner
-Mark Perez,E-05183,2026-03-27,7026HEXDVC0001043,0002,Business Analyst,24.0,0.0,16.0,40.0,Charles Shah
-John Ryan,E-99737,2026-07-17,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Johnathan Davis
-Cheryl Davis,E-65667,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Brandy Chavez
-Amy Valdez,E-10651,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,8.0,16.0,48.0,Natalie Bautista
-Connor West,E-62473,2026-06-12,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Patrick Moore
-Angela Morton,E-81080,2026-05-22,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Brett Burns
-Tammy Allison,E-26773,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Trevor Johnson
-Stephanie Martin,E-06474,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Jeremy Sampson
-Tyler Cowan,E-87234,2026-03-27,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Ariana Jennings
-Anthony Fitzgerald,E-05009,2026-06-05,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Vanessa Howard
-Thomas Schmidt,E-08121,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Colton Martinez
-Megan Young,E-19399,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Jordan Bates
-Bradley Sandoval,E-98543,2026-04-03,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,2.0,8.0,42.0,Linda Smith
-Emily Baker,E-24751,2026-04-24,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,2.0,8.0,42.0,Dana Martinez
-Marc Hart,E-11838,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,8.0,16.0,48.0,Andrea Hubbard
-Julie King,E-80184,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Daniel Kane
-Gina Carter,E-27048,2026-06-12,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Charles Lester
-Katie Rodriguez,E-48932,2026-07-10,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Scott Thomas
-Christopher Ashley,E-80957,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,David Thompson
-Timothy Koch,E-43039,2026-07-24,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,2.0,16.0,42.0,Allison Smith
-Angelica Tucker,E-18227,2026-03-20,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Cynthia Morris
-Carmen Rose,E-96383,2026-06-26,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Anthony Harmon
-Jennifer Powers,E-57871,2026-05-08,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Nichole Alvarez
-Austin Smith,E-83930,2026-04-17,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Kayla Rodriguez
-Mark Perez,E-05183,2026-06-05,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Theresa Williams
-John Ryan,E-99737,2026-06-05,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Sharon Boyd
-Cheryl Davis,E-65667,2026-07-17,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,6.0,16.0,46.0,Victor Brown
-Amy Valdez,E-10651,2026-05-01,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,8.0,0.0,48.0,James Parks
-Connor West,E-62473,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Theodore Jones Jr.
-Angela Morton,E-81080,2026-04-03,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Ana Hill
-Tammy Allison,E-26773,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Kimberly Nguyen
-Stephanie Martin,E-06474,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,24.0,8.0,16.0,48.0,Kerry Chavez DDS
-Tyler Cowan,E-87234,2026-07-24,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Michael Farrell
-Anthony Fitzgerald,E-05009,2026-04-24,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Patricia Le
-Thomas Schmidt,E-08121,2026-07-10,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Jesse Perez
-Megan Young,E-19399,2026-05-15,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Jesse Perry
-Bradley Sandoval,E-98543,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Jeffery Ortega
-Emily Baker,E-24751,2026-03-27,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Christian Leblanc
-Marc Hart,E-11838,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Ronald Davis
-Julie King,E-80184,2026-03-27,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,8.0,8.0,48.0,Parker Cain
-Gina Carter,E-27048,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Laurie Hoffman
-Katie Rodriguez,E-48932,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,2.0,8.0,42.0,Bryan Gomez
-Christopher Ashley,E-80957,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Nicole Parrish
-Timothy Koch,E-43039,2026-04-17,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Tracy Burke
-Angelica Tucker,E-18227,2026-07-24,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Kenneth Lewis
-Carmen Rose,E-96383,2026-07-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Courtney Rodriguez
-Jennifer Powers,E-57871,2026-05-08,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Holly Farmer
-Austin Smith,E-83930,2026-06-05,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Renee Bruce
-Mark Perez,E-05183,2026-03-20,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Sabrina Austin
-John Ryan,E-99737,2026-06-19,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,0.0,8.0,40.0,Allison Hickman
-Cheryl Davis,E-65667,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Debra White
-Amy Valdez,E-10651,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,24.0,6.0,16.0,46.0,Ellen Morgan
-Connor West,E-62473,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Sergio Knight
-Angela Morton,E-81080,2026-06-05,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Charles Schultz
-Tammy Allison,E-26773,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Paul Lewis
-Stephanie Martin,E-06474,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Glen Wood
-Tyler Cowan,E-87234,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Paula Bradley
-Anthony Fitzgerald,E-05009,2026-03-20,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Anthony Moore
-Thomas Schmidt,E-08121,2026-05-29,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Megan Nelson
-Megan Young,E-19399,2026-06-12,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Karla Ramos
-Bradley Sandoval,E-98543,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,8.0,0.0,48.0,Paul Wilson
-Emily Baker,E-24751,2026-03-20,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Douglas Gregory
-Marc Hart,E-11838,2026-05-22,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Mr. Andrew Foster
-Julie King,E-80184,2026-05-29,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,6.0,0.0,46.0,Aimee Turner
-Gina Carter,E-27048,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Chad Scott
-Katie Rodriguez,E-48932,2026-05-22,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,8.0,8.0,48.0,Adam Burgess
-Christopher Ashley,E-80957,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,James Padilla
-Timothy Koch,E-43039,2026-06-05,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,4.0,16.0,44.0,Sandra Drake
-Angelica Tucker,E-18227,2026-03-13,7026HEXDVC0001043,0001,Software Engineer (Mid),32.0,0.0,8.0,40.0,Scott Williams
-Carmen Rose,E-96383,2026-03-13,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Thomas Atkins
-Jennifer Powers,E-57871,2026-05-22,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Laura Mckinney
-Austin Smith,E-83930,2026-07-17,7026HEXDVC0001043,0002,Business Analyst,24.0,8.0,16.0,48.0,Brian Smith
-Mark Perez,E-05183,2026-06-26,7026HEXDVC0001043,0002,Business Analyst,40.0,4.0,0.0,44.0,Robert Montgomery
-John Ryan,E-99737,2026-05-15,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,2.0,0.0,42.0,Tamara Davis
-Cheryl Davis,E-65667,2026-06-19,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,6.0,8.0,46.0,Dana Chapman
-Amy Valdez,E-10651,2026-03-27,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Jennifer Collins
-Connor West,E-62473,2026-06-19,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Gary Jackson
-Angela Morton,E-81080,2026-05-22,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Ashley Hicks
-Tammy Allison,E-26773,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Hannah Luna
-Stephanie Martin,E-06474,2026-06-26,7026HEXDVC0001043,0002,Administrative Support,40.0,0.0,0.0,40.0,Robin Young
-Tyler Cowan,E-87234,2026-05-01,7026HEXDVC0001043,0002,Administrative Support,24.0,0.0,16.0,40.0,Craig Morrison
-Anthony Fitzgerald,E-05009,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,24.0,4.0,16.0,44.0,Mary Thompson
-Thomas Schmidt,E-08121,2026-07-24,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,6.0,16.0,46.0,Kathleen Webster
-Megan Young,E-19399,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Joann Glass
-Bradley Sandoval,E-98543,2026-03-20,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Madison Weber
-Emily Baker,E-24751,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Lori Hernandez
-Marc Hart,E-11838,2026-04-10,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Jeremy Turner
-Julie King,E-80184,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,4.0,0.0,44.0,Anthony Romero
-Gina Carter,E-27048,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Jesse Brown
-Katie Rodriguez,E-48932,2026-05-22,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,8.0,16.0,48.0,Angela Lin
-Christopher Ashley,E-80957,2026-07-03,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,6.0,8.0,46.0,Lisa Hunter
-Timothy Koch,E-43039,2026-07-17,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Julian Conner
-Angelica Tucker,E-18227,2026-07-03,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,8.0,0.0,48.0,Joanna Pacheco
-Carmen Rose,E-96383,2026-03-27,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,0.0,0.0,40.0,Erica Alvarez
-Jennifer Powers,E-57871,2026-04-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,6.0,0.0,46.0,Antonio Garcia
-Austin Smith,E-83930,2026-03-20,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Gwendolyn Klein
-Mark Perez,E-05183,2026-04-24,7026HEXDVC0001043,0002,Business Analyst,32.0,0.0,8.0,40.0,Carrie Wright
-John Ryan,E-99737,2026-04-10,7026HEXDVC0001043,0002,Senior Software Engineer,32.0,0.0,8.0,40.0,Jeffrey Mills
-Cheryl Davis,E-65667,2026-05-29,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,6.0,0.0,46.0,Jake Campbell
-Amy Valdez,E-10651,2026-06-12,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,George Harper
-Connor West,E-62473,2026-06-05,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Maria Jones
-Angela Morton,E-81080,2026-07-03,7026HEXDVC0001043,0002,Administrative Support,24.0,4.0,16.0,44.0,Michael Mitchell
-Tammy Allison,E-26773,2026-03-27,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Mary Escobar
-Stephanie Martin,E-06474,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,32.0,4.0,8.0,44.0,Felicia Aguilar
-Tyler Cowan,E-87234,2026-06-12,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Gregory Ponce
-Anthony Fitzgerald,E-05009,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,40.0,8.0,0.0,48.0,Jenna Larson
-Thomas Schmidt,E-08121,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Emily Bennett
-Megan Young,E-19399,2026-07-17,7026HEXDVC0001043,0002,Program Manager (PMP),32.0,0.0,8.0,40.0,Robin Santiago
-Bradley Sandoval,E-98543,2026-06-05,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,4.0,16.0,44.0,Nancy Jennings
-Emily Baker,E-24751,2026-07-10,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Maria Henderson
-Marc Hart,E-11838,2026-03-20,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Jack White
-Julie King,E-80184,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Travis Tucker
-Gina Carter,E-27048,2026-03-13,7026HEXDVC0001043,0001,Senior Software Engineer,24.0,0.0,16.0,40.0,Chad Jones
-Katie Rodriguez,E-48932,2026-06-26,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Ashley Wise
-Christopher Ashley,E-80957,2026-06-19,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,2.0,0.0,42.0,Sophia Johnson
-Timothy Koch,E-43039,2026-06-26,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Ralph Anderson
-Angelica Tucker,E-18227,2026-06-05,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Christopher Guerra
-Carmen Rose,E-96383,2026-07-24,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,4.0,0.0,44.0,Rhonda Martin
-Jennifer Powers,E-57871,2026-07-17,7026HEXDVC0001043,0001,Software Engineer (Mid),40.0,2.0,0.0,42.0,Jason Rhodes
-Austin Smith,E-83930,2026-04-03,7026HEXDVC0001043,0002,Business Analyst,40.0,6.0,0.0,46.0,Jeremy Mitchell
-Mark Perez,E-05183,2026-04-10,7026HEXDVC0001043,0002,Business Analyst,40.0,0.0,0.0,40.0,Joann Ferguson
-John Ryan,E-99737,2026-04-03,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,4.0,0.0,44.0,Robert Harrison
-Cheryl Davis,E-65667,2026-04-17,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Holly Valentine
-Amy Valdez,E-10651,2026-03-13,7026HEXDVC0001043,0002,Senior Software Engineer,40.0,0.0,0.0,40.0,Mrs. Diane Reyes
-Connor West,E-62473,2026-04-17,7026HEXDVC0001043,0002,Administrative Support,40.0,2.0,0.0,42.0,Tracy Montoya
-Angela Morton,E-81080,2026-07-17,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Brenda Wright
-Tammy Allison,E-26773,2026-04-24,7026HEXDVC0001043,0002,Administrative Support,40.0,6.0,0.0,46.0,Shelly Spencer
-Stephanie Martin,E-06474,2026-04-10,7026HEXDVC0001043,0002,Administrative Support,32.0,0.0,8.0,40.0,Ryan Rosales
-Tyler Cowan,E-87234,2026-07-10,7026HEXDVC0001043,0002,Administrative Support,32.0,8.0,8.0,48.0,Phillip Nelson
-Anthony Fitzgerald,E-05009,2026-03-13,7026HEXDVC0001043,0002,Administrative Support,40.0,4.0,0.0,44.0,Brittany Kim
-Thomas Schmidt,E-08121,2026-06-26,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,0.0,0.0,40.0,Courtney Hayes
-Megan Young,E-19399,2026-05-01,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,4.0,0.0,44.0,Alexander Brown
-Bradley Sandoval,E-98543,2026-04-17,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,2.0,0.0,42.0,Cynthia Vang
-Emily Baker,E-24751,2026-07-03,7026HEXDVC0001043,0002,Program Manager (PMP),40.0,6.0,0.0,46.0,Alfred Galvan
-Marc Hart,E-11838,2026-03-13,7026HEXDVC0001043,0002,Program Manager (PMP),24.0,0.0,16.0,40.0,Marie Moody
-Julie King,E-80184,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,32.0,0.0,8.0,40.0,Dustin Gallegos
-Gina Carter,E-27048,2026-04-24,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Brenda Thornton
-Katie Rodriguez,E-48932,2026-05-01,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,8.0,0.0,48.0,Aaron Miller
-Christopher Ashley,E-80957,2026-05-15,7026HEXDVC0001043,0001,Senior Software Engineer,40.0,0.0,0.0,40.0,Ruben Dunn
+employee,employee_id,week_ending,contract_no,charge_code,labor_category,reg_hours,ot_hours,holiday_hours,leave_hours,total_hours,paid_hours,approved_by
+Julie King,E-80184,2026-01-23,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,6.0,8.0,0.0,38.0,46.0,Allison Hill
+Gina Carter,E-27048,2026-01-23,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,2.0,8.0,0.0,34.0,42.0,Noah Rhodes
+Katie Rodriguez,E-48932,2026-01-23,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,8.0,0.0,32.0,40.0,Angie Henderson
+Christopher Ashley,E-80957,2026-01-23,7026HEXDVC0001043,0001,Systems Engineer,32.0,4.0,8.0,0.0,36.0,44.0,Daniel Wagner
+Timothy Koch,E-43039,2026-01-23,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Cristian Santos
+Angelica Tucker,E-18227,2026-01-23,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Connie Lawrence
+Carmen Rose,E-96383,2026-01-23,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,6.0,8.0,0.0,38.0,46.0,Abigail Shaffer
+Jennifer Powers,E-57871,2026-01-23,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Gina Moore
+Austin Smith,E-83930,2026-01-23,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Gabrielle Davis
+Mark Perez,E-05183,2026-01-23,7026HEXDVC0001043,0001,Business Analyst,32.0,4.0,8.0,0.0,36.0,44.0,Ryan Munoz
+John Ryan,E-99737,2026-01-23,7026HEXDVC0001043,0001,Business Analyst,32.0,8.0,8.0,0.0,40.0,48.0,Monica Herrera
+Cheryl Davis,E-65667,2026-01-23,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Jamie Arnold
+Amy Valdez,E-10651,2026-01-23,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Lisa Hensley
+Julie King,E-80184,2026-01-30,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Michele Williams
+Gina Carter,E-27048,2026-01-30,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Dylan Miller
+Katie Rodriguez,E-48932,2026-01-30,7026HEXDVC0001043,0001,Systems Engineer,40.0,6.0,0.0,0.0,46.0,46.0,Brian Ramirez
+Christopher Ashley,E-80957,2026-01-30,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Holly Wood
+Timothy Koch,E-43039,2026-01-30,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Derek Zuniga
+Angelica Tucker,E-18227,2026-01-30,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Lisa Jackson
+Carmen Rose,E-96383,2026-01-30,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Carla Gray
+Jennifer Powers,E-57871,2026-01-30,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,6.0,0.0,0.0,46.0,46.0,Margaret Hawkins DDS
+Austin Smith,E-83930,2026-01-30,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Patty Perez
+Mark Perez,E-05183,2026-01-30,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Ethan Adams
+John Ryan,E-99737,2026-01-30,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Tommy Walter
+Cheryl Davis,E-65667,2026-01-30,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Matthew Foster
+Amy Valdez,E-10651,2026-01-30,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Judy Baker
+Julie King,E-80184,2026-02-06,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Justin Baker
+Gina Carter,E-27048,2026-02-06,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Stephanie Ross
+Katie Rodriguez,E-48932,2026-02-06,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,Zachary Hicks
+Christopher Ashley,E-80957,2026-02-06,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Anthony Rodriguez
+Timothy Koch,E-43039,2026-02-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,6.0,0.0,0.0,46.0,46.0,Rebecca Henderson
+Angelica Tucker,E-18227,2026-02-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,James Ferrell
+Carmen Rose,E-96383,2026-02-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Tricia Valencia
+Jennifer Powers,E-57871,2026-02-06,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,4.0,0.0,8.0,36.0,44.0,Nathan Maldonado
+Austin Smith,E-83930,2026-02-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Debra Davidson
+Mark Perez,E-05183,2026-02-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Jeffrey Chavez
+John Ryan,E-99737,2026-02-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Sherri Baker
+Cheryl Davis,E-65667,2026-02-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Cassandra Gaines
+Amy Valdez,E-10651,2026-02-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Elizabeth Fowler
+Julie King,E-80184,2026-02-13,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Brittany Farmer
+Gina Carter,E-27048,2026-02-13,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,4.0,0.0,0.0,44.0,44.0,Paula Moreno
+Katie Rodriguez,E-48932,2026-02-13,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Fred Smith
+Christopher Ashley,E-80957,2026-02-13,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Sherry Decker
+Timothy Koch,E-43039,2026-02-13,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Anthony Humphrey
+Angelica Tucker,E-18227,2026-02-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Angelica Tucker
+Carmen Rose,E-96383,2026-02-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Philip Cannon
+Jennifer Powers,E-57871,2026-02-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,John Pierce
+Austin Smith,E-83930,2026-02-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Shane Henderson
+Mark Perez,E-05183,2026-02-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Joshua Blair
+John Ryan,E-99737,2026-02-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Eric Carney
+Cheryl Davis,E-65667,2026-02-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Jessica Holmes
+Amy Valdez,E-10651,2026-02-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Danny Morgan
+Julie King,E-80184,2026-02-20,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,8.0,0.0,32.0,40.0,Crystal Robinson
+Gina Carter,E-27048,2026-02-20,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,4.0,8.0,0.0,36.0,44.0,Mark Perez
+Katie Rodriguez,E-48932,2026-02-20,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,8.0,0.0,32.0,40.0,Shannon Jones
+Christopher Ashley,E-80957,2026-02-20,7026HEXDVC0001043,0001,Systems Engineer,24.0,6.0,8.0,8.0,30.0,46.0,Michael Lewis
+Timothy Koch,E-43039,2026-02-20,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,4.0,8.0,0.0,36.0,44.0,Timothy Duncan
+Angelica Tucker,E-18227,2026-02-20,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,8.0,0.0,40.0,48.0,Richard Aguirre
+Carmen Rose,E-96383,2026-02-20,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Brent Jordan
+Jennifer Powers,E-57871,2026-02-20,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,8.0,0.0,40.0,48.0,John Daniel
+Austin Smith,E-83930,2026-02-20,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,8.0,0.0,40.0,48.0,Victoria Garcia
+Mark Perez,E-05183,2026-02-20,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Gerald Hensley
+John Ryan,E-99737,2026-02-20,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Connor West
+Cheryl Davis,E-65667,2026-02-20,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Donald Wright
+Amy Valdez,E-10651,2026-02-20,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Jessica Callahan
+Julie King,E-80184,2026-02-27,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,4.0,0.0,8.0,36.0,44.0,Amber Kidd
+Gina Carter,E-27048,2026-02-27,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,4.0,0.0,0.0,44.0,44.0,Tracy House
+Katie Rodriguez,E-48932,2026-02-27,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,Carol Tucker
+Christopher Ashley,E-80957,2026-02-27,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,James Brown
+Timothy Koch,E-43039,2026-02-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,William Baker
+Angelica Tucker,E-18227,2026-02-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jordan Henderson
+Carmen Rose,E-96383,2026-02-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Whitney Peters
+Jennifer Powers,E-57871,2026-02-27,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,0.0,8.0,40.0,48.0,Brittney Phillips
+Austin Smith,E-83930,2026-02-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Lauren Daniels
+Mark Perez,E-05183,2026-02-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Amy Silva
+John Ryan,E-99737,2026-02-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Sarah Moore
+Cheryl Davis,E-65667,2026-02-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Angela Lopez
+Amy Valdez,E-10651,2026-02-27,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Megan Young
+Julie King,E-80184,2026-03-06,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,4.0,0.0,0.0,44.0,44.0,Steve Sanchez
+Gina Carter,E-27048,2026-03-06,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,4.0,0.0,8.0,36.0,44.0,Lisa Barnes
+Katie Rodriguez,E-48932,2026-03-06,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Kelly Donovan
+Christopher Ashley,E-80957,2026-03-06,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Mike Allen
+Timothy Koch,E-43039,2026-03-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Michael Evans
+Angelica Tucker,E-18227,2026-03-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Paul Jones
+Carmen Rose,E-96383,2026-03-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Zachary Ferrell
+Jennifer Powers,E-57871,2026-03-06,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,0.0,8.0,40.0,48.0,Daniel Baker
+Austin Smith,E-83930,2026-03-06,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Shirley Suarez
+Mark Perez,E-05183,2026-03-06,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Christopher Bass
+John Ryan,E-99737,2026-03-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Lisa Archer
+Cheryl Davis,E-65667,2026-03-06,7026HEXDVC0001043,0001,Business Analyst,32.0,6.0,0.0,8.0,38.0,46.0,Aimee Montoya
+Amy Valdez,E-10651,2026-03-06,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Matthew Mcmillan
+Julie King,E-80184,2026-03-13,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Brian Rodriguez
+Gina Carter,E-27048,2026-03-13,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Denise Jacobs
+Katie Rodriguez,E-48932,2026-03-13,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,Christina Walters
+Christopher Ashley,E-80957,2026-03-13,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,John Whitehead
+Timothy Koch,E-43039,2026-03-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Anna Henderson
+Angelica Tucker,E-18227,2026-03-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Aaron Wise
+Carmen Rose,E-96383,2026-03-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Deborah Figueroa
+Jennifer Powers,E-57871,2026-03-13,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jessica Smith
+Austin Smith,E-83930,2026-03-13,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Stephen Mckee
+Mark Perez,E-05183,2026-03-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Sandra Aguilar
+John Ryan,E-99737,2026-03-13,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Cameron Parker
+Cheryl Davis,E-65667,2026-03-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Rebecca Valencia
+Amy Valdez,E-10651,2026-03-13,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Christine Wright
+Julie King,E-80184,2026-03-20,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,2.0,0.0,0.0,42.0,42.0,Richard Henson
+Gina Carter,E-27048,2026-03-20,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Marc Moore
+Katie Rodriguez,E-48932,2026-03-20,7026HEXDVC0001043,0001,Systems Engineer,40.0,6.0,0.0,0.0,46.0,46.0,Sharon Cherry
+Christopher Ashley,E-80957,2026-03-20,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Sierra Johnson
+Timothy Koch,E-43039,2026-03-20,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Evelyn Galvan
+Angelica Tucker,E-18227,2026-03-20,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Sharon Cochran
+Carmen Rose,E-96383,2026-03-20,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Richard Rodriguez
+Jennifer Powers,E-57871,2026-03-20,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Shannon Walker
+Austin Smith,E-83930,2026-03-20,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Julia Torres
+Mark Perez,E-05183,2026-03-20,7026HEXDVC0001043,0001,Business Analyst,40.0,2.0,0.0,0.0,42.0,42.0,Crystal Johnson
+John Ryan,E-99737,2026-03-20,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Garrett Lin
+Cheryl Davis,E-65667,2026-03-20,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Diana May
+Amy Valdez,E-10651,2026-03-20,7026HEXDVC0001043,0001,Business Analyst,32.0,2.0,0.0,8.0,34.0,42.0,William Herrera
+Julie King,E-80184,2026-03-27,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Ashley Waller
+Gina Carter,E-27048,2026-03-27,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,6.0,0.0,0.0,46.0,46.0,Victor Baker
+Katie Rodriguez,E-48932,2026-03-27,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Jeffrey Chandler
+Christopher Ashley,E-80957,2026-03-27,7026HEXDVC0001043,0001,Systems Engineer,40.0,8.0,0.0,0.0,48.0,48.0,Larry Dixon
+Timothy Koch,E-43039,2026-03-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Kenneth Scott
+Angelica Tucker,E-18227,2026-03-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,April Frost
+Carmen Rose,E-96383,2026-03-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Michelle Harmon
+Jennifer Powers,E-57871,2026-03-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Helen Jones
+Austin Smith,E-83930,2026-03-27,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Erin Edwards
+Mark Perez,E-05183,2026-03-27,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Michelle Evans
+John Ryan,E-99737,2026-03-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Jason Powell
+Cheryl Davis,E-65667,2026-03-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Cameron Fisher
+Amy Valdez,E-10651,2026-03-27,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Megan Orr
+Julie King,E-80184,2026-04-03,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Elizabeth Kelley
+Gina Carter,E-27048,2026-04-03,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Dustin Jordan
+Katie Rodriguez,E-48932,2026-04-03,7026HEXDVC0001043,0001,Systems Engineer,40.0,6.0,0.0,0.0,46.0,46.0,Mary Marshall
+Christopher Ashley,E-80957,2026-04-03,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Daniel Kennedy
+Timothy Koch,E-43039,2026-04-03,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Rebecca Jackson
+Angelica Tucker,E-18227,2026-04-03,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jose Schultz
+Carmen Rose,E-96383,2026-04-03,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,0.0,8.0,40.0,48.0,Robert Potter
+Jennifer Powers,E-57871,2026-04-03,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Courtney Gonzalez
+Austin Smith,E-83930,2026-04-03,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,David Alvarez
+Mark Perez,E-05183,2026-04-03,7026HEXDVC0001043,0001,Business Analyst,40.0,2.0,0.0,0.0,42.0,42.0,Angel Perry
+John Ryan,E-99737,2026-04-03,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Cheyenne Horton
+Cheryl Davis,E-65667,2026-04-03,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,David Douglas Jr.
+Amy Valdez,E-10651,2026-04-03,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Patricia Rodriguez
+Julie King,E-80184,2026-04-10,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Christopher Rubio
+Gina Carter,E-27048,2026-04-10,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,6.0,0.0,0.0,46.0,46.0,Amber Wright
+Katie Rodriguez,E-48932,2026-04-10,7026HEXDVC0001043,0001,Systems Engineer,40.0,8.0,0.0,0.0,48.0,48.0,Joyce Solis
+Christopher Ashley,E-80957,2026-04-10,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Victoria Larson
+Timothy Koch,E-43039,2026-04-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Stephanie Salazar
+Angelica Tucker,E-18227,2026-04-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Kathy Rivas
+Carmen Rose,E-96383,2026-04-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Stephanie Manning
+Jennifer Powers,E-57871,2026-04-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,David Wright
+Austin Smith,E-83930,2026-04-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Pamela Boyd
+Mark Perez,E-05183,2026-04-10,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Denise Jones
+John Ryan,E-99737,2026-04-10,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Devon Flores
+Cheryl Davis,E-65667,2026-04-10,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Brenda Hall
+Amy Valdez,E-10651,2026-04-10,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Michelle Brown
+Julie King,E-80184,2026-04-17,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,6.0,0.0,0.0,46.0,46.0,Joshua Perry
+Gina Carter,E-27048,2026-04-17,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Jason Stein
+Katie Rodriguez,E-48932,2026-04-17,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Melissa Gates
+Christopher Ashley,E-80957,2026-04-17,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Jamie Smith
+Timothy Koch,E-43039,2026-04-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Paul Castaneda
+Angelica Tucker,E-18227,2026-04-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jennifer Adkins
+Carmen Rose,E-96383,2026-04-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Lindsey Walker
+Jennifer Powers,E-57871,2026-04-17,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Jeffrey Johnson
+Austin Smith,E-83930,2026-04-17,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Michael Powell
+Mark Perez,E-05183,2026-04-17,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,John Anderson
+John Ryan,E-99737,2026-04-17,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Alyssa Long
+Cheryl Davis,E-65667,2026-04-17,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Alyssa Day
+Amy Valdez,E-10651,2026-04-17,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Joel Williams
+Julie King,E-80184,2026-04-24,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,4.0,0.0,0.0,44.0,44.0,Daniel Murphy
+Gina Carter,E-27048,2026-04-24,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,0.0,8.0,32.0,40.0,Jamie Walton
+Katie Rodriguez,E-48932,2026-04-24,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Darlene Miller
+Christopher Ashley,E-80957,2026-04-24,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Joshua Cooke
+Timothy Koch,E-43039,2026-04-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Matthew Harrington
+Angelica Tucker,E-18227,2026-04-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Nicole Herring
+Carmen Rose,E-96383,2026-04-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Alex Hernandez
+Jennifer Powers,E-57871,2026-04-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Michael Elliott
+Austin Smith,E-83930,2026-04-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Michael Wang
+Mark Perez,E-05183,2026-04-24,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Lawrence Adkins
+John Ryan,E-99737,2026-04-24,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,0.0,8.0,32.0,40.0,Robert Oconnell
+Cheryl Davis,E-65667,2026-04-24,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Alexander Collins
+Amy Valdez,E-10651,2026-04-24,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,0.0,8.0,32.0,40.0,Tina Sanders
+Julie King,E-80184,2026-05-01,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Angela Vaughn
+Gina Carter,E-27048,2026-05-01,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,0.0,8.0,32.0,40.0,Ashley Barton
+Katie Rodriguez,E-48932,2026-05-01,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,0.0,8.0,32.0,40.0,Lindsay Martinez
+Christopher Ashley,E-80957,2026-05-01,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Dr. Hannah Patterson
+Timothy Koch,E-43039,2026-05-01,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jonathan Peterson
+Angelica Tucker,E-18227,2026-05-01,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Samantha Garcia
+Carmen Rose,E-96383,2026-05-01,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Madison Poole
+Jennifer Powers,E-57871,2026-05-01,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,6.0,0.0,0.0,46.0,46.0,Jessica Gross
+Austin Smith,E-83930,2026-05-01,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Debra Morton
+Mark Perez,E-05183,2026-05-01,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Karen Graham
+John Ryan,E-99737,2026-05-01,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Debra Christian
+Cheryl Davis,E-65667,2026-05-01,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Angelica Keith
+Amy Valdez,E-10651,2026-05-01,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,John Bishop
+Julie King,E-80184,2026-05-08,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Allen Rosales
+Gina Carter,E-27048,2026-05-08,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Daniel Salinas
+Katie Rodriguez,E-48932,2026-05-08,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Spencer Haynes
+Christopher Ashley,E-80957,2026-05-08,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Adam Vaughan
+Timothy Koch,E-43039,2026-05-08,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Nathan Freeman
+Angelica Tucker,E-18227,2026-05-08,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Melissa Brewer
+Carmen Rose,E-96383,2026-05-08,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Ricky Davis II
+Jennifer Powers,E-57871,2026-05-08,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Elizabeth Perkins
+Austin Smith,E-83930,2026-05-08,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Joseph Coleman
+Mark Perez,E-05183,2026-05-08,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Erin Warner
+John Ryan,E-99737,2026-05-08,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,0.0,8.0,32.0,40.0,David Martinez
+Cheryl Davis,E-65667,2026-05-08,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Bryan Herrera
+Amy Valdez,E-10651,2026-05-08,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Cathy Robinson
+Julie King,E-80184,2026-05-15,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Dr. William Warren
+Gina Carter,E-27048,2026-05-15,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Brian Lee
+Katie Rodriguez,E-48932,2026-05-15,7026HEXDVC0001043,0001,Systems Engineer,40.0,6.0,0.0,0.0,46.0,46.0,Christopher Smith
+Christopher Ashley,E-80957,2026-05-15,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Denise Mccann
+Timothy Koch,E-43039,2026-05-15,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Melissa Martinez
+Angelica Tucker,E-18227,2026-05-15,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Katherine Salas
+Carmen Rose,E-96383,2026-05-15,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,2.0,0.0,8.0,34.0,42.0,Julie Alexander
+Jennifer Powers,E-57871,2026-05-15,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Anthony Everett
+Austin Smith,E-83930,2026-05-15,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Rodney Morales
+Mark Perez,E-05183,2026-05-15,7026HEXDVC0001043,0001,Business Analyst,40.0,2.0,0.0,0.0,42.0,42.0,Mark Brown
+John Ryan,E-99737,2026-05-15,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Justin Torres
+Cheryl Davis,E-65667,2026-05-15,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Bailey Duran DDS
+Amy Valdez,E-10651,2026-05-15,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Courtney Mills
+Julie King,E-80184,2026-05-22,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Jeremy Dalton
+Gina Carter,E-27048,2026-05-22,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Elizabeth Oliver DDS
+Katie Rodriguez,E-48932,2026-05-22,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Theresa Clark
+Christopher Ashley,E-80957,2026-05-22,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Matthew Moore
+Timothy Koch,E-43039,2026-05-22,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Benjamin Smith
+Angelica Tucker,E-18227,2026-05-22,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Kirk Carter
+Carmen Rose,E-96383,2026-05-22,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Michael Warner
+Jennifer Powers,E-57871,2026-05-22,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Michael Bradshaw
+Austin Smith,E-83930,2026-05-22,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Lori Guerrero
+Mark Perez,E-05183,2026-05-22,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Jessica Stephens
+John Ryan,E-99737,2026-05-22,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Susan Serrano
+Cheryl Davis,E-65667,2026-05-22,7026HEXDVC0001043,0001,Business Analyst,40.0,8.0,0.0,0.0,48.0,48.0,Christopher Parker
+Amy Valdez,E-10651,2026-05-22,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Laura Roberts
+Julie King,E-80184,2026-05-29,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,8.0,0.0,32.0,40.0,Michael Lyons
+Gina Carter,E-27048,2026-05-29,7026HEXDVC0001043,0001,Program Manager (PMP),24.0,6.0,8.0,8.0,30.0,46.0,Kathryn Snyder
+Katie Rodriguez,E-48932,2026-05-29,7026HEXDVC0001043,0001,Systems Engineer,24.0,0.0,8.0,8.0,24.0,40.0,Andrew Reynolds
+Christopher Ashley,E-80957,2026-05-29,7026HEXDVC0001043,0001,Systems Engineer,32.0,6.0,8.0,0.0,38.0,46.0,David Davis
+Timothy Koch,E-43039,2026-05-29,7026HEXDVC0001043,0001,Senior Cyber SME,24.0,0.0,8.0,8.0,24.0,40.0,Sara Johnston
+Angelica Tucker,E-18227,2026-05-29,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,4.0,8.0,0.0,36.0,44.0,Yvonne Chambers
+Carmen Rose,E-96383,2026-05-29,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,8.0,0.0,40.0,48.0,Andrew Avila
+Jennifer Powers,E-57871,2026-05-29,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Matthew Moon
+Austin Smith,E-83930,2026-05-29,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,8.0,8.0,0.0,40.0,48.0,Kevin Walters
+Mark Perez,E-05183,2026-05-29,7026HEXDVC0001043,0001,Business Analyst,32.0,4.0,8.0,0.0,36.0,44.0,Brandon Bailey MD
+John Ryan,E-99737,2026-05-29,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Shannon Rivera
+Cheryl Davis,E-65667,2026-05-29,7026HEXDVC0001043,0001,Business Analyst,32.0,6.0,8.0,0.0,38.0,46.0,Donna Landry
+Amy Valdez,E-10651,2026-05-29,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Krista Gibson
+Julie King,E-80184,2026-06-05,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Frank Cordova
+Gina Carter,E-27048,2026-06-05,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,0.0,8.0,32.0,40.0,Jose Travis
+Katie Rodriguez,E-48932,2026-06-05,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Kimberly Gutierrez
+Christopher Ashley,E-80957,2026-06-05,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,0.0,8.0,32.0,40.0,Isaiah Avila
+Timothy Koch,E-43039,2026-06-05,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Olivia Harris
+Angelica Tucker,E-18227,2026-06-05,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Tanya Kim
+Carmen Rose,E-96383,2026-06-05,7026HEXDVC0001043,0001,Senior Cyber SME,0.0,0.0,0.0,40.0,0.0,40.0,Barbara Dudley
+Jennifer Powers,E-57871,2026-06-05,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Cynthia Moore
+Austin Smith,E-83930,2026-06-05,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Kristen Davis
+Mark Perez,E-05183,2026-06-05,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Susan Murray MD
+John Ryan,E-99737,2026-06-05,7026HEXDVC0001043,0001,Business Analyst,32.0,6.0,0.0,8.0,38.0,46.0,Kathleen Moran
+Cheryl Davis,E-65667,2026-06-05,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Denise Davenport
+Amy Valdez,E-10651,2026-06-05,7026HEXDVC0001043,0001,Business Analyst,40.0,4.0,0.0,0.0,44.0,44.0,Mrs. Kristen Reyes
+Julie King,E-80184,2026-06-12,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Katie Suarez
+Gina Carter,E-27048,2026-06-12,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Desiree Tyler
+Katie Rodriguez,E-48932,2026-06-12,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Timothy Romero
+Christopher Ashley,E-80957,2026-06-12,7026HEXDVC0001043,0001,Systems Engineer,40.0,6.0,0.0,0.0,46.0,46.0,Diane Evans
+Timothy Koch,E-43039,2026-06-12,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,4.0,0.0,0.0,44.0,44.0,Yvonne Burns
+Angelica Tucker,E-18227,2026-06-12,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,2.0,0.0,0.0,42.0,42.0,Joshua Reed
+Carmen Rose,E-96383,2026-06-12,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Kimberly Gibson
+Jennifer Powers,E-57871,2026-06-12,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Colin Terry
+Austin Smith,E-83930,2026-06-12,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,2.0,0.0,8.0,34.0,42.0,Cynthia Rowe
+Mark Perez,E-05183,2026-06-12,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Patrick Thornton
+John Ryan,E-99737,2026-06-12,7026HEXDVC0001043,0001,Business Analyst,32.0,2.0,0.0,8.0,34.0,42.0,Jasmin Alvarado
+Cheryl Davis,E-65667,2026-06-12,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Veronica Simpson
+Amy Valdez,E-10651,2026-06-12,7026HEXDVC0001043,0001,Business Analyst,32.0,2.0,0.0,8.0,34.0,42.0,Jonathan Lawrence
+Julie King,E-80184,2026-06-19,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,8.0,0.0,32.0,40.0,Shelly Alexander
+Gina Carter,E-27048,2026-06-19,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,6.0,8.0,0.0,38.0,46.0,Joyce Bowen
+Katie Rodriguez,E-48932,2026-06-19,7026HEXDVC0001043,0001,Systems Engineer,8.0,0.0,8.0,24.0,8.0,40.0,Matthew Moore
+Christopher Ashley,E-80957,2026-06-19,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,8.0,0.0,32.0,40.0,Wayne Morgan
+Timothy Koch,E-43039,2026-06-19,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Marie Christian
+Angelica Tucker,E-18227,2026-06-19,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Shannon James
+Carmen Rose,E-96383,2026-06-19,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Nathan Malone
+Jennifer Powers,E-57871,2026-06-19,7026HEXDVC0001043,0001,Senior Cyber SME,24.0,8.0,8.0,8.0,32.0,48.0,Amanda Jones
+Austin Smith,E-83930,2026-06-19,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Tammie Bright
+Mark Perez,E-05183,2026-06-19,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Jessica Garcia
+John Ryan,E-99737,2026-06-19,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Shelia Wallace
+Cheryl Davis,E-65667,2026-06-19,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Stephanie Williams
+Amy Valdez,E-10651,2026-06-19,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Elaine Brooks
+Julie King,E-80184,2026-06-26,7026HEXDVC0001043,0001,Program Manager (PMP),0.0,0.0,0.0,40.0,0.0,40.0,Joseph Knight
+Gina Carter,E-27048,2026-06-26,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,Carolyn Miller
+Katie Rodriguez,E-48932,2026-06-26,7026HEXDVC0001043,0001,Systems Engineer,32.0,4.0,0.0,8.0,36.0,44.0,Lisa Allen
+Christopher Ashley,E-80957,2026-06-26,7026HEXDVC0001043,0001,Systems Engineer,0.0,0.0,0.0,40.0,0.0,40.0,Briana Murray
+Timothy Koch,E-43039,2026-06-26,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,4.0,0.0,8.0,36.0,44.0,David Smith
+Angelica Tucker,E-18227,2026-06-26,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Stephanie Byrd
+Carmen Rose,E-96383,2026-06-26,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jeremy Reed
+Jennifer Powers,E-57871,2026-06-26,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Margaret Coleman
+Austin Smith,E-83930,2026-06-26,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Ryan Gonzalez
+Mark Perez,E-05183,2026-06-26,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,John Young
+John Ryan,E-99737,2026-06-26,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Laura Haney
+Cheryl Davis,E-65667,2026-06-26,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,0.0,8.0,32.0,40.0,William Barrett
+Amy Valdez,E-10651,2026-06-26,7026HEXDVC0001043,0001,Business Analyst,0.0,0.0,0.0,40.0,0.0,40.0,Keith Jennings
+Julie King,E-80184,2026-07-03,7026HEXDVC0001043,0001,Program Manager (PMP),0.0,0.0,8.0,32.0,0.0,40.0,Amber Obrien
+Gina Carter,E-27048,2026-07-03,7026HEXDVC0001043,0001,Program Manager (PMP),0.0,0.0,8.0,32.0,0.0,40.0,Tanner Mitchell DDS
+Katie Rodriguez,E-48932,2026-07-03,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,8.0,0.0,32.0,40.0,Heather Fields
+Christopher Ashley,E-80957,2026-07-03,7026HEXDVC0001043,0001,Systems Engineer,32.0,2.0,8.0,0.0,34.0,42.0,Megan Le
+Timothy Koch,E-43039,2026-07-03,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Sara Fuller
+Angelica Tucker,E-18227,2026-07-03,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Maria Parker
+Carmen Rose,E-96383,2026-07-03,7026HEXDVC0001043,0001,Senior Cyber SME,24.0,0.0,8.0,8.0,24.0,40.0,Kevin Oconnor
+Jennifer Powers,E-57871,2026-07-03,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Edward Burgess
+Austin Smith,E-83930,2026-07-03,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,8.0,0.0,32.0,40.0,Carlos Ryan
+Mark Perez,E-05183,2026-07-03,7026HEXDVC0001043,0001,Business Analyst,24.0,0.0,8.0,8.0,24.0,40.0,Kiara Mcintyre
+John Ryan,E-99737,2026-07-03,7026HEXDVC0001043,0001,Business Analyst,24.0,6.0,8.0,8.0,30.0,46.0,Dawn Summers
+Cheryl Davis,E-65667,2026-07-03,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,8.0,0.0,32.0,40.0,Dr. Paul Morgan
+Amy Valdez,E-10651,2026-07-03,7026HEXDVC0001043,0001,Business Analyst,32.0,8.0,8.0,0.0,40.0,48.0,Victor Taylor
+Julie King,E-80184,2026-07-10,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Shannon Ramsey
+Gina Carter,E-27048,2026-07-10,7026HEXDVC0001043,0001,Program Manager (PMP),0.0,0.0,0.0,40.0,0.0,40.0,Tracy Ballard
+Katie Rodriguez,E-48932,2026-07-10,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Richard Smith
+Christopher Ashley,E-80957,2026-07-10,7026HEXDVC0001043,0001,Systems Engineer,40.0,2.0,0.0,0.0,42.0,42.0,Jordan Chambers
+Timothy Koch,E-43039,2026-07-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Lauren Carson
+Angelica Tucker,E-18227,2026-07-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Ashley Hall
+Carmen Rose,E-96383,2026-07-10,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Stephen Hoffman
+Jennifer Powers,E-57871,2026-07-10,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Connie Brown
+Austin Smith,E-83930,2026-07-10,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Susan Turner
+Mark Perez,E-05183,2026-07-10,7026HEXDVC0001043,0001,Business Analyst,0.0,0.0,0.0,40.0,0.0,40.0,Charles Shah
+John Ryan,E-99737,2026-07-10,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Johnathan Davis
+Cheryl Davis,E-65667,2026-07-10,7026HEXDVC0001043,0001,Business Analyst,32.0,4.0,0.0,8.0,36.0,44.0,Brandy Chavez
+Amy Valdez,E-10651,2026-07-10,7026HEXDVC0001043,0001,Business Analyst,40.0,2.0,0.0,0.0,42.0,42.0,Natalie Bautista
+Julie King,E-80184,2026-07-17,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,2.0,0.0,0.0,42.0,42.0,Patrick Moore
+Gina Carter,E-27048,2026-07-17,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,0.0,8.0,32.0,40.0,Brett Burns
+Katie Rodriguez,E-48932,2026-07-17,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Trevor Johnson
+Christopher Ashley,E-80957,2026-07-17,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Jeremy Sampson
+Timothy Koch,E-43039,2026-07-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Ariana Jennings
+Angelica Tucker,E-18227,2026-07-17,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Vanessa Howard
+Carmen Rose,E-96383,2026-07-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Colton Martinez
+Jennifer Powers,E-57871,2026-07-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jordan Bates
+Austin Smith,E-83930,2026-07-17,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Linda Smith
+Mark Perez,E-05183,2026-07-17,7026HEXDVC0001043,0001,Business Analyst,0.0,0.0,0.0,40.0,0.0,40.0,Dana Martinez
+John Ryan,E-99737,2026-07-17,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Andrea Hubbard
+Cheryl Davis,E-65667,2026-07-17,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Daniel Kane
+Amy Valdez,E-10651,2026-07-17,7026HEXDVC0001043,0001,Business Analyst,32.0,0.0,0.0,8.0,32.0,40.0,Charles Lester
+Julie King,E-80184,2026-07-24,7026HEXDVC0001043,0001,Program Manager (PMP),32.0,0.0,0.0,8.0,32.0,40.0,Scott Thomas
+Gina Carter,E-27048,2026-07-24,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,8.0,0.0,0.0,48.0,48.0,David Thompson
+Katie Rodriguez,E-48932,2026-07-24,7026HEXDVC0001043,0001,Systems Engineer,32.0,0.0,0.0,8.0,32.0,40.0,Allison Smith
+Christopher Ashley,E-80957,2026-07-24,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Cynthia Morris
+Timothy Koch,E-43039,2026-07-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Anthony Harmon
+Angelica Tucker,E-18227,2026-07-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Nichole Alvarez
+Carmen Rose,E-96383,2026-07-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,8.0,0.0,0.0,48.0,48.0,Kayla Rodriguez
+Jennifer Powers,E-57871,2026-07-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Theresa Williams
+Austin Smith,E-83930,2026-07-24,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Sharon Boyd
+Mark Perez,E-05183,2026-07-24,7026HEXDVC0001043,0001,Business Analyst,40.0,6.0,0.0,0.0,46.0,46.0,Victor Brown
+John Ryan,E-99737,2026-07-24,7026HEXDVC0001043,0001,Business Analyst,0.0,0.0,0.0,40.0,0.0,40.0,James Parks
+Cheryl Davis,E-65667,2026-07-24,7026HEXDVC0001043,0001,Business Analyst,32.0,8.0,0.0,8.0,40.0,48.0,Theodore Jones Jr.
+Amy Valdez,E-10651,2026-07-24,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Ana Hill
+Julie King,E-80184,2026-07-31,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,0.0,0.0,0.0,40.0,40.0,Kimberly Nguyen
+Gina Carter,E-27048,2026-07-31,7026HEXDVC0001043,0001,Program Manager (PMP),40.0,6.0,0.0,0.0,46.0,46.0,Kerry Chavez DDS
+Katie Rodriguez,E-48932,2026-07-31,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Michael Farrell
+Christopher Ashley,E-80957,2026-07-31,7026HEXDVC0001043,0001,Systems Engineer,40.0,0.0,0.0,0.0,40.0,40.0,Patricia Le
+Timothy Koch,E-43039,2026-07-31,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jesse Perez
+Angelica Tucker,E-18227,2026-07-31,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Jesse Perry
+Carmen Rose,E-96383,2026-07-31,7026HEXDVC0001043,0001,Senior Cyber SME,32.0,0.0,0.0,8.0,32.0,40.0,Jeffery Ortega
+Jennifer Powers,E-57871,2026-07-31,7026HEXDVC0001043,0001,Senior Cyber SME,8.0,0.0,0.0,32.0,8.0,40.0,Christian Leblanc
+Austin Smith,E-83930,2026-07-31,7026HEXDVC0001043,0001,Senior Cyber SME,40.0,0.0,0.0,0.0,40.0,40.0,Ronald Davis
+Mark Perez,E-05183,2026-07-31,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Parker Cain
+John Ryan,E-99737,2026-07-31,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Laurie Hoffman
+Cheryl Davis,E-65667,2026-07-31,7026HEXDVC0001043,0001,Business Analyst,0.0,0.0,0.0,40.0,0.0,40.0,Bryan Gomez
+Amy Valdez,E-10651,2026-07-31,7026HEXDVC0001043,0001,Business Analyst,40.0,0.0,0.0,0.0,40.0,40.0,Nicole Parrish
