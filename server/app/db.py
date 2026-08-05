@@ -14,6 +14,21 @@ def get_conn():
     return conn
 
 
+def _add_missing_columns(conn, table: str, columns: dict) -> None:
+    """Add columns an existing table doesn't have yet.
+
+    `CREATE TABLE IF NOT EXISTS` is a no-op once a table exists, so a schema
+    addition never reaches a database that predates it. This is the additive half
+    of a migration and deliberately nothing more: new columns arrive NULL, and no
+    existing column is renamed, retyped or dropped. Anything beyond that needs a
+    real migration with a data step, not this helper.
+    """
+    have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    for name, decl in columns.items():
+        if name not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
 def init_db():
     conn = get_conn()
     conn.execute(
@@ -26,6 +41,16 @@ def init_db():
     )
     # Cache of synced timesheet rows, keyed to a contract. One row per
     # employee-week-CLIN; the burn engine buckets these by charge_code (== CLIN).
+    #
+    # The hours arrive as a split, not a single figure (#85). `total_hours` is the
+    # BILLABLE quantity — regular plus overtime — and it is the only column that
+    # may be priced against a CLIN. Leave and holidays are indirect costs recovered
+    # through the fringe pool (FAR 31.205-6) and are already inside every loaded
+    # rate, so charging them again to a CLIN double-counts. They are stored anyway:
+    # #85's dated-absence planning and #84's utilisation baseline both need to know
+    # what a person's paid week actually looked like. Read hours through
+    # `burn.billable_hours` rather than off `total_hours` directly — a row synced
+    # before the split existed means something different by the same name.
     conn.execute(
         """CREATE TABLE IF NOT EXISTS timesheets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,9 +61,25 @@ def init_db():
             charge_code TEXT,
             labor_category TEXT,
             total_hours REAL,
+            reg_hours REAL,
+            ot_hours REAL,
+            holiday_hours REAL,
+            leave_hours REAL,
+            paid_hours REAL,
             contract_no TEXT,
             synced_at TEXT DEFAULT (datetime('now'))
         )"""
+    )
+    _add_missing_columns(
+        conn,
+        "timesheets",
+        {
+            "reg_hours": "REAL",
+            "ot_hours": "REAL",
+            "holiday_hours": "REAL",
+            "leave_hours": "REAL",
+            "paid_hours": "REAL",
+        },
     )
     # Manually-logged non-labor actuals (travel / ODC / materials / subs), keyed
     # to a contract and one of its non-labor CLINs. Cost-reimbursable spend that
@@ -415,6 +456,16 @@ def get_contract(cid: int) -> Optional[dict]:
     }
 
 
+def _opt_float(v) -> Optional[float]:
+    """float(v), but None survives as None and so does anything unparseable."""
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def replace_timesheets(contract_id: int, rows: list) -> int:
     """Swap in a fresh synced batch for a contract (delete-then-insert), so a
     re-sync never double-counts. Returns the number of rows stored."""
@@ -423,8 +474,9 @@ def replace_timesheets(contract_id: int, rows: list) -> int:
     conn.executemany(
         """INSERT INTO timesheets
            (contract_id, employee, employee_id, week_ending, charge_code,
-            labor_category, total_hours, contract_no)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            labor_category, total_hours, reg_hours, ot_hours, holiday_hours,
+            leave_hours, paid_hours, contract_no)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 contract_id,
@@ -434,6 +486,14 @@ def replace_timesheets(contract_id: int, rows: list) -> int:
                 str(r.get("charge_code")) if r.get("charge_code") is not None else None,
                 r.get("labor_category"),
                 float(r.get("total_hours") or 0),
+                # The split columns stay None when the source doesn't send them —
+                # `or 0` would forge a zero, and a missing reg_hours is exactly the
+                # signal `burn.billable_hours` uses to spot a pre-split row.
+                _opt_float(r.get("reg_hours")),
+                _opt_float(r.get("ot_hours")),
+                _opt_float(r.get("holiday_hours")),
+                _opt_float(r.get("leave_hours")),
+                _opt_float(r.get("paid_hours")),
                 r.get("contract_no"),
             )
             for r in rows
@@ -448,7 +508,8 @@ def get_timesheets(contract_id: int) -> list:
     conn = get_conn()
     rows = conn.execute(
         """SELECT employee, employee_id, week_ending, charge_code, labor_category,
-                  total_hours, contract_no, synced_at
+                  total_hours, reg_hours, ot_hours, holiday_hours, leave_hours,
+                  paid_hours, contract_no, synced_at
            FROM timesheets WHERE contract_id = ? ORDER BY week_ending""",
         (contract_id,),
     ).fetchall()

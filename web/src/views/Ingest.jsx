@@ -153,7 +153,8 @@ function SourceDetail({ s }) {
                   <th style={th}>Week ending</th>
                   <th style={th}>Charge</th>
                   <th style={th}>Labor category</th>
-                  <th style={{ ...th, textAlign: "right" }}>Hours</th>
+                  <th style={{ ...th, textAlign: "right" }}>Billable hrs</th>
+                  <th style={{ ...th, textAlign: "right" }}>Leave</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,6 +166,17 @@ function SourceDetail({ s }) {
                     <td style={{ ...td, color: "var(--dim)" }}>{r.labor_category}</td>
                     <td style={{ ...td, textAlign: "right", fontFamily: "'IBM Plex Mono',monospace" }}>
                       {r.total_hours}
+                    </td>
+                    {/* Shown next to the billable figure precisely so it's visible
+                        that leave is NOT in it (#85) — it's recovered through the
+                        fringe pool, not charged to the CLIN. */}
+                    <td
+                      style={{
+                        ...td, textAlign: "right", color: "var(--faint)",
+                        fontFamily: "'IBM Plex Mono',monospace",
+                      }}
+                    >
+                      {r.leave_hours ? r.leave_hours : "—"}
                     </td>
                   </tr>
                 ))}

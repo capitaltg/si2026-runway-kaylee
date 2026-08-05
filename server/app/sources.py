@@ -114,6 +114,9 @@ def _probe_fixtura() -> dict:
                     "charge_code": r.get("charge_code"),
                     "labor_category": r.get("labor_category"),
                     "total_hours": r.get("total_hours"),
+                    # Carried so the preview can show leave sitting *outside* the
+                    # billable figure rather than inside it (#85).
+                    "leave_hours": r.get("leave_hours"),
                 }
                 for r in rows[:_PREVIEW_ROWS]
             ],
