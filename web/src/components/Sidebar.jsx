@@ -42,6 +42,13 @@ const ICONS = {
       <path d="M6 12l5-5 5 8 3-6" strokeLinecap="round" strokeLinejoin="round" opacity=".55" />
     </svg>
   ),
+  rates: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M18.5 5.5l-13 13" strokeLinecap="round" />
+      <circle cx="7.75" cy="7.75" r="2.6" />
+      <circle cx="16.25" cy="16.25" r="2.6" opacity=".55" />
+    </svg>
+  ),
   drafts: (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
       <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
@@ -58,11 +65,17 @@ const ICONS = {
   ),
 };
 
-// The two app-wide scopes. People is global for the same reason Portfolio is: a
+// The app-wide scopes. People is global for the same reason Portfolio is: a
 // person's degree is not a fact about a contract, so it does not belong under
-// "Current contract" — and putting it here is the nav expressing that.
-const PORTFOLIO = { key: "portfolio", label: "Portfolio", sub: "All contracts" };
-const PEOPLE = { key: "people", label: "People", sub: "Directory & quals" };
+// "Current contract" — and putting it here is the nav expressing that. Ingest is
+// global for a blunter reason: it is the *add a contract* screen and takes no
+// contract at all, so filing it under "Current contract" claimed it would act on
+// the open one. It sits last because it's an occasional action, not a landing.
+const GLOBAL_NAV = [
+  { key: "portfolio", label: "Portfolio", sub: "All contracts" },
+  { key: "people", label: "People", sub: "Directory & quals" },
+  { key: "ingest", label: "Add a Contract", sub: "PDF → data" },
+];
 const CONTRACT_NAV = [
   { key: "flightdeck", label: "Flight Deck", sub: "Live burn & runway" },
   { key: "allocate", label: "Allocation Matrix", sub: "Staff → CLINs" },
@@ -70,7 +83,6 @@ const CONTRACT_NAV = [
   { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
   { key: "rates", label: "Indirect Rates", sub: "Cost vs. billing (optional)" },
   { key: "drafts", label: "Drafts", sub: "Memos · invoices · check-ins" },
-  { key: "ingest", label: "Contract Ingest", sub: "PDF → data" },
 ];
 
 const sectionLabel = {
@@ -187,95 +199,115 @@ export default function Sidebar({ view, setView, contract, hero }) {
         </div>
       </div>
 
-      {/* App-wide */}
-      <div style={{ padding: "8px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
-        {NavItem(PORTFOLIO)}
-        {NavItem(PEOPLE)}
-      </div>
-
-      <div style={{ margin: "16px 16px 11px", height: 1, background: "var(--border)" }} />
-
-      {/* Current contract — boxed card + its scoped nav */}
-      <div style={sectionLabel}>Current contract</div>
+      {/* Everything between the brand and the footer scrolls as one region. The
+          brand and the footer stay put — a scrolling wordmark reads as broken,
+          and the footer carries the "not a system of record" disclaimer, which
+          shouldn't be scrollable out of existence. `minHeight: 0` is the
+          load-bearing bit: without it this flex child refuses to shrink below
+          its content and the overflow never engages. */}
       <div
-        onClick={() => setView("portfolio")}
-        title="Switch contract"
         style={{
-          ...boxBase,
-          padding: "12px 13px",
-          borderBottom: "none",
-          borderRadius: "14px 14px 0 0",
-          cursor: "pointer",
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          scrollbarWidth: "thin",
+          scrollbarColor: "var(--border) transparent",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text)", lineHeight: 1.3, flex: 1, minWidth: 0 }}>
-            {contract?.name || "No contract selected"}
-          </div>
-          <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>
-            Switch &#8599;
-          </span>
+        {/* App-wide */}
+        <div style={{ padding: "8px 12px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+          {GLOBAL_NAV.map(NavItem)}
         </div>
-        {contract ? (
-          <div style={{ marginTop: 5 }}>
-            {contract.nickname && contract.legal_name && (
-              <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.25 }}>{contract.legal_name}</div>
-            )}
-            {contract.piid && (
-              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--faint)", marginTop: 2 }}>
-                {contract.piid}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ fontSize: 10.5, color: "var(--dim)", marginTop: 5 }}>Open one from Portfolio</div>
-        )}
-        {contract && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9 }}>
-            <span style={{ width: 9, height: 9, borderRadius: "50%", background: health.dot }} />
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: health.color }}>{health.label}</span>
-          </div>
-        )}
-      </div>
-      <div
-        style={{
-          ...boxBase,
-          padding: "7px 8px 9px",
-          borderTop: "none",
-          borderRadius: "0 0 14px 14px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 3,
-        }}
-      >
-        {CONTRACT_NAV.map(NavItem)}
-      </div>
 
-      {/* Timesheets live — honest: shown only while a contract is loaded; no
-          fabricated "synced N min ago" timestamp (we don't persist one). */}
-      {contract && (
+        <div style={{ margin: "16px 16px 11px", height: 1, background: "var(--border)" }} />
+
+        {/* Current contract — boxed card + its scoped nav */}
+        <div style={sectionLabel}>Current contract</div>
         <div
+          onClick={() => setView("portfolio")}
+          title="Switch contract"
           style={{
-            margin: "14px 12px 0",
-            padding: "11px 13px",
-            borderRadius: 12,
-            background: "var(--goodBg)",
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
+            ...boxBase,
+            padding: "12px 13px",
+            borderBottom: "none",
+            borderRadius: "14px 14px 0 0",
+            cursor: "pointer",
           }}
         >
-          <span style={{ width: 9, height: 9, flex: "0 0 9px", borderRadius: "50%", background: "var(--good)" }} />
-          <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.35 }}>
-            <b>Timesheets live</b>
-            <br />
-            <span style={{ color: "var(--dim)" }}>synced from your provider</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text)", lineHeight: 1.3, flex: 1, minWidth: 0 }}>
+              {contract?.name || "No contract selected"}
+            </div>
+            <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>
+              Switch &#8599;
+            </span>
           </div>
+          {contract ? (
+            <div style={{ marginTop: 5 }}>
+              {contract.nickname && contract.legal_name && (
+                <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.25 }}>{contract.legal_name}</div>
+              )}
+              {contract.piid && (
+                <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--faint)", marginTop: 2 }}>
+                  {contract.piid}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10.5, color: "var(--dim)", marginTop: 5 }}>Open one from Portfolio</div>
+          )}
+          {contract && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9 }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: health.dot }} />
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: health.color }}>{health.label}</span>
+            </div>
+          )}
         </div>
-      )}
+        <div
+          style={{
+            ...boxBase,
+            padding: "7px 8px 9px",
+            borderTop: "none",
+            borderRadius: "0 0 14px 14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+          }}
+        >
+          {CONTRACT_NAV.map(NavItem)}
+        </div>
 
-      {/* Footer */}
-      <div style={{ marginTop: "auto", padding: "16px 18px", fontSize: 10.5, color: "var(--faint)", lineHeight: 1.5 }}>
+        {/* Timesheets live — honest: shown only while a contract is loaded; no
+            fabricated "synced N min ago" timestamp (we don't persist one). */}
+        {contract && (
+          <div
+            style={{
+              margin: "14px 12px 0",
+              padding: "11px 13px",
+              borderRadius: 12,
+              background: "var(--goodBg)",
+              display: "flex",
+              alignItems: "center",
+              gap: 9,
+            }}
+          >
+            <span style={{ width: 9, height: 9, flex: "0 0 9px", borderRadius: "50%", background: "var(--good)" }} />
+            <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.35 }}>
+              <b>Timesheets live</b>
+              <br />
+              <span style={{ color: "var(--dim)" }}>synced from your provider</span>
+            </div>
+          </div>
+        )}
+
+        {/* Breathing room so the last item never sits flush against the footer
+            when the region is scrolled to the bottom. */}
+        <div style={{ height: 14 }} />
+      </div>
+
+      {/* Footer — outside the scroll region, so the disclaimer is always visible.
+          The scroll wrapper's flex:1 now does the pushing that marginTop:auto did. */}
+      <div style={{ padding: "16px 18px", fontSize: 10.5, color: "var(--faint)", lineHeight: 1.5 }}>
         <div style={{ fontFamily: "'IBM Plex Mono',monospace", letterSpacing: ".05em" }}>CTG · GovCon fintech</div>
         <div style={{ marginTop: 3 }}>Demo data · not a system of record</div>
       </div>
