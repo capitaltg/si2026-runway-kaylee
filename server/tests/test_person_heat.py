@@ -29,6 +29,7 @@ def test_people_are_ranked_by_avoidable_overrun_not_gross_billing():
             "lcat": "Engineer",
             "avoidable_weekly_overrun": 3200,
             "moves": moves,
+            "lcat_issues": [],
         }
     ]
 
@@ -77,7 +78,8 @@ def test_staffing_moves_prefer_one_exact_roll_off_over_two_smaller_moves():
     ]
 
     moves = allocation._staffing_moves(
-        people, [{"id": "0002", "planned_lcat_hours": {"Engineer": 24}}]
+        people,
+        [{"id": "0002", "base_status": "over", "planned_lcat_hours": {"Engineer": 24}}],
     )
 
     assert moves == [
@@ -91,3 +93,50 @@ def test_staffing_moves_prefer_one_exact_roll_off_over_two_smaller_moves():
             "weekly_savings": 4800,
         },
     ]
+
+
+def test_underburning_clins_never_propose_staffing_reductions():
+    people = [
+        {
+            "id": "e1",
+            "name": "Aisha Khan",
+            "cells": {"0002": {"hours": 40, "rate": 200, "lcat": "Engineer"}},
+        }
+    ]
+
+    assert (
+        allocation._staffing_moves(
+            people,
+            [
+                {
+                    "id": "0002",
+                    "base_status": "under",
+                    "planned_lcat_hours": {"Engineer": 0},
+                }
+            ],
+        )
+        == []
+    )
+
+
+def test_trim_moves_land_on_whole_hours_and_reconcile_to_the_plan():
+    people = [
+        {
+            "id": "e1",
+            "name": "Aisha Khan",
+            "cells": {"0002": {"hours": 20, "rate": 200, "lcat": "Engineer"}},
+        },
+        {
+            "id": "e2",
+            "name": "Wei Chen",
+            "cells": {"0002": {"hours": 20, "rate": 200, "lcat": "Engineer"}},
+        },
+    ]
+
+    moves = allocation._staffing_moves(
+        people,
+        [{"id": "0002", "base_status": "over", "planned_lcat_hours": {"Engineer": 27}}],
+    )
+
+    assert sum(move["to_hours"] for move in moves) == 27
+    assert all(float(move["to_hours"]).is_integer() for move in moves)

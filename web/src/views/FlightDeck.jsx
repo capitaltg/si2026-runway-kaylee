@@ -183,8 +183,12 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
 }
 
 function varianceText(move) {
-  const excess = move.from_hours - move.to_hours;
+  const excess = Math.round(move.from_hours - move.to_hours);
   return `${excess} hrs/wk above plan on ${move.clin} · ${money(move.weekly_savings)}/wk overrun`;
+}
+
+function lcatIssueText(issue) {
+  return `${issue.lcat || "This LCAT"} on ${issue.clin} needs rate-line review`;
 }
 
 function HotPeople({ people, onOpenPerson }) {
@@ -223,7 +227,7 @@ function HotPeople({ people, onOpenPerson }) {
                 <span style={{ color: "var(--accent)", fontWeight: 700 }}>avoids {money(person.avoidable_weekly_overrun)}/wk</span>
               </div>
               <div style={{ marginTop: 3, color: "var(--dim)", fontSize: 12 }}>
-                {person.moves.map(varianceText).join(" · ")}
+                {[...person.moves.map(varianceText), ...(person.lcat_issues || []).map(lcatIssueText)].join(" · ")}
               </div>
             </button>
           ))}

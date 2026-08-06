@@ -46,6 +46,12 @@ def _staffing_moves(employees: List[dict], clins: List[dict]) -> List[dict]:
     """
     moves = []
     for clin in clins:
+        # A staffing reduction only makes sense when the CLIN is forecast to run
+        # hot. An underburn may contain one over-consumed LCAT alongside several
+        # unfilled ones; calling that person "hot" would prescribe the opposite of
+        # what the contract needs.
+        if clin.get("base_status") not in ("over", "watch"):
+            continue
         groups = {}
         for employee in employees:
             cell = employee["cells"].get(clin["id"])
@@ -71,7 +77,6 @@ def _staffing_moves(employees: List[dict], clins: List[dict]) -> List[dict]:
                     rollable,
                     key=lambda item: (
                         abs(excess - item[1]["hours"]),
-                        not item[1].get("unmatched", False),
                         -item[1]["hours"],
                         item[0]["name"],
                     ),
@@ -93,11 +98,26 @@ def _staffing_moves(employees: List[dict], clins: List[dict]) -> List[dict]:
             if excess <= 0 or not kept:
                 continue
             kept_hours = sum(cell["hours"] for _, cell in kept)
+            target_total = max(0, round(kept_hours - excess))
+            raw_targets = [
+                (employee, cell, cell["hours"] * target_total / kept_hours)
+                for employee, cell in kept
+            ]
+            whole_targets = {
+                employee["id"]: int(raw_target)
+                for employee, _, raw_target in raw_targets
+            }
+            remainder = target_total - sum(whole_targets.values())
+            for employee, _, raw_target in sorted(
+                raw_targets,
+                key=lambda item: (-(item[2] - int(item[2])), item[0]["name"]),
+            )[:remainder]:
+                whole_targets[employee["id"]] += 1
             for employee, cell in kept:
-                reduction = round(excess * cell["hours"] / kept_hours, 1)
+                target_hours = whole_targets[employee["id"]]
+                reduction = cell["hours"] - target_hours
                 if reduction <= 0:
                     continue
-                target_hours = round(cell["hours"] - reduction, 1)
                 moves.append(
                     {
                         "employee_id": employee["id"],
@@ -122,6 +142,15 @@ def _person_heat(employees: List[dict], moves: List[dict]) -> List[dict]:
     for employee_id, person_moves in by_person.items():
         employee = names[employee_id]
         savings = round(sum(move["weekly_savings"] for move in person_moves), 2)
+        lcat_issues = [
+            {
+                "clin": clin_id,
+                "lcat": cell.get("lcat"),
+                "cause": cell.get("cause"),
+            }
+            for clin_id, cell in (employee.get("cells") or {}).items()
+            if cell.get("unmatched")
+        ]
         people.append(
             {
                 "id": employee_id,
@@ -129,6 +158,7 @@ def _person_heat(employees: List[dict], moves: List[dict]) -> List[dict]:
                 "lcat": employee.get("lcat"),
                 "avoidable_weekly_overrun": savings,
                 "moves": person_moves,
+                "lcat_issues": lcat_issues,
             }
         )
     return sorted(
@@ -333,7 +363,6 @@ def compute_allocation(
                 planned[name] = round(
                     max(0.0, float(estimated) - actual_by_lcat.get(name, 0.0))
                     / weeks_remaining,
-                    1,
                 )
         clin_cards_by_id[num]["planned_lcat_hours"] = planned
 

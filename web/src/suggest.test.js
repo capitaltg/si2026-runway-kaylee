@@ -83,6 +83,7 @@ test("an overrun suggestion names roll-offs before grouped trims", () => {
     ],
   );
   assert.match(s.body, /Roll Aisha Khan \(Cyber Engineer III\) off CLIN 0002/);
-  assert.match(s.body, /Move Wei Chen \(Engineer I\) off CLIN 0002 — also clears the LCAT flag/);
+  assert.match(s.body, /Roll Wei Chen \(Engineer I\) off CLIN 0002/);
+  assert.doesNotMatch(s.body, /LCAT flag/);
   assert.match(s.body, /Trim Dana Yu & Marcus Lee to 24 hrs\/wk/);
 });

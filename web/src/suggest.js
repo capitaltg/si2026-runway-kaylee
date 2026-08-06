@@ -23,11 +23,7 @@ export function suggestFor(kind, item, contract, staffingMoves = []) {
         `${move.name}${move.lcat ? ` (${move.lcat})` : ""}`;
       const rollOffs = staffingMoves
         .filter((move) => move.kind === "roll_off")
-        .map((move) =>
-          move.clears_lcat_flag
-            ? `Move ${describe(move)} off ${item.code} — also clears the LCAT flag`
-            : `Roll ${describe(move)} off ${item.code}`
-        );
+        .map((move) => `Roll ${describe(move)} off ${item.code}`);
       const trims = new Map();
       for (const move of staffingMoves.filter((move) => move.kind === "trim")) {
         const names = trims.get(move.to_hours) || [];
