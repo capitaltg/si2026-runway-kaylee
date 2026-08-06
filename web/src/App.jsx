@@ -72,6 +72,7 @@ export default function App() {
   // Set when a Flight Deck suggestion routes to the Allocation Matrix so it
   // pre-applies the rebalanced plan; cleared once the Matrix consumes it.
   const [pendingBalance, setPendingBalance] = useState(false);
+  const [pendingMoves, setPendingMoves] = useState(null);
   const [pendingPerson, setPendingPerson] = useState(null);
   // A Flight Deck funding suggestion asked to draft a funding request; the Drafts
   // view reads this once on arrival to auto-select the doc type and generate.
@@ -148,6 +149,11 @@ export default function App() {
     setView("allocate");
   }
 
+  function openAllocationMoves(moves) {
+    setPendingMoves(moves);
+    setView("allocate");
+  }
+
   // Deep-link from a suggestion into the Drafts view, pre-loaded for a contract.
   function openDrafts(id, docType) {
     if (id != null) setActiveId(id);
@@ -184,6 +190,7 @@ export default function App() {
               onOpenAllocation={() => setView("allocate")}
               onOpenPerson={openAllocationPerson}
               onApplyFix={openAllocationBalanced}
+              onApplyMoves={openAllocationMoves}
               onOpenFunding={() => setView("funding")}
               onOpenDrafts={openDrafts}
               onRename={onRename}
@@ -204,6 +211,8 @@ export default function App() {
               onAutoBalanced={() => setPendingBalance(false)}
               focusEmployee={pendingPerson}
               onFocusedEmployee={() => setPendingPerson(null)}
+              staffingMoves={pendingMoves}
+              onStaffingMovesApplied={() => setPendingMoves(null)}
             />
           ) : view === "drafts" ? (
             <Drafts

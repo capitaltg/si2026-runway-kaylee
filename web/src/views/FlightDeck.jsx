@@ -46,8 +46,8 @@ const btnSecondary = {
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
 // stream fails (Bedrock down, etc.). The action button routes via onAction.
-function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts }) {
-  const heuristic = suggestFor(kind, item, contract);
+function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts, staffingMoves = [] }) {
+  const heuristic = suggestFor(kind, item, contract, staffingMoves);
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
@@ -158,7 +158,7 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
                 <button onClick={() => onAction("simulator")} style={btnSecondary}>
                   Open simulator
                 </button>
-                <button onClick={() => onAction("apply-fix")} style={btnPrimary}>
+                <button onClick={() => onAction(staffingMoves.length ? "apply-moves" : "apply-fix", staffingMoves)} style={btnPrimary}>
                   Apply fix
                 </button>
               </>
@@ -182,15 +182,9 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
   );
 }
 
-function heatReason(reason) {
-  if (reason.kind === "over_expected")
-    return `${reason.hours} hrs/wk against a ${reason.expected_hours}-hr target`;
-  if (reason.kind === "off_pace_share")
-    return `${money(reason.weekly_dollars)}/wk on off-pace CLIN ${reason.clin}`;
-  if (reason.kind === "accelerating")
-    return `${money(reason.weekly_dollars)}/wk, up ${money(reason.increase)} from recent pace`;
-  if (reason.kind === "negative_fee") return `${money(reason.weekly_loss)}/wk costs more than billed`;
-  return "needs review";
+function moveText(move) {
+  const action = move.kind === "roll_off" ? `roll off ${move.clin}` : `trim to ${move.to_hours} hrs/wk on ${move.clin}`;
+  return `${action} · avoids ${money(move.weekly_savings)}/wk${move.clears_lcat_flag ? " · clears LCAT flag" : ""}`;
 }
 
 function HotPeople({ people, onOpenPerson }) {
@@ -204,7 +198,7 @@ function HotPeople({ people, onOpenPerson }) {
             Who&apos;s running hot
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>
-            Ranked by weekly dollar impact; each signal names why the person surfaced.
+            Ranked by avoidable overrun against the contract&apos;s remaining LCAT hours.
           </div>
         </div>
         {people.length > 5 && (
@@ -226,17 +220,17 @@ function HotPeople({ people, onOpenPerson }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
                 <span><b>{person.name}</b>{person.lcat ? ` · ${person.lcat}` : ""}</span>
-                <span style={{ color: "var(--accent)", fontWeight: 700 }}>{money(person.weekly_dollars)}/wk</span>
+                <span style={{ color: "var(--accent)", fontWeight: 700 }}>avoids {money(person.avoidable_weekly_overrun)}/wk</span>
               </div>
               <div style={{ marginTop: 3, color: "var(--dim)", fontSize: 12 }}>
-                {person.reasons.map(heatReason).join(" · ")}
+                {person.moves.map(moveText).join(" · ")}
               </div>
             </button>
           ))}
         </div>
       ) : (
         <div style={{ marginTop: 12, fontSize: 13, color: "var(--dim)" }}>
-          Nobody is running hot against the current hours, pace, and cost signals.
+          Nobody is above the contract&apos;s remaining LCAT-hour plan.
         </div>
       )}
     </section>
@@ -250,6 +244,7 @@ export default function FlightDeck({
   onOpenAllocation,
   onOpenPerson,
   onApplyFix,
+  onApplyMoves,
   onOpenFunding,
   onOpenDrafts,
   onRename,
@@ -409,9 +404,10 @@ export default function FlightDeck({
   // Route a suggestion's action buttons: "simulator" opens the Allocation Matrix
   // untouched, "apply-fix" opens it with the rebalanced plan pre-applied, and
   // "funding" opens the Funding History.
-  function onSuggestAction(kind) {
+  function onSuggestAction(kind, moves) {
     if (kind === "simulator") onOpenAllocation?.();
     else if (kind === "apply-fix") onApplyFix?.();
+    else if (kind === "apply-moves") onApplyMoves?.(moves);
     else if (kind === "funding") onOpenFunding?.();
   }
 
@@ -622,6 +618,9 @@ export default function FlightDeck({
               contractId={contractId}
               onAction={onSuggestAction}
               onOpenDrafts={onOpenDrafts}
+              staffingMoves={hot_people.flatMap((person) =>
+                person.moves.filter((move) => move.clin === tw.code.replace("CLIN ", "")).map((move) => ({ ...move, name: person.name, lcat: person.lcat }))
+              )}
             />
           </div>
         </div>

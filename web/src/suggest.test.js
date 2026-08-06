@@ -69,3 +69,20 @@ test("a tripwire past its funding advises on the realized loss, not a forecast",
   assert.match(s.body, /at risk/);
   assert.doesNotMatch(s.body, /week 14/);
 });
+
+test("an overrun suggestion names roll-offs before grouped trims", () => {
+  const s = suggestFor(
+    "over",
+    { code: "CLIN 0002", budget: 1_000_000, exhaust_week: 40, weeks_early: 3 },
+    {},
+    [
+      { name: "Aisha Khan", lcat: "Cyber Engineer III", kind: "roll_off", from_hours: 24, to_hours: 0, clears_lcat_flag: false },
+      { name: "Wei Chen", lcat: "Engineer I", kind: "roll_off", from_hours: 16, to_hours: 0, clears_lcat_flag: true },
+      { name: "Dana Yu", kind: "trim", from_hours: 32, to_hours: 24 },
+      { name: "Marcus Lee", kind: "trim", from_hours: 32, to_hours: 24 },
+    ],
+  );
+  assert.match(s.body, /Roll Aisha Khan \(Cyber Engineer III\) off CLIN 0002/);
+  assert.match(s.body, /Move Wei Chen \(Engineer I\) off CLIN 0002 — also clears the LCAT flag/);
+  assert.match(s.body, /Trim Dana Yu & Marcus Lee to 24 hrs\/wk/);
+});

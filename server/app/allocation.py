@@ -36,104 +36,105 @@ def _emp_name(rows: List[dict], emp_id: str) -> str:
     return emp_id
 
 
-def _person_heat(
-    employees: List[dict], clins: List[dict], weekly_by_person: dict
-) -> List[dict]:
-    """People who need attention, ranked by the weekly dollars they drive.
+def _staffing_moves(employees: List[dict], clins: List[dict]) -> List[dict]:
+    """Turn excess current staffing into the smallest practical set of moves.
 
-    Kept beside the allocation pass because it is the one place we already have
-    person x CLIN hours, the resolved billing rate, and expected hours on the
-    exact same window as burn. The Flight Deck consumes this summary; the matrix
-    retains the detailed cells.
+    The contract's remaining estimated hours are the demand plan. Within a CLIN
+    and LCAT, whole people come off first; only the remaining fractional excess is
+    spread across the people still needed. An unmatched LCAT wins the roll-off tie
+    because it removes both unsupported spend and the mapping flag.
     """
-    off_pace = {c["id"] for c in clins if c.get("base_status") in ("over", "watch")}
-    clin_dollars = {}
-    for employee in employees:
-        for clin_id, cell in employee["cells"].items():
-            if clin_id in off_pace and cell.get("rate") is not None:
-                clin_dollars[clin_id] = clin_dollars.get(clin_id, 0.0) + (
-                    cell["hours"] * cell["rate"]
-                )
-
-    hot = []
-    for employee in employees:
-        weekly_dollars = round(
-            sum(
-                cell["hours"] * cell["rate"]
-                for cell in employee["cells"].values()
-                if cell.get("rate") is not None
-            ),
-            2,
-        )
-        expected = employee.get("expected", {}).get("hours")
-        hours = employee["hours"]
-        reasons = []
-        if expected is not None and hours > expected:
-            reasons.append(
-                {
-                    "kind": "over_expected",
-                    "hours": hours,
-                    "expected_hours": expected,
-                    "over_hours": round(hours - expected, 1),
-                }
-            )
-        for clin_id, cell in employee["cells"].items():
-            if clin_id not in off_pace or cell.get("rate") is None:
+    moves = []
+    for clin in clins:
+        groups = {}
+        for employee in employees:
+            cell = employee["cells"].get(clin["id"])
+            if not cell or cell.get("hours", 0) <= 0:
                 continue
-            dollars = round(cell["hours"] * cell["rate"], 2)
-            if dollars:
-                reasons.append(
+            lcat = cell.get("planned_lcat") or cell.get("lcat") or ""
+            groups.setdefault(lcat, []).append((employee, cell))
+        for lcat, members in groups.items():
+            target = float((clin.get("planned_lcat_hours") or {}).get(lcat, 0.0))
+            excess = sum(cell["hours"] for _, cell in members) - target
+            if excess <= 0:
+                continue
+            kept = list(members)
+            while kept:
+                rollable = [
+                    (employee, cell)
+                    for employee, cell in kept
+                    if cell["hours"] <= excess
+                ]
+                if not rollable:
+                    break
+                employee, cell = min(
+                    rollable,
+                    key=lambda item: (
+                        abs(excess - item[1]["hours"]),
+                        not item[1].get("unmatched", False),
+                        -item[1]["hours"],
+                        item[0]["name"],
+                    ),
+                )
+                hours = cell["hours"]
+                moves.append(
                     {
-                        "kind": "off_pace_share",
-                        "clin": clin_id,
-                        "weekly_dollars": dollars,
-                        "share": round(dollars / clin_dollars[clin_id], 4),
+                        "employee_id": employee["id"],
+                        "clin": clin["id"],
+                        "kind": "roll_off",
+                        "from_hours": hours,
+                        "to_hours": 0,
+                        "clears_lcat_flag": bool(cell.get("unmatched")),
+                        "weekly_savings": round(hours * (cell.get("rate") or 0), 2),
                     }
                 )
-        acceleration = []
-        for clin_id, weeks in weekly_by_person.get(employee["id"], {}).items():
-            values = [weeks[week] for week in sorted(weeks)]
-            if len(values) < 2:
+                excess -= hours
+                kept.remove((employee, cell))
+            if excess <= 0 or not kept:
                 continue
-            latest = values[-1]
-            prior = sum(values[:-1]) / len(values[:-1])
-            if latest > prior:
-                acceleration.append((latest - prior, clin_id, latest, prior))
-        if acceleration:
-            increase, clin_id, latest, prior = max(acceleration)
-            reasons.append(
-                {
-                    "kind": "accelerating",
-                    "clin": clin_id,
-                    "weekly_dollars": round(latest, 2),
-                    "prior_weekly_dollars": round(prior, 2),
-                    "increase": round(increase, 2),
-                }
-            )
-        loss = round(
-            sum(
-                cell["hours"] * (cell["cost_rate"] - cell["rate"])
-                for cell in employee["cells"].values()
-                if cell.get("cost_known")
-                and cell.get("cost_rate") is not None
-                and cell.get("rate") is not None
-                and cell["cost_rate"] > cell["rate"]
-            ),
-            2,
+            kept_hours = sum(cell["hours"] for _, cell in kept)
+            for employee, cell in kept:
+                reduction = round(excess * cell["hours"] / kept_hours, 1)
+                if reduction <= 0:
+                    continue
+                target_hours = round(cell["hours"] - reduction, 1)
+                moves.append(
+                    {
+                        "employee_id": employee["id"],
+                        "clin": clin["id"],
+                        "kind": "trim",
+                        "from_hours": cell["hours"],
+                        "to_hours": target_hours,
+                        "clears_lcat_flag": False,
+                        "weekly_savings": round(reduction * (cell.get("rate") or 0), 2),
+                    }
+                )
+    return moves
+
+
+def _person_heat(employees: List[dict], moves: List[dict]) -> List[dict]:
+    """Rank people by avoidable overrun dollars, never their gross billing rate."""
+    by_person = {}
+    names = {employee["id"]: employee for employee in employees}
+    for move in moves:
+        by_person.setdefault(move["employee_id"], []).append(move)
+    people = []
+    for employee_id, person_moves in by_person.items():
+        employee = names[employee_id]
+        savings = round(sum(move["weekly_savings"] for move in person_moves), 2)
+        people.append(
+            {
+                "id": employee_id,
+                "name": employee["name"],
+                "lcat": employee.get("lcat"),
+                "avoidable_weekly_overrun": savings,
+                "moves": person_moves,
+            }
         )
-        if loss:
-            reasons.append({"kind": "negative_fee", "weekly_loss": loss})
-        if reasons:
-            hot.append(
-                {
-                    "id": employee["id"],
-                    "name": employee["name"],
-                    "lcat": employee.get("lcat"),
-                    "weekly_dollars": weekly_dollars,
-                    "reasons": reasons,
-                }
-            )
-    return sorted(hot, key=lambda person: (-person["weekly_dollars"], person["name"]))
+    return sorted(
+        people,
+        key=lambda person: (-person["avoidable_weekly_overrun"], person["name"]),
+    )
 
 
 def compute_allocation(
@@ -235,7 +236,7 @@ def compute_allocation(
     # Walk each CLIN's charges (scoped to the active PoP window, same as burn) and
     # build per-employee avg hrs/wk + the LCAT/rate that hrs bills at.
     employees = {}  # emp_id -> {id, name, cells: {clin_id: {hours, lcat, rate}}}
-    weekly_by_person = {}  # employee -> CLIN -> week ending -> billed dollars
+    clin_cards_by_id = {card["id"]: card for card in clin_cards}
     for c in labor:
         num = burn._clin_num(c)
         resolve = resolvers[num]
@@ -260,11 +261,6 @@ def compute_allocation(
             hrs_by_emp[emp] = hrs_by_emp.get(emp, 0.0) + h
             lc = (r.get("labor_category") or "").strip()
             lcat_hrs.setdefault(emp, {})[lc] = lcat_hrs.get(emp, {}).get(lc, 0.0) + h
-            resolved_rate = resolve(lc).rate
-            if resolved_rate is not None:
-                week = r.get("week_ending")
-                person_weeks = weekly_by_person.setdefault(emp, {}).setdefault(num, {})
-                person_weeks[week] = person_weeks.get(week, 0.0) + h * resolved_rate
 
         for emp, total in hrs_by_emp.items():
             lcat = (
@@ -302,6 +298,7 @@ def compute_allocation(
                 # off as a printed rate line.
                 "via": res.via,
                 "rate_line": res.line.payload() if res.matched and res.line else None,
+                "planned_lcat": res.line.lcat if res.matched and res.line else lcat,
                 # Cost next to price, per person per CLIN (#77) — the acceptance
                 # criterion that cost and price be separately readable for any
                 # (person, CLIN, week). `cost_known` false means this is the billing
@@ -315,6 +312,30 @@ def compute_allocation(
                     }
                 )(cost_model.cost_for(lcat, res.rate, emp)),
             }
+
+        # The award's per-LCAT estimated hours are the staffing demand. Subtract
+        # billed hours across the active period, then spread what remains over the
+        # remaining PoP weeks. A category without an estimate is intentionally not
+        # planned here: guessing a target is worse than omitting a suggestion.
+        actual_by_lcat = {}
+        for r in clin_rows:
+            res = resolve((r.get("labor_category") or "").strip())
+            if not res.matched or not res.line:
+                continue
+            key = res.line.lcat
+            actual_by_lcat[key] = actual_by_lcat.get(key, 0.0) + burn.billable_hours(r)
+        weeks_remaining = max(1, bc.get("weeks_remaining") or 0)
+        planned = {}
+        for line in c.get("labor_rates") or []:
+            name = (line.get("lcat") or "").strip()
+            estimated = line.get("est_hours")
+            if name and estimated is not None:
+                planned[name] = round(
+                    max(0.0, float(estimated) - actual_by_lcat.get(name, 0.0))
+                    / weeks_remaining,
+                    1,
+                )
+        clin_cards_by_id[num]["planned_lcat_hours"] = planned
 
     # Contract- and LCAT-level expected hours, read once off the contract's blob.
     caps = capacity.contract_capacity(contract)
@@ -372,5 +393,5 @@ def compute_allocation(
         },
         "clins": clin_cards,
         "employees": emp_list,
-        "hot_people": _person_heat(emp_list, clin_cards, weekly_by_person),
+        "hot_people": _person_heat(emp_list, _staffing_moves(emp_list, clin_cards)),
     }

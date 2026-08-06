@@ -7,7 +7,7 @@ import { moneyM, shortDate } from "./format.js";
 // to render and where they route; `result` is the green "what this does" line.
 //
 // kind: "over" (tripwire) | "underburn" | "funding"
-export function suggestFor(kind, item, contract) {
+export function suggestFor(kind, item, contract, staffingMoves = []) {
   const wk = (w) => `week ${Math.round(w)}`;
   // The hard-stop date (#23) alongside the week index. A week number is the
   // engine's unit but not the PM's — the action here is scheduling a mod or a
@@ -18,6 +18,31 @@ export function suggestFor(kind, item, contract) {
   const at = item.stop_date ? ` (around ${shortDate(item.stop_date)})` : "";
 
   if (kind === "over") {
+    if (staffingMoves.length) {
+      const describe = (move) =>
+        `${move.name}${move.lcat ? ` (${move.lcat})` : ""}`;
+      const rollOffs = staffingMoves
+        .filter((move) => move.kind === "roll_off")
+        .map((move) =>
+          move.clears_lcat_flag
+            ? `Move ${describe(move)} off ${item.code} — also clears the LCAT flag`
+            : `Roll ${describe(move)} off ${item.code}`
+        );
+      const trims = new Map();
+      for (const move of staffingMoves.filter((move) => move.kind === "trim")) {
+        const names = trims.get(move.to_hours) || [];
+        names.push(move.name);
+        trims.set(move.to_hours, names);
+      }
+      const trimSteps = [...trims.entries()].map(([hours, names]) =>
+        `Trim ${names.join(" & ")} to ${hours} hrs/wk`
+      );
+      return {
+        body: [...rollOffs, ...trimSteps].join(". ") + ".",
+        result: "Brings this CLIN back to its contracted labor-hour plan.",
+        action: { kind: "balance" },
+      };
+    }
     const ceiling = item.limited_by === "funding" ? item.funded : item.budget;
     const label = item.limited_by === "funding" ? "funded amount" : "ceiling";
     // Already spent through: rebalancing forward can't recover money that's gone,
