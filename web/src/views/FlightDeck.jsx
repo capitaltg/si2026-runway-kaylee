@@ -5,6 +5,7 @@ import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 import { suggestFor } from "../suggest.js";
+import { scopeNotices } from "../scope-notice.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -324,6 +325,7 @@ export default function FlightDeck({
           : hero?.status === "watch"
             ? "lands tight against the finish line"
             : "clears the finish line";
+  const notices = scopeNotices(contract);
 
   function startRename() {
     cancelRename.current = false;
@@ -411,6 +413,29 @@ export default function FlightDeck({
           {contract.agency || "—"} · {contract.piid}
         </div>
       </div>
+
+      {notices.length > 0 && (
+        <div
+          style={{
+            border: "1px solid var(--warn)",
+            background: "var(--warnBg)",
+            borderRadius: 12,
+            padding: "12px 16px",
+            marginBottom: 16,
+            color: "var(--text)",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <b style={{ color: "var(--warn)" }}>Data scope needs review.</b>{" "}
+          {notices.map((notice, index) => (
+            <React.Fragment key={notice.key}>
+              {index > 0 && " "}
+              {notice.text}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
 
       {/* tripwires (real numbers only) */}
       {tripwires.map((tw) => (
