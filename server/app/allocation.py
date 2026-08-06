@@ -147,6 +147,8 @@ def _person_heat(employees: List[dict], moves: List[dict]) -> List[dict]:
                 "clin": clin_id,
                 "lcat": cell.get("lcat"),
                 "cause": cell.get("cause"),
+                "priced_on": cell.get("priced_on"),
+                "suggestion": cell.get("suggestion"),
             }
             for clin_id, cell in (employee.get("cells") or {}).items()
             if cell.get("unmatched")

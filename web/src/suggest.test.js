@@ -77,13 +77,13 @@ test("an overrun suggestion names roll-offs before grouped trims", () => {
     {},
     [
       { name: "Aisha Khan", lcat: "Cyber Engineer III", kind: "roll_off", from_hours: 24, to_hours: 0, clears_lcat_flag: false },
-      { name: "Wei Chen", lcat: "Engineer I", kind: "roll_off", from_hours: 16, to_hours: 0, clears_lcat_flag: true },
+      { name: "Wei Chen", lcat: "Engineer I", kind: "roll_off", from_hours: 16, to_hours: 0, clears_lcat_flag: true, lcatIssue: { cause: "priced_elsewhere", priced_on: "0003" } },
       { name: "Dana Yu", kind: "trim", from_hours: 32, to_hours: 24 },
       { name: "Marcus Lee", kind: "trim", from_hours: 32, to_hours: 24 },
     ],
   );
   assert.match(s.body, /Roll Aisha Khan \(Cyber Engineer III\) off CLIN 0002/);
   assert.match(s.body, /Roll Wei Chen \(Engineer I\) off CLIN 0002/);
-  assert.doesNotMatch(s.body, /LCAT flag/);
+  assert.match(s.body, /consider reassigning Wei Chen to CLIN 0003 if that is where the work belongs/);
   assert.match(s.body, /Trim Dana Yu & Marcus Lee to 24 hrs\/wk/);
 });

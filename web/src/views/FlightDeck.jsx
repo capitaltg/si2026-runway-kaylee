@@ -188,6 +188,10 @@ function varianceText(move) {
 }
 
 function lcatIssueText(issue) {
+  if (issue.cause === "priced_elsewhere" && issue.priced_on)
+    return `${issue.lcat || "This LCAT"} is priced on ${issue.priced_on} · reassign the charge there if that is where the work belongs`;
+  if (issue.cause === "no_rate_line" && issue.suggestion?.lcat)
+    return `${issue.lcat || "This LCAT"} has no matching rate line · review ${issue.suggestion.lcat} before changing the charge`;
   return `${issue.lcat || "This LCAT"} on ${issue.clin} needs rate-line review`;
 }
 
@@ -623,7 +627,12 @@ export default function FlightDeck({
               onAction={onSuggestAction}
               onOpenDrafts={onOpenDrafts}
               staffingMoves={hot_people.flatMap((person) =>
-                person.moves.filter((move) => move.clin === tw.code.replace("CLIN ", "")).map((move) => ({ ...move, name: person.name, lcat: person.lcat }))
+                person.moves.filter((move) => move.clin === tw.code.replace("CLIN ", "")).map((move) => ({
+                  ...move,
+                  name: person.name,
+                  lcat: person.lcat,
+                  lcatIssue: person.lcat_issues?.find((issue) => issue.clin === move.clin),
+                }))
               )}
             />
           </div>

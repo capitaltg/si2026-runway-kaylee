@@ -140,3 +140,43 @@ def test_trim_moves_land_on_whole_hours_and_reconcile_to_the_plan():
 
     assert sum(move["to_hours"] for move in moves) == 27
     assert all(float(move["to_hours"]).is_integer() for move in moves)
+
+
+def test_lcat_issue_carries_a_verified_reassignment_destination_not_a_guess():
+    people = [
+        {
+            "id": "e1",
+            "name": "Wei Chen",
+            "lcat": "Engineer I",
+            "cells": {
+                "0002": {
+                    "unmatched": True,
+                    "lcat": "Engineer I",
+                    "cause": "priced_elsewhere",
+                    "priced_on": "0003",
+                    "suggestion": None,
+                }
+            },
+        }
+    ]
+    moves = [
+        {
+            "employee_id": "e1",
+            "clin": "0002",
+            "kind": "roll_off",
+            "from_hours": 24,
+            "to_hours": 0,
+            "clears_lcat_flag": False,
+            "weekly_savings": 4800,
+        }
+    ]
+
+    issue = allocation._person_heat(people, moves)[0]["lcat_issues"][0]
+
+    assert issue == {
+        "clin": "0002",
+        "lcat": "Engineer I",
+        "cause": "priced_elsewhere",
+        "priced_on": "0003",
+        "suggestion": None,
+    }

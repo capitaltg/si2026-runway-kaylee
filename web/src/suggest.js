@@ -23,7 +23,12 @@ export function suggestFor(kind, item, contract, staffingMoves = []) {
         `${move.name}${move.lcat ? ` (${move.lcat})` : ""}`;
       const rollOffs = staffingMoves
         .filter((move) => move.kind === "roll_off")
-        .map((move) => `Roll ${describe(move)} off ${item.code}`);
+        .map((move) => {
+          const rollOff = `Roll ${describe(move)} off ${item.code}`;
+          if (move.lcatIssue?.cause === "priced_elsewhere" && move.lcatIssue.priced_on)
+            return `${rollOff}; consider reassigning ${move.name} to CLIN ${move.lcatIssue.priced_on} if that is where the work belongs`;
+          return rollOff;
+        });
       const trims = new Map();
       for (const move of staffingMoves.filter((move) => move.kind === "trim")) {
         const names = trims.get(move.to_hours) || [];
