@@ -1048,7 +1048,9 @@ def _compute_clin(
         "ceiling": ceiling,
         # The binding budget the runway is measured against, and whether it's the
         # funded slice (incremental funding) rather than the full ceiling. The
-        # Flight Deck chart draws the "funds run out" marker at `budget`.
+        # Flight Deck chart draws the "funds run out" marker at `budget`, and since
+        # #39 the CLIN card's bar draws the same marker at `funded_frac` along its
+        # ceiling track — the two surfaces now agree.
         "budget": round(budget, 2),
         "funded": round(funded, 2) if funded is not None else None,
         "incrementally_funded": incrementally_funded,
@@ -1061,6 +1063,13 @@ def _compute_clin(
         "mod_in_progress": bool(mod_in_progress),
         "spent": round(spent, 2),
         "pct": round(pct, 4),
+        # The same spend against the *binding* budget (#39). `pct` is
+        # spent/ceiling while `remaining`, `weeks_left` and the status are all
+        # spent-vs-budget, so a card printing only `pct` next to a runway shows
+        # two numbers with different denominators and no way to reconcile them.
+        # Equal to `pct` whenever the CLIN is fully funded, so a reader who
+        # doesn't care about the distinction never sees one.
+        "pct_budget": round((spent / budget) if budget else 0.0, 4),
         "weekly": round(weekly, 2),
         "remaining": round(remaining, 2),
         # Dollars already spent past the binding budget, when there are any. The
@@ -1574,9 +1583,16 @@ def compute(
                 "budget": round(budget, 2),
                 "incrementally_funded": incrementally_funded,
                 "spent": round(spent, 2),
-                # `pct` stays ceiling-based for the display %; the two-denominator
-                # reconciliation on the card is #39. Status uses the budget.
+                # `pct` stays ceiling-based; `pct_budget` is the same spend against
+                # the binding budget the status is actually read off, and
+                # `funded_frac` places the funded marker on the ceiling track (#39).
+                # All three are present on labor cards too, so the card renders one
+                # way for both.
                 "pct": round((spent / ceiling) if ceiling else 0.0, 4),
+                "pct_budget": round((spent / budget) if budget else 0.0, 4),
+                "funded_frac": round(
+                    (funded / ceiling) if (funded is not None and ceiling) else 1.0, 4
+                ),
                 "remaining": round(remaining, 2),
                 "overspent": round(spent - budget, 2) if remaining < 0 else 0.0,
                 "entries": exp_count.get(num, 0),
@@ -1631,6 +1647,10 @@ def compute(
 
     labor_ceiling = sum(c["ceiling"] for c in computed)
     total_ceiling = labor_ceiling + sum(c["ceiling"] for c in nl_cards)
+    # The binding budget rolled up the same way (#39): the funded slice where a CLIN
+    # is incrementally funded, its ceiling where it isn't. Summed per CLIN rather
+    # than taken from `period_funded` so it reconciles line-by-line with the cards.
+    total_budget = sum(c["budget"] for c in computed + nl_cards)
     # Both feeds roll into burn: labor hours × rate, plus logged non-labor actuals.
     total_spent = sum(c["spent"] for c in computed) + sum(c["spent"] for c in nl_cards)
     total_weekly = sum(c["weekly"] for c in computed)
@@ -1653,6 +1673,10 @@ def compute(
             "code": c["code"],
             "name": c["name"],
             "pct": c["pct"],
+            # Spend against whichever limit this row is about (#39). A funding-
+            # limited tripwire that prints a ceiling percentage contradicts its own
+            # headline — "40% burned, past its obligated $1.4M".
+            "pct_budget": c["pct_budget"],
             "exhaust_week": c["exhaust_week"],
             "runway_days": c["runway_days"],
             "weeks_early": round(tw - (c["exhaust_week"] or tw)),
@@ -1706,6 +1730,9 @@ def compute(
             "code": c["code"],
             "name": c["name"],
             "pct": c["pct"],
+            # Same reason as the tripwire list (#39): this banner's sentence is
+            # about the budget, so the badge beside it has to be too.
+            "pct_budget": c["pct_budget"],
             "exhaust_week": c["exhaust_week"],
             "weeks_slack": round((c["exhaust_week"] or tw) - tw),
             "budget": c["budget"],
@@ -1896,6 +1923,16 @@ def compute(
             "ceiling": round(total_ceiling, 2),
             "spent": round(total_spent, 2),
             "pct": round(total_spent / total_ceiling, 4) if total_ceiling else 0.0,
+            # Contract-level mirror of the per-CLIN pair (#39). The hero tile reads
+            # a runway measured against funded dollars, so "Contract burned" needs
+            # the funded denominator available next to the ceiling one.
+            "budget": round(total_budget, 2),
+            "pct_budget": (
+                round(total_spent / total_budget, 4) if total_budget else 0.0
+            ),
+            "incrementally_funded": any(
+                c["incrementally_funded"] for c in computed + nl_cards
+            ),
             "weekly": round(total_weekly, 2),
             "labor_count": len(computed),
             # Cost of the same work, when it's independently known (#77).
@@ -2003,6 +2040,12 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
                 "ceiling": t["ceiling"],
                 "spent": t["spent"],
                 "pct": t["pct"],
+                # The portfolio card carries the same runway the Flight Deck hero
+                # does, so it inherits the same two-denominator problem and the same
+                # fix (#39): the funded read alongside the ceiling read.
+                "budget": t["budget"],
+                "pct_budget": t["pct_budget"],
+                "incrementally_funded": t["incrementally_funded"],
                 "weekly": t["weekly"],
                 "runway_days": b["hero"]["days"] if b["hero"] else None,
                 "status": overall,

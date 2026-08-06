@@ -457,7 +457,13 @@ export default function FlightDeck({
                   borderRadius: 20,
                 }}
               >
-                {pct(tw.pct)} burned
+                {/* Of whichever limit the sentence below is about (#39) —
+                    otherwise the badge reads "40% burned" over a line that has
+                    already blown through its obligated dollars. */}
+                {tw.limited_by === "funding"
+                  ? `${pct(tw.pct_budget)} of funded`
+                  : `${pct(tw.pct)} of ceiling`}{" "}
+                burned
               </span>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
@@ -469,7 +475,13 @@ export default function FlightDeck({
                   is 0 and React prints null as nothing. */}
               {tw.exhaust_week == null ? (
                 <>
-                  {tw.code} has already spent {pct(tw.pct)} of its ceiling, past its{" "}
+                  {tw.code} has already spent{" "}
+                  {tw.limited_by === "funding" ? (
+                    <>{pct(tw.pct_budget)} of its obligated funding</>
+                  ) : (
+                    <>{pct(tw.pct)} of its ceiling</>
+                  )}
+                  , past its{" "}
                   {tw.limited_by === "funding" ? (
                     <>
                       obligated <b>{moneyM(tw.funded)}</b>
@@ -597,7 +609,9 @@ export default function FlightDeck({
                   borderRadius: 20,
                 }}
               >
-                {pct(ub.pct)} burned
+                {/* The sentence below is about the budget, so this is too (#39). */}
+                {pct(ub.pct_budget)} of{" "}
+                {ub.limited_by === "funding" ? "funded" : "ceiling"} burned
               </span>
             </div>
             <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
@@ -1094,11 +1108,31 @@ export default function FlightDeck({
           </div>
         </div>
         <div style={panelStyle}>
+          {/* Named denominators (#39). The headline is spend against the *binding*
+              budget, because this tile sits beside a runway measured the same way —
+              a 40%-of-ceiling headline next to "89 days" is the reconciliation
+              failure the ticket is about. The ceiling read stays underneath, and on
+              a fully funded contract the two are the same number. */}
           <div style={tileLabel}>Contract burned</div>
-          <div style={tileNum}>{pct(totals.pct)}</div>
-          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>
-            {moneyM(totals.spent)} of {moneyM(totals.ceiling)}
+          <div style={tileNum}>
+            {pct(totals.incrementally_funded ? totals.pct_budget : totals.pct)}
           </div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>
+            {totals.incrementally_funded ? (
+              <>
+                {moneyM(totals.spent)} of {moneyM(totals.budget)} funded
+              </>
+            ) : (
+              <>
+                {moneyM(totals.spent)} of {moneyM(totals.ceiling)} ceiling
+              </>
+            )}
+          </div>
+          {totals.incrementally_funded && (
+            <div style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }}>
+              {pct(totals.pct)} of the {moneyM(totals.ceiling)} ceiling
+            </div>
+          )}
         </div>
         <div style={panelStyle}>
           <div style={tileLabel}>Time elapsed</div>
@@ -1184,11 +1218,23 @@ export default function FlightDeck({
           const mm = !!c.margin_managed;
           const pos = c.margin_position;
           const p = pill(c.status, c.ceiling_breached !== false, !!c.funds_exceeded, mm);
+          // Colour off the *binding* budget, not the ceiling (#39). A CLIN at 40% of
+          // its ceiling but 89% of its funded slice is nearly out of money, and the
+          // pill already says so — a cool bar next to a red pill reads as a bug.
+          // Identical to the ceiling read on a fully funded CLIN.
+          const heat = c.pct_budget ?? c.pct;
+          // Where the obligated money runs out, as a fraction of the ceiling track.
+          // Null unless the line is actually incrementally funded — and always on
+          // fixed price, where funding is not the constraint at all (#79).
+          const fundedMarker =
+            !mm && c.incrementally_funded && c.funded != null && c.ceiling
+              ? Math.max(0, Math.min(100, (c.funded / c.ceiling) * 100))
+              : null;
           const barColor = mm
             ? statusColor(c.status)
-            : c.pct > 0.85
+            : heat > 0.85
               ? "var(--bad)"
-              : c.pct > 0.7
+              : heat > 0.7
                 ? "var(--warn)"
                 : hue;
           // Non-labor CLINs have no timesheet burn — their card routes into the
@@ -1252,14 +1298,24 @@ export default function FlightDeck({
                 </span>
                 <span style={p.style}>{p.label}</span>
               </div>
+              {/* The track is the ceiling, the fill is spend, and on an
+                  incrementally funded line a marker sits where the obligated money
+                  runs out (#39). Without it a 40% fill next to "89 days runway"
+                  looks wrong, because the runway is measured against the funded
+                  slice the bar never drew. */}
               <div
                 style={{
+                  position: "relative",
                   height: 8,
                   borderRadius: 5,
                   background: "var(--border)",
                   marginTop: 11,
-                  overflow: "hidden",
                 }}
+                title={
+                  fundedMarker !== null
+                    ? `Funded ${moneyM(c.funded)} of ${moneyM(c.ceiling)} ceiling`
+                    : undefined
+                }
               >
                 <div
                   style={{
@@ -1269,17 +1325,46 @@ export default function FlightDeck({
                     borderRadius: 5,
                   }}
                 />
+                {fundedMarker !== null && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -2,
+                      bottom: -2,
+                      left: `${fundedMarker}%`,
+                      width: 2,
+                      marginLeft: -1,
+                      borderRadius: 1,
+                      background: "var(--text)",
+                      opacity: 0.75,
+                    }}
+                  />
+                )}
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: "var(--dim)" }}>
                 {/* The label has to name the quantity, because `spent` means a
                     different thing per pricing policy (#79) — cost on a cost-type or
                     fixed-price line, billings on T&M. Printing "$X spent" over all
                     three is how the two get conflated. */}
+                {/* Name the denominator (#39). "40%" alone is unreadable next to a
+                    runway measured against funded dollars; on an incrementally
+                    funded line both reads are printed, and the funded one is bolded
+                    because it's the one the pill and the runway agree with. */}
                 <span>
                   {mm ? "cost " : ""}
                   {moneyM(c.spent)} / {moneyM(c.ceiling)}
                   {mm ? " price" : ""} ·{" "}
-                  <b style={{ color: "var(--text)" }}>{pct(c.pct)}</b>
+                  {fundedMarker !== null ? (
+                    <>
+                      <span>{pct(c.pct)} of ceiling</span> ·{" "}
+                      <b style={{ color: "var(--text)" }}>{pct(c.pct_budget)} of funded</b>
+                    </>
+                  ) : (
+                    <b style={{ color: "var(--text)" }}>
+                      {pct(c.pct)}
+                      {mm ? "" : " of ceiling"}
+                    </b>
+                  )}
                 </span>
                 <span style={{ color: runwayColor, fontWeight: 600 }}>{runwayLabel}</span>
               </div>
