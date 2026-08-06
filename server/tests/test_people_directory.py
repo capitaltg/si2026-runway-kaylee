@@ -239,6 +239,43 @@ def test_a_hand_added_person_never_appears_on_the_allocation_matrix():
     assert [e["id"] for e in alloc["employees"]] == ["e1"]
 
 
+def test_allocation_clin_exposes_rate_line_qualifications():
+    contract = {
+        "id": 1,
+        "contract": {"piid": "TEST-1", "total_ceiling": 1_000_000},
+        "clins": [
+            {
+                "clin": "0001",
+                "title": "Labor",
+                "is_labor": True,
+                "ceiling": 500_000,
+                "est_hours": 2_500,
+                "labor_rates": [
+                    {
+                        "lcat": "Senior Engineer",
+                        "loaded_rate": 225,
+                        "min_education": "Bachelor's",
+                        "min_experience_yrs": 8,
+                        "clearance": "Secret",
+                    }
+                ],
+            }
+        ],
+        "periods": [],
+    }
+
+    alloc = allocation.compute_allocation(contract, [])
+    assert alloc["clins"][0]["rate_lines"] == [
+        {
+            "lcat": "Senior Engineer",
+            "rate": 225.0,
+            "min_education": "Bachelor's",
+            "min_experience_yrs": 8,
+            "clearance": "Secret",
+        }
+    ]
+
+
 def test_allocation_does_not_read_the_directory():
     # The structural half of the same rule. If allocation ever imports people, the
     # grid gains a second source of truth and can drift from the feed.

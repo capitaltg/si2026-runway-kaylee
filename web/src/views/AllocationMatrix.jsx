@@ -7,6 +7,8 @@ import {
   updatePlan,
   deletePlan,
   getLcatRates,
+  getPeople,
+  getPeopleUtilization,
   setLcatAlias,
   deleteLcatAlias,
   setContractCapacity,
@@ -22,6 +24,13 @@ import {
 import { planFingerprint, isUnsaved } from "../plans.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
+import {
+  prefillPerson,
+  rateOptions,
+  selectDirectoryPersonForm,
+  switchPersonSource,
+  validateAddedPerson,
+} from "../allocation-person.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -185,6 +194,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [added, setAdded] = useState([]);
   const [removed, setRemoved] = useState([]);
   const [newPerson, setNewPerson] = useState(null); // the open "add person" form
+  const [addPersonError, setAddPersonError] = useState(null);
+  const [directory, setDirectory] = useState({ people: [], utilization: {}, loading: false, error: null });
   const addSeq = useRef(0);
   // #85 — dated absence. Two tiers, deliberately:
   //   `absences` is the what-if list: PTO, start and roll-off dates typed into *this*
@@ -446,6 +457,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const clins = data?.clins || [];
   const employees = data?.employees || [];
   const { current_week: cw, total_weeks: tw } = data?.contract || {};
+  const activeNewClin = clins.find((c) => c.id === newPerson?.clin) || clins[0] || null;
+  const newPersonRateOptions = rateOptions(activeNewClin);
+  const selectedRateOption = newPersonRateOptions.find((line) => line.lcat === newPerson?.lcatChoice);
+  const directoryMatches = (directory.people || []).filter((person) => {
+    const q = (newPerson?.search || "").trim().toLowerCase();
+    return !q || [person.name, person.employee_id, ...(person.lcats || [])].some((x) =>
+      (x || "").toLowerCase().includes(q)
+    );
+  });
 
   // The effective roster this plan runs on: synced people minus those rolled off,
   // plus any planned adds.
@@ -967,21 +987,100 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     else setRemoved((r) => (r.includes(id) ? r : [...r, id]));
   }
 
-  // Add a planned person to a CLIN at that CLIN's blended rate — models "what if
-  // we crew up here?". Lives in the simulation only.
+  // Open the staffing panel and fetch its optional directory context. A failed
+  // directory request never blocks a typed new-hire scenario.
+  async function openAddPerson() {
+    setAddPersonError(null);
+    setNewPerson({
+      source: "new",
+      personId: "",
+      search: "",
+      name: "",
+      employeeId: "",
+      clin: clins[0]?.id || "",
+      lcatChoice: "",
+      lcat: "",
+      rate: "",
+      utilization: null,
+      quals: { education: "", years_experience: "", clearance: "" },
+      // Seeded from the contract's resolved expectation, not a hard-coded 40.
+      hrs: Math.round(contractExpected?.hours ?? FTE_HOURS_PER_WEEK),
+    });
+    setDirectory((d) => ({ ...d, loading: true, error: null }));
+    try {
+      const [directoryData, utilizationData] = await Promise.all([getPeople(), getPeopleUtilization()]);
+      const utilization = Object.fromEntries(
+        (utilizationData.people || []).map((person) => [person.employee_id, person])
+      );
+      setDirectory({ people: directoryData.people || [], utilization, loading: false, error: null });
+    } catch (e) {
+      setDirectory((d) => ({ ...d, loading: false, error: e.message }));
+    }
+  }
+
+  function selectDirectoryPerson(employeeId) {
+    const person = directory.people.find((p) => p.employee_id === employeeId);
+    if (!person) return;
+    const prefill = prefillPerson(person, directory.utilization[employeeId]);
+    const match = newPersonRateOptions.find((line) => line.lcat === prefill.lcat);
+    setAddPersonError(null);
+    setNewPerson((p) => ({
+      ...selectDirectoryPersonForm(p, employeeId, prefill),
+      lcatChoice: match?.lcat || "other",
+      rate: match ? String(match.rate) : "",
+    }));
+  }
+
+  function setNewPersonClin(clin) {
+    const target = clins.find((c) => c.id === clin);
+    const matches = rateOptions(target);
+    setNewPerson((p) => {
+      const match = matches.find((line) => line.lcat === p.lcat);
+      return {
+        ...p,
+        clin,
+        lcatChoice: match?.lcat || "other",
+        rate: match ? String(match.rate) : "",
+      };
+    });
+  }
+
+  function selectPlannedLcat(choice) {
+    if (choice === "other") {
+      setNewPerson((p) => ({ ...p, lcatChoice: "other", rate: "" }));
+      return;
+    }
+    const option = newPersonRateOptions.find((line) => line.lcat === choice);
+    if (!option) return;
+    setNewPerson((p) => ({ ...p, lcatChoice: option.lcat, lcat: option.lcat, rate: String(option.rate) }));
+  }
+
+  // Add a plan-local person with an explicit rate. Unlike synced actuals, a what-if
+  // has no timesheet LCAT for the burn engine to resolve; using blended here would
+  // silently underprice a senior hire and reintroduce the bug this panel replaces.
   function addPerson() {
     const clin = newPerson.clin || clins[0]?.id;
     if (!clin) return;
+    const problem = validateAddedPerson(newPerson);
+    if (problem) {
+      setAddPersonError(problem);
+      return;
+    }
     const hrs = Math.max(0, Math.min(80, +newPerson.hrs || 0));
     const id = `added-${addSeq.current++}`;
-    const rate = clins.find((c) => c.id === clin)?.blended_rate || 0;
+    const rate = Number(newPerson.rate);
     setAdded((a) => [
       ...a,
       {
         id,
-        name: newPerson.name.trim() || "New hire",
-        lcat: "Planned add",
+        name: newPerson.name.trim(),
+        employeeId: newPerson.employeeId.trim(),
+        source: newPerson.source,
+        lcat: newPerson.lcat.trim(),
+        rate,
         rates: { [clin]: rate },
+        utilization: newPerson.utilization,
+        quals: newPerson.quals,
         // So their utilisation cell measures against the same expectation their
         // seeded hours came from, rather than falling back to 40.
         expected: contractExpected,
@@ -991,6 +1090,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
       ...d,
       [id]: Object.fromEntries(clins.map((c) => [c.id, c.id === clin ? hrs : 0])),
     }));
+    setAddPersonError(null);
     setNewPerson(null);
   }
 
@@ -1458,17 +1558,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               </div>
 
               <button
-                onClick={() =>
-                  setNewPerson({
-                    name: "",
-                    clin: clins[0]?.id || "",
-                    // Seeded from what this contract expects, not 40 (#84). Seeding at
-                    // 40 assumed a planned hire bills every hour of every remaining
-                    // week — no holidays, no leave, no ramp — which overstated forward
-                    // burn and understated the runway on every what-if.
-                    hrs: Math.round(contractExpected?.hours ?? FTE_HOURS_PER_WEEK),
-                  })
-                }
+                onClick={openAddPerson}
                 title="Add a planned person"
                 style={primaryBtn}
               >
@@ -1792,29 +1882,82 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 ...panelStyle,
                 padding: "12px 14px",
                 marginBottom: 12,
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
                 gap: 10,
                 alignItems: "flex-end",
-                flexWrap: "wrap",
               }}
             >
+              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingBottom: 2 }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>1. Person</span>
+                <button
+                  type="button"
+                  onClick={() => setNewPerson((p) => switchPersonSource(p, "directory"))}
+                  style={{ ...chipBtnDim, padding: "6px 10px", ...(newPerson.source === "directory" ? { borderColor: "var(--accent)", color: "var(--accent)" } : null) }}
+                >
+                  People directory
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewPerson((p) => switchPersonSource(p, "new"))}
+                  style={{ ...chipBtnDim, padding: "6px 10px", ...(newPerson.source === "new" ? { borderColor: "var(--accent)", color: "var(--accent)" } : null) }}
+                >
+                  New hire
+                </button>
+                {newPerson.source === "directory" && directory.loading && <span style={{ fontSize: 11.5, color: "var(--dim)" }}>Loading people…</span>}
+                {directory.error && <span style={{ fontSize: 11.5, color: "var(--warn)" }}>Directory unavailable — enter a new hire instead.</span>}
+              </div>
+              {newPerson.source === "directory" && (
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px", borderRadius: 8, background: "var(--panel2)" }}>
+                  <input
+                    value={newPerson.search}
+                    placeholder="Search name, ID, or LCAT"
+                    onChange={(e) => setNewPerson((p) => ({ ...p, search: e.target.value }))}
+                    style={{ height: 34, width: 240, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  />
+                  <select
+                    value={newPerson.personId}
+                    onChange={(e) => selectDirectoryPerson(e.target.value)}
+                    style={{ height: 34, minWidth: 260, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13 }}
+                  >
+                    <option value="">Select a person…</option>
+                    {directoryMatches.map((person) => (
+                      <option key={person.employee_id} value={person.employee_id}>
+                        {person.name} · {person.employee_id}{person.lcats?.length ? ` · ${person.lcats.join(", ")}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Name</div>
                 <input
                   autoFocus
                   value={newPerson.name}
-                  placeholder="New hire"
+                  placeholder="Name"
                   onChange={(e) => setNewPerson((p) => ({ ...p, name: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 200, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
                 />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Employee ID</div>
+                <input
+                  value={newPerson.employeeId}
+                  placeholder="Optional"
+                  onChange={(e) => setNewPerson((p) => ({ ...p, employeeId: e.target.value }))}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 11, fontWeight: 700, color: "var(--dim)" }}>
+                2. Assignment
               </div>
               <div>
                 <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>CLIN</div>
                 <select
                   value={newPerson.clin}
-                  onChange={(e) => setNewPerson((p) => ({ ...p, clin: e.target.value }))}
-                  style={{ height: 34, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                  onChange={(e) => setNewPersonClin(e.target.value)}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
                 >
                   {clins.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1822,6 +1965,45 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>LCAT</div>
+                <select
+                  value={newPerson.lcatChoice}
+                  onChange={(e) => selectPlannedLcat(e.target.value)}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13 }}
+                >
+                  <option value="">Select priced LCAT…</option>
+                  {newPersonRateOptions.map((line) => (
+                    <option key={line.lcat} value={line.lcat}>
+                      {line.lcat} — {money(line.rate)}/hr
+                    </option>
+                  ))}
+                  <option value="other">Other — not on the rate schedule…</option>
+                </select>
+              </div>
+              {newPerson.lcatChoice === "other" && (
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Other LCAT</div>
+                  <input
+                    value={newPerson.lcat}
+                    placeholder="Negotiated category"
+                    onChange={(e) => setNewPerson((p) => ({ ...p, lcat: e.target.value }))}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  />
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Rate / hr</div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newPerson.rate}
+                  placeholder={newPerson.lcatChoice === "other" ? "Required" : "Select LCAT"}
+                  onChange={(e) => setNewPerson((p) => ({ ...p, rate: e.target.value }))}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
+                />
               </div>
               <div>
                 <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>Hrs / wk</div>
@@ -1832,12 +2014,41 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   value={newPerson.hrs}
                   onChange={(e) => setNewPerson((p) => ({ ...p, hrs: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 90, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
                 />
               </div>
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <span style={{ flexBasis: "100%", fontSize: 11, fontWeight: 700, color: "var(--dim)" }}>3. Optional planning profile</span>
+                {[["education", "Education"], ["years_experience", "Years"], ["clearance", "Clearance"]].map(([field, label]) => (
+                  <label key={field} style={{ fontSize: 11, color: "var(--dim)" }}>
+                    {label} <span style={{ color: "var(--faint)" }}>(optional)</span><br />
+                    <input
+                      value={newPerson.quals[field] || ""}
+                      onChange={(e) => setNewPerson((p) => ({ ...p, quals: { ...p.quals, [field]: e.target.value } }))}
+                      style={{ marginTop: 5, height: 30, width: 140, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 12 }}
+                    />
+                  </label>
+                ))}
+                {newPerson.utilization != null && <span style={{ alignSelf: "end", fontSize: 11.5, color: "var(--dim)", paddingBottom: 7 }}>Current utilization: {Math.round(newPerson.utilization * 100)}%</span>}
+              </div>
+              {selectedRateOption && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--dim)" }}>
+                  Rate schedule minimums: {[
+                    selectedRateOption.min_education,
+                    selectedRateOption.min_experience_yrs != null ? `${selectedRateOption.min_experience_yrs} yrs experience` : null,
+                    selectedRateOption.clearance,
+                  ].filter(Boolean).join(" · ") || "none listed"}.
+                </div>
+              )}
+              {!newPersonRateOptions.length && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--warn)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  This CLIN has no rate table. Enter an Other LCAT and explicit rate, or
+                  <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
+                </div>
+              )}
               <button
                 onClick={addPerson}
-                style={{ height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+                style={{ gridColumn: "-2", height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
               >
                 Add
               </button>
@@ -1847,12 +2058,8 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               >
                 Cancel
               </button>
-              <div style={{ fontSize: 11.5, color: "var(--dim)", flexBasis: "100%" }}>
-                Added at {clins.find((c) => c.id === newPerson.clin)?.code || "CLIN"}&apos;s blended rate
-                {clins.find((c) => c.id === newPerson.clin)?.blended_rate
-                  ? ` ($${Math.round(clins.find((c) => c.id === newPerson.clin).blended_rate)}/hr)`
-                  : ""}
-                . This is a what-if only.
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: addPersonError ? "var(--bad)" : "var(--dim)" }}>
+                {addPersonError || "This is a what-if only. The plan uses the explicit rate shown above; it never falls back to the CLIN blended rate."}
               </div>
             </div>
           )}

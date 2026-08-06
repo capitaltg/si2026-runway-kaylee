@@ -100,6 +100,22 @@ def compute_allocation(
                 "base_runway_days": card.get("runway_days"),
                 "rate_source": source,
                 "blended_rate": round(blended, 2) if blended else None,
+                # The picker needs this CLIN's actual priced categories, not the
+                # contract-wide mapping targets. Keep the award's qualification
+                # floors beside each rate so staffing can be planned with the same
+                # information the later compliance check will read.
+                "rate_lines": [
+                    {
+                        "lcat": (line.get("lcat") or "").strip(),
+                        "rate": round(float(line["loaded_rate"]), 2),
+                        "min_education": line.get("min_education"),
+                        "min_experience_yrs": line.get("min_experience_yrs"),
+                        "clearance": line.get("clearance"),
+                    }
+                    for line in (c.get("labor_rates") or [])
+                    if (line.get("lcat") or "").strip()
+                    and line.get("loaded_rate") is not None
+                ],
                 "unmatched_lcats": card.get("unmatched_lcats", []),
                 # Why this CLIN's LCATs didn't match, from burn (#64). The card
                 # renders one banner off `rate_table_missing` — a missing rate
