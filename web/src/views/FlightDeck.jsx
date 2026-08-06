@@ -3,9 +3,11 @@ import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from ".
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
+import AlertCarouselCard from "../components/AlertCarouselCard.jsx";
 import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 import { suggestFor } from "../suggest.js";
 import { scopeNotices } from "../scope-notice.js";
+import { clampAlertIndex, nextAlertIndex, orderedFlightDeckAlerts } from "../flight-deck-alerts.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -202,6 +204,7 @@ export default function FlightDeck({
   const [burn, setBurn] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [alertIndex, setAlertIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   // Inline contract rename (nickname) right on the title.
@@ -223,6 +226,7 @@ export default function FlightDeck({
     try {
       const b = await getBurn(id);
       setBurn(b);
+      setAlertIndex(0);
       const labor = b.clins.filter((c) => c.is_labor);
       setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
       // First visit with no hours synced yet: pull them once automatically so
@@ -326,6 +330,18 @@ export default function FlightDeck({
             ? "lands tight against the finish line"
             : "clears the finish line";
   const notices = scopeNotices(contract);
+  const alerts = orderedFlightDeckAlerts({
+    dataQuality: data_quality,
+    tripwires,
+    funding,
+    underburn,
+    marginAlerts: margin_alerts,
+    notices,
+    rateGaps: rate_gaps,
+    lcatGaps: lcat_gaps,
+  });
+  const activeIndex = clampAlertIndex(alertIndex, alerts.length);
+  const activeAlert = alerts[activeIndex];
 
   function startRename() {
     cancelRename.current = false;
@@ -414,7 +430,14 @@ export default function FlightDeck({
         </div>
       </div>
 
-      {notices.length > 0 && (
+      {activeAlert && (
+        <AlertCarouselCard
+          index={activeIndex}
+          total={alerts.length}
+          onPrevious={() => setAlertIndex(nextAlertIndex(activeIndex, alerts.length, -1))}
+          onNext={() => setAlertIndex(nextAlertIndex(activeIndex, alerts.length, 1))}
+        >
+      {activeAlert.kind === "scope" && (
         <div
           style={{
             border: "1px solid var(--warn)",
@@ -428,7 +451,7 @@ export default function FlightDeck({
           }}
         >
           <b style={{ color: "var(--warn)" }}>Data scope needs review.</b>{" "}
-          {notices.map((notice, index) => (
+          {activeAlert.item.map((notice, index) => (
             <React.Fragment key={notice.key}>
               {index > 0 && " "}
               {notice.text}
@@ -438,7 +461,9 @@ export default function FlightDeck({
       )}
 
       {/* tripwires (real numbers only) */}
-      {tripwires.map((tw) => (
+      {activeAlert.kind === "tripwire" && (() => {
+        const tw = activeAlert.item;
+        return (
         <div
           key={tw.code}
           style={{
@@ -587,10 +612,13 @@ export default function FlightDeck({
             />
           </div>
         </div>
-      ))}
+        );
+      })()}
 
       {/* under-burn warnings — amber/info, distinct from the red over-ceiling tripwire */}
-      {underburn.map((ub) => (
+      {activeAlert.kind === "underburn" && (() => {
+        const ub = activeAlert.item;
+        return (
         <div
           key={ub.code}
           style={{
@@ -657,12 +685,14 @@ export default function FlightDeck({
             />
           </div>
         </div>
-      ))}
+        );
+      })()}
 
       {/* fixed-price margin erosion (#79) — cost projected to eat the fee. Reads in
           margin language throughout: no dates, no runway, no "funding runs out",
           because a firm price is owed however the hours land. */}
-      {margin_alerts.map((ma) => {
+      {activeAlert.kind === "margin" && (() => {
+        const ma = activeAlert.item;
         const red = ma.status === "over";
         const tone = red ? "var(--bad)" : "var(--warn)";
         return (
@@ -739,11 +769,13 @@ export default function FlightDeck({
             </div>
           </div>
         );
-      })}
+      })()}
 
       {/* funding-pace watch — amber, routine incremental funding awaiting its
           next obligation; deliberately not the red over-ceiling tripwire (#22) */}
-      {funding.map((fw) => (
+      {activeAlert.kind === "funding" && (() => {
+        const fw = activeAlert.item;
+        return (
         <div
           key={fw.code}
           style={{
@@ -813,13 +845,16 @@ export default function FlightDeck({
             />
           </div>
         </div>
-      ))}
+        );
+      })()}
 
       {/* data-quality gaps (#40) — CLINs with charged rows the engine could not
           price. The most dangerous state: without this the contract reads "All
           clear" because $0 priced looks like $0 spent. Rendered above all_clear,
           which is now gated off when any of these exist. */}
-      {data_quality.map((dq) => (
+      {activeAlert.kind === "data-quality" && (() => {
+        const dq = activeAlert.item;
+        return (
         <div
           key={dq.code}
           style={{
@@ -889,14 +924,17 @@ export default function FlightDeck({
             </div>
           </div>
         </div>
-      ))}
+        );
+      })()}
 
       {/* Rate coverage (#64) — cause A, stated once per CLIN. These CLINs *are*
           priced (blended = ceiling / est_hours, real contract arithmetic), so this
           is amber and does not gate all_clear: it says why nothing here is
           per-LCAT, and offers the document that fixes it. The old behaviour was a
           red ⚠ on every person charging the CLIN, for one missing PDF page. */}
-      {rate_gaps.map((g) => (
+      {activeAlert.kind === "rate-gap" && (() => {
+        const g = activeAlert.item;
+        return (
         <div
           key={g.code}
           style={{
@@ -930,13 +968,16 @@ export default function FlightDeck({
             <ImportRateSchedule contractId={contractId} onImported={() => load(contractId)} />
           </div>
         </div>
-      ))}
+        );
+      })()}
 
       {/* Causes B and C (#64) — LCATs on CLINs that DO have a rate table, which no
           document fixes: someone has to decide which rate line they belong to.
           One line here, with the count and the way in, rather than making the user
           open the matrix to discover there's anything to do. */}
-      {lcat_gaps.length > 0 && (
+      {activeAlert.kind === "lcat-gap" && (() => {
+        const gaps = activeAlert.item;
+        return (
         <div
           style={{
             ...panelStyle,
@@ -950,10 +991,10 @@ export default function FlightDeck({
         >
           <span style={{ fontSize: 13, color: "var(--text)" }}>
             <b>
-              {lcat_gaps.reduce((n, g) => n + g.issues.length, 0)} labor categor
-              {lcat_gaps.reduce((n, g) => n + g.issues.length, 0) === 1 ? "y" : "ies"}
+              {gaps.reduce((n, g) => n + g.issues.length, 0)} labor categor
+              {gaps.reduce((n, g) => n + g.issues.length, 0) === 1 ? "y" : "ies"}
             </b>{" "}
-            charged on {lcat_gaps.map((g) => g.code).join(", ")} don&apos;t match a rate line, so their hours
+            charged on {gaps.map((g) => g.code).join(", ")} don&apos;t match a rate line, so their hours
             bill at the blended rate. Each one needs pointing at the line it belongs to.
           </span>
           <button
@@ -974,9 +1015,12 @@ export default function FlightDeck({
             Map labor categories →
           </button>
         </div>
+        );
+      })()}
+        </AlertCarouselCard>
       )}
 
-      {all_clear && (
+      {!activeAlert && all_clear && (
         <div
           style={{
             border: "1px solid var(--good)",
