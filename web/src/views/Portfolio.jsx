@@ -148,7 +148,18 @@ export default function Portfolio({ onOpen, onDeleted }) {
           // a funding problem stops claiming the ceiling was breached.
           const p = pill(c.status);
           const pillLabel = c.status_label || p.label;
-          const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
+          // Burn against the *binding* budget — the funded slice where the contract
+          // is incrementally funded, the ceiling otherwise (#39). The card's Runway
+          // is measured the same way, so a ceiling-based % beside it showed two
+          // numbers that could not be reconciled. Equal on a fully funded contract.
+          const inc = !!c.incrementally_funded;
+          const burned = inc ? (c.pct_budget ?? c.pct) : c.pct;
+          const barColor = burned > 0.85 ? "var(--bad)" : burned > 0.7 ? "var(--warn)" : hue;
+          // Where the obligated money runs out, along the ceiling track.
+          const fundedMarker =
+            inc && c.budget != null && c.ceiling
+              ? Math.max(0, Math.min(100, (c.budget / c.ceiling) * 100))
+              : null;
           const isPicked = picked.includes(c.id);
           return (
             <div
@@ -212,13 +223,33 @@ export default function Portfolio({ onOpen, onDeleted }) {
                     Burned
                   </div>
                   <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 26, color: "var(--text)", lineHeight: 1.1 }}>
-                    {pct(c.pct)}
+                    {pct(burned)}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 1 }}>
+                    {inc ? `of funded · ${pct(c.pct)} of ceiling` : "of ceiling"}
                   </div>
                 </div>
               </div>
 
-              <div style={{ height: 8, borderRadius: 5, background: "var(--border)", marginTop: 12, overflow: "hidden" }}>
+              {/* Track is the ceiling, fill is spend, marker is where the obligated
+                  money runs out (#39) — same bar as the Flight Deck's CLIN cards. */}
+              <div style={{ position: "relative", height: 8, borderRadius: 5, background: "var(--border)", marginTop: 12 }}>
                 <div style={{ height: "100%", width: `${Math.min(100, Math.round(c.pct * 100))}%`, background: barColor, borderRadius: 5 }} />
+                {fundedMarker !== null && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -2,
+                      bottom: -2,
+                      left: `${fundedMarker}%`,
+                      width: 2,
+                      marginLeft: -1,
+                      borderRadius: 1,
+                      background: "var(--text)",
+                      opacity: 0.75,
+                    }}
+                  />
+                )}
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11.5, color: "var(--dim)" }}>
                 <span style={c.data_quality ? { color: "var(--bad)", fontWeight: 700 } : undefined}>
