@@ -341,8 +341,15 @@ def _funds_exceeded(
     (`overspent` carries the amount). Only meaningful for an incrementally funded
     CLIN: when budget == ceiling, passing it is a ceiling breach and says so.
     Spend past the actual ceiling is likewise a ceiling story, so it yields here.
+
+    A zero budget is a real budget, and the strictest one: a CLIN named in the
+    accounting block at $0 (or left with nothing after the by-name obligations
+    are netted out) cannot absorb a single dollar, so any spend on it is already
+    past its funding. The old `not budget` guard read that budget as no-data and
+    returned False, suppressing the breach on exactly the line most likely to
+    have one — the same trap the `0 < funded` guard fell into.
     """
-    if not incrementally_funded or not budget or spent < budget:
+    if not incrementally_funded or spent <= 0 or spent < budget:
         return False
     return not (ceiling and spent >= ceiling)
 
@@ -1270,7 +1277,9 @@ def _nl_status(
         return "tracked"
     if ceiling and spent >= ceiling:
         return "over"
-    if incrementally_funded and budget and spent >= budget:
+    # No `budget` truthiness guard: spend is already > 0 here, so a $0-funded
+    # CLIN with charges on it has passed its funding by definition.
+    if incrementally_funded and spent >= budget:
         return "over"
     pct = (spent / budget) if budget else 0.0
     if pct >= 0.8:
@@ -1406,6 +1415,20 @@ def compute(
     #    accurate per line (labor funded near-full while travel/ODC starves)
     #    instead of a uniform blend.
     #
+    #    A mixed award — some CLINs named in the ACRN block, some not — is the
+    #    case that needs care, and the one this used to get wrong: it pro-rated
+    #    the *whole* header obligation across *every* CLIN, so a CLIN that
+    #    already carried an exact figure kept it AND had a slice of the same
+    #    dollars smeared onto its neighbours. On the burn-demo award (header
+    #    $800K obligated, all $800K printed against CLIN 0001, travel and ODC
+    #    printed at $0) that invented ~$34.5K of travel funding and ~$27.5K of
+    #    ODC funding and summed per-CLIN funded to $862K against $800K
+    #    obligated. Dollars already attributed by name are therefore netted out
+    #    of the header total first, and only the remainder is pro-rated — across
+    #    the unattributed ceilings alone, since the attributed lines have
+    #    already been paid for. When nothing is left over the unnamed CLINs get
+    #    $0, which is the award's own answer, not a smear.
+    #
     # When nothing is obligated, or the obligation already covers this period's
     # whole ceiling, funded is None and every CLIN falls back to ceiling runway.
     active_ceiling = sum(float(c.get("ceiling") or 0) for c in clins)
@@ -1427,13 +1450,27 @@ def compute(
             available = max(0.0, float(obligated) - prior_consumed)
             if available < active_ceiling:
                 period_funded = available
-        funded_frac = (
-            (period_funded / active_ceiling) if period_funded is not None else None
+        # Net the by-name obligations out of the period's funded total, and
+        # pro-rate what's left over the ceilings that have no figure of their
+        # own. Both halves matter: netting stops the same dollars being counted
+        # twice, and the narrowed denominator stops the remainder being diluted
+        # by ceilings that were already funded explicitly. Floored at zero —
+        # attributed dollars can exceed the header total on a stale extraction,
+        # and that means "nothing left to spread", not negative funding.
+        attributed_funded = sum(float(c["obligated"]) for c in attributed)
+        unattributed_ceiling = sum(
+            float(c.get("ceiling") or 0) for c in clins if c.get("obligated") is None
         )
+        if period_funded is not None and unattributed_ceiling:
+            remainder = max(0.0, period_funded - attributed_funded)
+            funded_frac = remainder / unattributed_ceiling
+        else:
+            funded_frac = None
 
     def funded_for(c):
         """Funded dollars for one CLIN: the award's own obligation to it when
-        present, else its pro-rata slice of the period's funded total."""
+        present, else its pro-rata slice of whatever the period's funded total
+        has left after the by-name obligations are netted out."""
         if c.get("obligated") is not None:
             return float(c["obligated"])
         return (
