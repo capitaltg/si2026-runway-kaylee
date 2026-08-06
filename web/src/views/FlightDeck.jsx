@@ -182,11 +182,73 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
   );
 }
 
+function heatReason(reason) {
+  if (reason.kind === "over_expected")
+    return `${reason.hours} hrs/wk against a ${reason.expected_hours}-hr target`;
+  if (reason.kind === "off_pace_share")
+    return `${money(reason.weekly_dollars)}/wk on off-pace CLIN ${reason.clin}`;
+  if (reason.kind === "accelerating")
+    return `${money(reason.weekly_dollars)}/wk, up ${money(reason.increase)} from recent pace`;
+  if (reason.kind === "negative_fee") return `${money(reason.weekly_loss)}/wk costs more than billed`;
+  return "needs review";
+}
+
+function HotPeople({ people, onOpenPerson }) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? people : people.slice(0, 5);
+  return (
+    <section style={{ ...panelStyle, marginTop: 18, padding: "15px 17px" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
+            Who&apos;s running hot
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>
+            Ranked by weekly dollar impact; each signal names why the person surfaced.
+          </div>
+        </div>
+        {people.length > 5 && (
+          <button onClick={() => setExpanded((open) => !open)} style={btnSecondary}>
+            {expanded ? "Show top 5" : `Show all ${people.length}`}
+          </button>
+        )}
+      </div>
+      {shown.length ? (
+        <div style={{ marginTop: 12, display: "grid", gap: 7 }}>
+          {shown.map((person) => (
+            <button
+              key={person.id}
+              onClick={() => onOpenPerson?.(person.id)}
+              style={{
+                textAlign: "left", border: "1px solid var(--border)", borderRadius: 10,
+                padding: "10px 12px", background: "var(--panel2)", color: "var(--text)", cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+                <span><b>{person.name}</b>{person.lcat ? ` · ${person.lcat}` : ""}</span>
+                <span style={{ color: "var(--accent)", fontWeight: 700 }}>{money(person.weekly_dollars)}/wk</span>
+              </div>
+              <div style={{ marginTop: 3, color: "var(--dim)", fontSize: 12 }}>
+                {person.reasons.map(heatReason).join(" · ")}
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--dim)" }}>
+          Nobody is running hot against the current hours, pace, and cost signals.
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function FlightDeck({
   contractId,
   setActiveId,
   onOpenExpenses,
   onOpenAllocation,
+  onOpenPerson,
   onApplyFix,
   onOpenFunding,
   onOpenDrafts,
@@ -287,6 +349,7 @@ export default function FlightDeck({
     rate_gaps = [],
     lcat_gaps = [],
     all_clear,
+    hot_people = [],
     sync,
   } = burn;
   const labor = burn.clins.filter((c) => c.is_labor);
@@ -1393,6 +1456,8 @@ export default function FlightDeck({
           );
         })}
       </div>
+
+      <HotPeople people={hot_people} onOpenPerson={onOpenPerson} />
 
       {/* Bottom of the view, deliberately far from the tripwires: remove this
           contract entirely. Same quiet trash as the portfolio cards. */}

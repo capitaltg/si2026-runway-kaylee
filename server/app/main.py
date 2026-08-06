@@ -406,12 +406,19 @@ def contract_burn(contract_id: int):
     contract = db.get_contract(contract_id)
     if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
-    return burn.compute(
+    timesheets = db.get_timesheets(contract_id)
+    expenses = db.list_expenses(contract_id)
+    cost_model = _cost_model(contract_id)
+    result = burn.compute(contract, timesheets, expenses, cost_model)
+    result["hot_people"] = allocation.compute_allocation(
         contract,
-        db.get_timesheets(contract_id),
-        db.list_expenses(contract_id),
-        _cost_model(contract_id),
-    )
+        timesheets,
+        expenses,
+        cost_model,
+        db.expected_hours_by_person(),
+        burn_data=result,
+    )["hot_people"]
+    return result
 
 
 class RenameIn(BaseModel):

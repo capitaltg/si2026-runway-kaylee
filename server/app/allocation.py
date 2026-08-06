@@ -36,12 +36,113 @@ def _emp_name(rows: List[dict], emp_id: str) -> str:
     return emp_id
 
 
+def _person_heat(
+    employees: List[dict], clins: List[dict], weekly_by_person: dict
+) -> List[dict]:
+    """People who need attention, ranked by the weekly dollars they drive.
+
+    Kept beside the allocation pass because it is the one place we already have
+    person x CLIN hours, the resolved billing rate, and expected hours on the
+    exact same window as burn. The Flight Deck consumes this summary; the matrix
+    retains the detailed cells.
+    """
+    off_pace = {c["id"] for c in clins if c.get("base_status") in ("over", "watch")}
+    clin_dollars = {}
+    for employee in employees:
+        for clin_id, cell in employee["cells"].items():
+            if clin_id in off_pace and cell.get("rate") is not None:
+                clin_dollars[clin_id] = clin_dollars.get(clin_id, 0.0) + (
+                    cell["hours"] * cell["rate"]
+                )
+
+    hot = []
+    for employee in employees:
+        weekly_dollars = round(
+            sum(
+                cell["hours"] * cell["rate"]
+                for cell in employee["cells"].values()
+                if cell.get("rate") is not None
+            ),
+            2,
+        )
+        expected = employee.get("expected", {}).get("hours")
+        hours = employee["hours"]
+        reasons = []
+        if expected is not None and hours > expected:
+            reasons.append(
+                {
+                    "kind": "over_expected",
+                    "hours": hours,
+                    "expected_hours": expected,
+                    "over_hours": round(hours - expected, 1),
+                }
+            )
+        for clin_id, cell in employee["cells"].items():
+            if clin_id not in off_pace or cell.get("rate") is None:
+                continue
+            dollars = round(cell["hours"] * cell["rate"], 2)
+            if dollars:
+                reasons.append(
+                    {
+                        "kind": "off_pace_share",
+                        "clin": clin_id,
+                        "weekly_dollars": dollars,
+                        "share": round(dollars / clin_dollars[clin_id], 4),
+                    }
+                )
+        acceleration = []
+        for clin_id, weeks in weekly_by_person.get(employee["id"], {}).items():
+            values = [weeks[week] for week in sorted(weeks)]
+            if len(values) < 2:
+                continue
+            latest = values[-1]
+            prior = sum(values[:-1]) / len(values[:-1])
+            if latest > prior:
+                acceleration.append((latest - prior, clin_id, latest, prior))
+        if acceleration:
+            increase, clin_id, latest, prior = max(acceleration)
+            reasons.append(
+                {
+                    "kind": "accelerating",
+                    "clin": clin_id,
+                    "weekly_dollars": round(latest, 2),
+                    "prior_weekly_dollars": round(prior, 2),
+                    "increase": round(increase, 2),
+                }
+            )
+        loss = round(
+            sum(
+                cell["hours"] * (cell["cost_rate"] - cell["rate"])
+                for cell in employee["cells"].values()
+                if cell.get("cost_known")
+                and cell.get("cost_rate") is not None
+                and cell.get("rate") is not None
+                and cell["cost_rate"] > cell["rate"]
+            ),
+            2,
+        )
+        if loss:
+            reasons.append({"kind": "negative_fee", "weekly_loss": loss})
+        if reasons:
+            hot.append(
+                {
+                    "id": employee["id"],
+                    "name": employee["name"],
+                    "lcat": employee.get("lcat"),
+                    "weekly_dollars": weekly_dollars,
+                    "reasons": reasons,
+                }
+            )
+    return sorted(hot, key=lambda person: (-person["weekly_dollars"], person["name"]))
+
+
 def compute_allocation(
     contract: dict,
     rows: List[dict],
     expenses: Optional[List[dict]] = None,
     cost_model: Optional[rates.CostModel] = None,
     expected_hours_by_person: Optional[dict] = None,
+    burn_data: Optional[dict] = None,
 ) -> dict:
     """Employee x labor-CLIN allocation for the active period, plus the per-CLIN
     budget/spend/clock the simulator recomputes runway against.
@@ -52,7 +153,11 @@ def compute_allocation(
     must never own a roster). Everyone in the grid is here because they charged time;
     a person with an expected week and no hours does not appear.
     """
-    b = burn.compute(contract, rows, expenses, cost_model)
+    b = (
+        burn_data
+        if burn_data is not None
+        else burn.compute(contract, rows, expenses, cost_model)
+    )
     # Level 1 when the caller supplied nothing: cost falls back to the billing rate
     # and every cell says so (#77).
     cost_model = cost_model or rates.CostModel()
@@ -130,6 +235,7 @@ def compute_allocation(
     # Walk each CLIN's charges (scoped to the active PoP window, same as burn) and
     # build per-employee avg hrs/wk + the LCAT/rate that hrs bills at.
     employees = {}  # emp_id -> {id, name, cells: {clin_id: {hours, lcat, rate}}}
+    weekly_by_person = {}  # employee -> CLIN -> week ending -> billed dollars
     for c in labor:
         num = burn._clin_num(c)
         resolve = resolvers[num]
@@ -154,6 +260,11 @@ def compute_allocation(
             hrs_by_emp[emp] = hrs_by_emp.get(emp, 0.0) + h
             lc = (r.get("labor_category") or "").strip()
             lcat_hrs.setdefault(emp, {})[lc] = lcat_hrs.get(emp, {}).get(lc, 0.0) + h
+            resolved_rate = resolve(lc).rate
+            if resolved_rate is not None:
+                week = r.get("week_ending")
+                person_weeks = weekly_by_person.setdefault(emp, {}).setdefault(num, {})
+                person_weeks[week] = person_weeks.get(week, 0.0) + h * resolved_rate
 
         for emp, total in hrs_by_emp.items():
             lcat = (
@@ -261,4 +372,5 @@ def compute_allocation(
         },
         "clins": clin_cards,
         "employees": emp_list,
+        "hot_people": _person_heat(emp_list, clin_cards, weekly_by_person),
     }

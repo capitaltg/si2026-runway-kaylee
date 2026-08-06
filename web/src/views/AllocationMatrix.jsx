@@ -178,7 +178,9 @@ function causeText(x) {
   }
 }
 
-export default function AllocationMatrix({ contractId, setActiveId, autoBalance, onAutoBalanced }) {
+export default function AllocationMatrix({
+  contractId, setActiveId, autoBalance, onAutoBalanced, focusEmployee, onFocusedEmployee,
+}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   // draft[empId][clinId] = hrs/wk. The editable overlay on the synced actuals.
@@ -188,6 +190,13 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [clinFilter, setClinFilter] = useState(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState({ key: null, dir: "desc" });
+
+  useEffect(() => {
+    if (!focusEmployee) return;
+    setClinFilter(null);
+    setQuery(focusEmployee);
+    onFocusedEmployee?.();
+  }, [focusEmployee, onFocusedEmployee]);
   // What-if roster edits: `added` are planned new people, `removed` are ids rolled
   // off the plan. Both are simulation-only — they change no employee record — but they
   // do go into `plans.data` on save, and Discard puts the roster back.
