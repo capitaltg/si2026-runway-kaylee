@@ -1949,8 +1949,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
                 />
               </div>
+              <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 10, fontSize: 11, fontWeight: 700, color: "var(--dim)" }}>
+                2. Assignment
+              </div>
               <div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>2. Assignment · CLIN</div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>CLIN</div>
                 <select
                   value={newPerson.clin}
                   onChange={(e) => setNewPersonClin(e.target.value)}
