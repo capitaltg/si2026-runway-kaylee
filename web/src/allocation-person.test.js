@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { prefillPerson, rateOptions, validateAddedPerson } from "./allocation-person.js";
+import {
+  prefillPerson,
+  rateOptions,
+  selectDirectoryPersonForm,
+  switchPersonSource,
+  validateAddedPerson,
+} from "./allocation-person.js";
 
 test("priced LCAT options carry the loaded rate and qualification floors", () => {
   const [option] = rateOptions({
@@ -69,4 +75,18 @@ test("a selected rate line becomes the planned person's explicit rate", () => {
     }),
     null
   );
+});
+
+test("switching paths preserves the selected person and clears the directory filter", () => {
+  const selected = selectDirectoryPersonForm(
+    { source: "directory", search: "Aisha", personId: "" },
+    "E-17",
+    { name: "Aisha Khan" }
+  );
+  const newHire = switchPersonSource(selected, "new");
+  const directory = switchPersonSource(newHire, "directory");
+
+  assert.equal(directory.personId, "E-17");
+  assert.equal(directory.search, "");
+  assert.equal(directory.name, "Aisha Khan");
 });

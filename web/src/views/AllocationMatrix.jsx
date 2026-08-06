@@ -24,7 +24,13 @@ import {
 import { planFingerprint, isUnsaved } from "../plans.js";
 import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
-import { prefillPerson, rateOptions, validateAddedPerson } from "../allocation-person.js";
+import {
+  prefillPerson,
+  rateOptions,
+  selectDirectoryPersonForm,
+  switchPersonSource,
+  validateAddedPerson,
+} from "../allocation-person.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -1019,11 +1025,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
     const match = newPersonRateOptions.find((line) => line.lcat === prefill.lcat);
     setAddPersonError(null);
     setNewPerson((p) => ({
-      ...p,
-      ...prefill,
-      source: "directory",
-      personId: employeeId,
-      search: person.name,
+      ...selectDirectoryPersonForm(p, employeeId, prefill),
       lcatChoice: match?.lcat || "other",
       rate: match ? String(match.rate) : "",
     }));
@@ -1890,14 +1892,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 <span style={{ fontSize: 12, fontWeight: 700 }}>1. Person</span>
                 <button
                   type="button"
-                  onClick={() => setNewPerson((p) => ({ ...p, source: "directory" }))}
+                  onClick={() => setNewPerson((p) => switchPersonSource(p, "directory"))}
                   style={{ ...chipBtnDim, padding: "6px 10px", ...(newPerson.source === "directory" ? { borderColor: "var(--accent)", color: "var(--accent)" } : null) }}
                 >
                   People directory
                 </button>
                 <button
                   type="button"
-                  onClick={() => setNewPerson((p) => ({ ...p, source: "new", personId: "" }))}
+                  onClick={() => setNewPerson((p) => switchPersonSource(p, "new"))}
                   style={{ ...chipBtnDim, padding: "6px 10px", ...(newPerson.source === "new" ? { borderColor: "var(--accent)", color: "var(--accent)" } : null) }}
                 >
                   New hire

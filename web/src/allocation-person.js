@@ -29,6 +29,17 @@ export function prefillPerson(person, utilization) {
   };
 }
 
+// The source toggle changes which controls are visible, not the planned person.
+// Clearing only the search filter means returning to the directory shows every
+// candidate while retaining the selected employee in the dropdown.
+export function switchPersonSource(form, source) {
+  return { ...form, source, search: "" };
+}
+
+export function selectDirectoryPersonForm(form, employeeId, prefill) {
+  return { ...form, ...prefill, source: "directory", personId: employeeId, search: "" };
+}
+
 export function validateAddedPerson(form) {
   if (!(form?.name || "").trim()) return "Enter a name.";
   if (!(form?.lcat || "").trim()) return "Choose an LCAT or enter one under Other.";
