@@ -3,6 +3,7 @@ import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from ".
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
+import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 import { suggestFor } from "../suggest.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
@@ -190,8 +191,13 @@ export default function FlightDeck({
   onOpenFunding,
   onOpenDrafts,
   onRename,
+  onDeleted,
   aiEnabled,
 }) {
+  // Staged for the delete confirm — the Flight Deck is where a bad extraction
+  // actually gets noticed, so the fix lives here too rather than only back in
+  // the portfolio.
+  const [pendingDelete, setPendingDelete] = useState(false);
   const [burn, setBurn] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -1302,6 +1308,38 @@ export default function FlightDeck({
           );
         })}
       </div>
+
+      {/* Bottom of the view, deliberately far from the tripwires: remove this
+          contract entirely. Same quiet trash as the portfolio cards. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginTop: 34,
+          paddingTop: 14,
+          borderTop: "1px solid var(--border)",
+        }}
+      >
+        <TrashButton
+          label={`Delete contract ${contract.piid || contract.name}`}
+          onClick={() => setPendingDelete(true)}
+        />
+        <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
+          Delete this contract and everything attached to it
+        </span>
+      </div>
+
+      {pendingDelete && (
+        <DeleteConfirm
+          contracts={[{ id: contractId, piid: contract.piid, name: contract.name }]}
+          onCancel={() => setPendingDelete(false)}
+          onDone={(ids) => {
+            setPendingDelete(false);
+            onDeleted?.(ids);
+          }}
+        />
+      )}
     </div>
   );
 }

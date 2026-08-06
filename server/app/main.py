@@ -293,6 +293,17 @@ def contracts():
     return db.list_contracts()
 
 
+@app.delete("/api/contracts/{contract_id}")
+def remove_contract(contract_id: int):
+    """Hard-delete a contract and its timesheets, expenses, plans and
+    contract-scoped rates. Irreversible — the UI confirms by PIID first. Bulk
+    delete is the client calling this once per contract, so a partial failure
+    reports honestly instead of pretending the whole batch went."""
+    if not db.delete_contract(contract_id):
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {"deleted": contract_id}
+
+
 @app.post("/api/contracts/{contract_id}/timesheets/sync")
 def sync_timesheets(
     contract_id: int, rows: int = sources.DEMO_SYNC_ROWS, seed: Optional[int] = None

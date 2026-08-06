@@ -343,6 +343,33 @@ def update_contract(cid: int, data: dict) -> None:
     conn.close()
 
 
+def delete_contract(cid: int) -> bool:
+    """Hard-delete a contract and everything hanging off it. There is no FK
+    cascade in this schema, so every contract-scoped table is cleared explicitly,
+    in one transaction. Returns False if the id doesn't exist.
+
+    `rate_sets` / `direct_rates` also hold company-wide rows (`contract_id IS
+    NULL`) — scoping on `contract_id = ?` leaves those defaults alone, which is
+    the whole point. `people` / `person_attrs` are not contract-scoped: identity
+    is derived from charging, so a person who only ever appeared here simply
+    stops resolving once the timesheets go.
+    """
+    conn = get_conn()
+    try:
+        if (
+            conn.execute("SELECT 1 FROM contracts WHERE id = ?", (cid,)).fetchone()
+            is None
+        ):
+            return False
+        for table in ("timesheets", "expenses", "plans", "rate_sets", "direct_rates"):
+            conn.execute(f"DELETE FROM {table} WHERE contract_id = ?", (cid,))
+        conn.execute("DELETE FROM contracts WHERE id = ?", (cid,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def rename_contract(cid: int, nickname: Optional[str]) -> Optional[dict]:
     """Set (or clear) a user-chosen nickname for a contract — a callsign like
     'FALCON' that reads better than the legal name or PIID. Stored on the data

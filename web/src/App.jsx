@@ -118,6 +118,17 @@ export default function App() {
       .catch(() => {});
   }
 
+  // A contract was deleted. If it was the one loaded, the whole app is pointed at
+  // a dead id — clear the selection (which drops the sidebar health card and the
+  // top-bar period bar too) and fall back to the portfolio.
+  function onContractsDeleted(ids) {
+    if (activeId != null && ids.includes(activeId)) {
+      setActiveId(null);
+      setChrome(null);
+      setView("portfolio");
+    }
+  }
+
   function openExpenses(clin) {
     setExpenseClin(clin);
     setView("expenses");
@@ -156,7 +167,7 @@ export default function App() {
           {view === "ingest" ? (
             <Ingest onSaved={openContract} />
           ) : view === "portfolio" ? (
-            <Portfolio onOpen={openContract} />
+            <Portfolio onOpen={openContract} onDeleted={onContractsDeleted} />
           ) : view === "people" ? (
             <People onOpenContract={openContract} />
           ) : view === "flightdeck" ? (
@@ -169,6 +180,7 @@ export default function App() {
               onOpenFunding={() => setView("funding")}
               onOpenDrafts={openDrafts}
               onRename={onRename}
+              onDeleted={onContractsDeleted}
               aiEnabled={aiEnabled}
             />
           ) : view === "expenses" ? (
