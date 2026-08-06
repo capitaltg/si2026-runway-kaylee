@@ -306,46 +306,81 @@ def remove_contract(contract_id: int):
 
 @app.post("/api/contracts/{contract_id}/timesheets/sync")
 def sync_timesheets(
-    contract_id: int, rows: int = sources.DEMO_SYNC_ROWS, seed: Optional[int] = None
+    contract_id: int,
+    rows: int = sources.SYNC_ROW_CAP,
+    seed: Optional[int] = None,
+    scenario: Optional[str] = None,
 ):
     """Pull a fresh timesheet batch from Fixtura and cache it against this
     contract. Delete-then-insert (via db.replace_timesheets) so a re-sync
     never double-counts hours.
 
-    Seed precedence: an explicit ?seed wins; otherwise the seed this contract was
-    last synced with (persisted on its blob), otherwise the module default. So a
-    contract keeps generating the *coherent* batch it was ingested against —
-    different demo bundles carry different seeds, and the auto-sync (which passes
-    no seed) reuses each contract's own seed instead of a single hardwired one."""
+    Scenario precedence: an explicit ?scenario ('red' / 'amber') wins; otherwise the
+    scenario this contract was last synced with; otherwise the opts are DERIVED from
+    the award itself and the roster is crewed to the FTEs its labor lines were priced
+    at. A demo scenario is deliberately opt-in: those opts crew above or below plan on
+    purpose, and sending them on every sync (as this endpoint used to) skewed every
+    real contract's hours to make a demo read red.
+
+    Seed precedence, likewise: explicit ?seed, else the seed this contract recorded
+    at ingest, else the named scenario's own seed, else one derived from the PIID. So
+    a contract keeps generating the *coherent* batch it was ingested against, and the
+    auto-sync (which passes nothing) reproduces it rather than drifting."""
     contract = db.get_contract(contract_id)
     if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
+    name = scenario if scenario is not None else contract.get("sync_scenario")
+    picked = None
+    if name:
+        try:
+            picked = sources.scenario(name)
+        except KeyError:
+            known = ", ".join(sorted(sources.SCENARIOS))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown scenario '{name}'. Known scenarios: {known}.",
+            )
+    opts = picked["opts"] if picked else sources.derive_scenario_opts(contract)
     effective_seed = (
         seed
         if seed is not None
         else (
             contract.get("sync_seed")
             if contract.get("sync_seed") is not None
-            else sources.DEFAULT_SYNC_SEED
+            else (
+                picked["seed"]
+                if picked
+                else sources.seed_for_piid(contract.get("piid"))
+            )
         )
     )
     try:
-        ts = sources.fetch_timesheets(rows=rows, seed=effective_seed)
+        ts = sources.fetch_timesheets(rows=rows, seed=effective_seed, opts=opts)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Timesheet sync failed: {e}")
     stored = db.replace_timesheets(contract_id, ts)
-    # Remember an explicitly chosen seed so future auto-syncs stay coherent.
+    # Remember an explicitly chosen seed or scenario so future auto-syncs — which
+    # pass neither — keep reproducing this same batch instead of falling back to
+    # derived opts and quietly re-baselining a demo bundle to on-plan.
+    remember = {}
     if seed is not None and contract.get("sync_seed") != seed:
+        remember["sync_seed"] = seed
+    if scenario is not None and contract.get("sync_scenario") != scenario:
+        remember["sync_scenario"] = scenario
+    if remember:
         blob = {
             k: v for k, v in contract.items() if k not in ("id", "piid", "created_at")
         }
-        blob["sync_seed"] = seed
+        blob.update(remember)
         db.update_contract(contract_id, blob)
     return {
         "id": contract_id,
         "rows": stored,
         "people": len({r.get("employee_id") for r in ts if r.get("employee_id")}),
         "weeks": len({r.get("week_ending") for r in ts if r.get("week_ending")}),
+        # Which scenario the batch came from, so a caller can tell demo data from
+        # data generated against the award it's attached to.
+        "scenario": name or "derived",
     }
 
 
