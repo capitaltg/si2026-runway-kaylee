@@ -66,6 +66,11 @@ SYSTEM = (
     "its Accounting Classification Reference Number into `acrn`. This funded amount "
     "is distinct from the CLIN's not-to-exceed `ceiling` — do not copy one into the "
     "other, and leave `obligated` null when only a ceiling is printed. "
+    "A CLIN the accounting block *does* name but shows no money against — $0, "
+    "$0.00, 0, a dash or a blank in the obligated column — is obligated 0.0, not "
+    "null: an unfunded line on a funded award is a real, reportable state, and "
+    "null means only 'the document does not say'. Reserve null for CLINs the "
+    "accounting block never mentions. "
     "Use null for any field not present in the document — never invent or "
     "estimate values. Money is in US dollars as a number (no '$' or commas). "
     "For every field, also report your extraction confidence as a 0.0-1.0 number. "
@@ -179,6 +184,27 @@ def _parse_schema(
     return output_format.model_validate_json(text)
 
 
+def normalize_obligations(parsed: Extraction) -> Extraction:
+    """Coerce "named in the accounting block, no dollars printed" to 0.0.
+
+    A CLIN carries an `acrn` only because the Accounting and Appropriation Data
+    block named it, so an ACRN with a null `obligated` is a line the award funded
+    at zero — not a line the award is silent about. The distinction is not
+    cosmetic: `burn.py` treats a CLIN with any figure of its own as attributed,
+    and only uses the by-name figures directly when *every* active CLIN has one.
+    A single null drops the whole period onto the header pro-rata path, so one
+    dropped zero changes how every other CLIN's funding is read.
+
+    Deterministic on purpose. The SYSTEM prompt asks for the same thing, but a
+    zero is the easiest value for a model to read as "nothing to report", and
+    this is cheap to guarantee here rather than hope for per call.
+    """
+    for clin in parsed.clins:
+        if clin.acrn and clin.obligated is None:
+            clin.obligated = 0.0
+    return parsed
+
+
 def _parse(content) -> Extraction:
     # 16000, not 8000: adaptive thinking is on by default on current models and
     # max_tokens caps thinking plus response text together, so a budget sized for
@@ -188,8 +214,10 @@ def _parse(content) -> Extraction:
     # Bedrock it never compiles, so the parse attempt is a guaranteed
     # grammar-compilation timeout on every award ingest — skip straight to plain
     # JSON and save that dead wait.
-    parsed = _parse_schema(
-        content, SYSTEM, Extraction, 16000, constrained=(PROVIDER != "bedrock")
+    parsed = normalize_obligations(
+        _parse_schema(
+            content, SYSTEM, Extraction, 16000, constrained=(PROVIDER != "bedrock")
+        )
     )
     try:
         return confidence.apply(parsed)

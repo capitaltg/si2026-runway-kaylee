@@ -117,13 +117,15 @@ def test_fully_obligated_clins_fall_back_to_ceiling_runway():
 
 
 def test_partial_attribution_mixes_real_and_pro_rata():
-    # Only labor carries an ACRN figure. It is used as printed; travel keeps the
-    # header-derived pro-rata slice (50% of $100k), and the period total still
-    # comes from the header netting.
+    # Only labor carries an ACRN figure. It is used as printed; travel gets a
+    # pro-rata slice of what's *left* of the header obligation once labor's
+    # by-name $240k is netted out — $10k, not the 50% ($50k) that pro-rating the
+    # undiminished header total used to hand it. The period total still comes
+    # from the header netting.
     p = burn.compute(_contract(labor_obligated=240_000), _rows())
 
     assert _clin(p, "0001")["funded"] == 240_000.0
-    assert _clin(p, "0002")["funded"] == 50_000.0
+    assert _clin(p, "0002")["funded"] == 10_000.0
     assert p["contract"]["period_funded"] == float(_OBLIGATED)
 
 
@@ -135,6 +137,70 @@ def test_award_only_contract_keeps_the_pro_rata_fallback():
     assert _clin(p, "0001")["funded"] == 200_000.0
     assert _clin(p, "0002")["funded"] == 50_000.0
     assert p["contract"]["period_funded"] == float(_OBLIGATED)
+
+
+def test_by_name_dollars_are_netted_out_before_the_pro_rata_split():
+    # The burn-demo award's shape: every obligated dollar the header reports is
+    # printed against labor in the ACRN block, and travel/ODC are not named at
+    # all. There is nothing left to spread, so the unnamed lines are funded $0 —
+    # the award's own answer. Pro-rating the undiminished header total used to
+    # invent a slice for each of them (~17% of ceiling apiece).
+    p = burn.compute(_contract(labor_obligated=_OBLIGATED), _rows())
+
+    assert _clin(p, "0001")["funded"] == float(_OBLIGATED)
+    assert _clin(p, "0002")["funded"] == 0.0
+    # $0 funded is a funding limit, not missing data: the CLIN cannot spend until
+    # money lands on it, and that is the tightest funding state there is.
+    assert _clin(p, "0002")["incrementally_funded"] is True
+    assert _clin(p, "0002")["budget"] == 0.0
+    assert _clin(p, "0002")["limited_by"] == "funding"
+
+
+def test_spend_on_a_zero_funded_clin_reads_red():
+    # Netting makes $0 funded reachable, so the statuses have to survive it: a
+    # travel charge against a CLIN with no obligated dollars is a realized
+    # breach of its funding, not a "tracked" line. Both status guards used to
+    # test `budget` for truthiness and let a zero budget suppress the red.
+    c = _contract(labor_obligated=_OBLIGATED)
+    p = burn.compute(
+        c,
+        _rows(),
+        expenses=[
+            {
+                "clin": "0002",
+                "amount": 4_000,
+                "date": "2026-02-06",
+                "category": "travel",
+            }
+        ],
+    )
+
+    travel = _clin(p, "0002")
+    assert travel["funded"] == 0.0
+    assert travel["status"] == "over"
+    assert travel["limited_by"] == "funding"
+
+
+def test_funded_dollars_never_exceed_the_header_obligation():
+    # The invariant the double-count broke. Whatever the mix of by-name and
+    # unattributed CLINs, per-CLIN funded must sum to no more than the period's
+    # obligated dollars — the old split counted labor's ACRN figure once as its
+    # own funding and again inside every neighbour's slice.
+    for labor_obligated in (0, 10_000, 125_000, 240_000, _OBLIGATED):
+        p = burn.compute(_contract(labor_obligated=labor_obligated), _rows())
+        funded = sum(c["funded"] or 0.0 for c in p["clins"])
+        assert funded <= float(_OBLIGATED) + 0.01, labor_obligated
+
+
+def test_stale_attribution_above_the_header_total_spreads_nothing():
+    # A by-name figure can exceed the header total when an ACRN block is newer
+    # than the header (or the header is a stale extraction). The remainder floors
+    # at zero rather than going negative and handing the unattributed CLIN a
+    # negative budget.
+    p = burn.compute(_contract(labor_obligated=_OBLIGATED + 100_000), _rows())
+
+    assert _clin(p, "0002")["funded"] == 0.0
+    assert _clin(p, "0002")["funded"] >= 0.0
 
 
 def test_one_nonlabor_clins_ratio_does_not_leak_into_the_next():
@@ -157,6 +223,7 @@ def test_one_nonlabor_clins_ratio_does_not_leak_into_the_next():
     p = burn.compute(c, _rows())
 
     assert _clin(p, "0002")["funded"] == float(_TRAVEL_CEILING)
-    # $250k obligated, $600k period ceiling → 41.67% pro-rata on the unattributed
-    # line, not the 100% the previous CLIN was funded at.
-    assert _clin(p, "0003")["funded_frac"] == 0.4167
+    # $250k obligated less the $100k already named to 0002 leaves $150k, spread
+    # over the $500k of unattributed ceiling (labor + materials) → 30% on the
+    # unattributed line, not the 100% the previous CLIN was funded at.
+    assert _clin(p, "0003")["funded_frac"] == 0.3
