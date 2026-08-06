@@ -26,9 +26,13 @@ export default function Portfolio({ onOpen, onDeleted }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [conflicts, setConflicts] = useState(null);
-  // Contract ids ticked for bulk delete. Empty === no selection chrome on screen.
+  // Selection mode is opt-in via "Select" in the header. Off, there are no tick
+  // boxes on the cards at all — the portfolio reads as a dashboard, not a
+  // file manager.
+  const [selecting, setSelecting] = useState(false);
+  // Contract ids ticked for bulk delete.
   const [picked, setPicked] = useState([]);
-  // Contracts staged in the confirm dialog (one row's trash, or the whole selection).
+  // Contracts staged in the confirm dialog (one card's trash, or the whole selection).
   const [pending, setPending] = useState(null);
 
   function load() {
@@ -45,11 +49,22 @@ export default function Portfolio({ onOpen, onDeleted }) {
   const toggle = (id) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
+  // Leaving selection mode drops whatever was ticked — an abandoned selection
+  // shouldn't survive to surprise the next click.
+  function endSelecting() {
+    setSelecting(false);
+    setPicked([]);
+  }
+
   // Deleted contracts are gone from the server; drop them from the selection,
   // refresh, and let App clear the active contract if it was one of them.
   function afterDelete(ids) {
     setPending(null);
-    setPicked((p) => p.filter((id) => !ids.includes(id)));
+    const left = picked.filter((id) => !ids.includes(id));
+    setPicked(left);
+    // Nothing left staged — drop out of selection mode so the portfolio goes
+    // back to reading as a dashboard.
+    if (!left.length) setSelecting(false);
     load();
     if (onDeleted) onDeleted(ids);
   }
@@ -63,13 +78,38 @@ export default function Portfolio({ onOpen, onDeleted }) {
 
   return (
     <div style={{ padding: "26px 26px 60px", maxWidth: 1280 }}>
-      <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
-          Portfolio
-        </h2>
-        <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 5 }}>
-          How your {data.count} active {data.count === 1 ? "contract is" : "contracts are"} pacing today.
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 18 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
+            Portfolio
+          </h2>
+          <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 5 }}>
+            {selecting
+              ? "Tick the contracts you want to remove."
+              : `How your ${data.count} active ${data.count === 1 ? "contract is" : "contracts are"} pacing today.`}
+          </div>
         </div>
+        {/* Select mode is the only way the tick boxes ever appear. One quiet text
+            button at rest; the delete action shows up in the footer bar once
+            something is actually ticked. */}
+        <button
+          type="button"
+          onClick={() => (selecting ? endSelecting() : setSelecting(true))}
+          style={{
+            flex: "0 0 auto",
+            height: 32,
+            padding: "0 13px",
+            borderRadius: 9,
+            border: `1px solid ${selecting ? "var(--accent)" : "var(--border)"}`,
+            background: selecting ? "var(--accent)" : "var(--panel)",
+            color: selecting ? "#fff" : "var(--dim)",
+            fontSize: 12.5,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {selecting ? "Done" : "Select"}
+        </button>
       </div>
 
       {/* KPI tiles */}
@@ -113,7 +153,7 @@ export default function Portfolio({ onOpen, onDeleted }) {
           return (
             <div
               key={c.id}
-              onClick={() => onOpen(c.id)}
+              onClick={() => (selecting ? toggle(c.id) : onOpen(c.id))}
               style={{
                 border: `1px solid ${
                   isPicked
@@ -203,21 +243,25 @@ export default function Portfolio({ onOpen, onDeleted }) {
                   borderTop: "1px solid var(--border)",
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={isPicked}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={() => toggle(c.id)}
-                  aria-label={`Select ${c.piid || c.name} for deletion`}
-                  style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" }}
-                />
+                {selecting && (
+                  <input
+                    type="checkbox"
+                    checked={isPicked}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggle(c.id)}
+                    aria-label={`Select ${c.piid || c.name} for deletion`}
+                    style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" }}
+                  />
+                )}
                 <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "var(--accent)" }}>
-                  Open flight deck →
+                  {selecting ? (isPicked ? "Selected" : "Tap to select") : "Open flight deck →"}
                 </span>
-                <TrashButton
-                  label={`Delete ${c.piid || c.name}`}
-                  onClick={() => setPending([c])}
-                />
+                {!selecting && (
+                  <TrashButton
+                    label={`Delete ${c.piid || c.name}`}
+                    onClick={() => setPending([c])}
+                  />
+                )}
               </div>
             </div>
           );
@@ -299,9 +343,10 @@ export default function Portfolio({ onOpen, onDeleted }) {
         </div>
       )}
 
-      {/* Bulk action bar. Appears only once something is ticked, so the portfolio
-          carries no delete chrome at rest. */}
-      {picked.length > 0 && (
+      {/* Bulk action bar — in selection mode, once something is actually ticked.
+          The delete option only ever exists here, so nothing destructive is on
+          screen until you've both opted into selecting and picked a target. */}
+      {selecting && picked.length > 0 && (
         <div
           style={{
             position: "fixed",
@@ -324,7 +369,7 @@ export default function Portfolio({ onOpen, onDeleted }) {
           </span>
           <button
             type="button"
-            onClick={() => setPicked([])}
+            onClick={endSelecting}
             style={{
               height: 30,
               padding: "0 12px",
@@ -337,12 +382,15 @@ export default function Portfolio({ onOpen, onDeleted }) {
               cursor: "pointer",
             }}
           >
-            Clear selection
+            Cancel
           </button>
           <button
             type="button"
             onClick={() => setPending(data.contracts.filter((c) => picked.includes(c.id)))}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
               height: 30,
               padding: "0 13px",
               borderRadius: 8,
@@ -354,6 +402,10 @@ export default function Portfolio({ onOpen, onDeleted }) {
               cursor: "pointer",
             }}
           >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+              <path d="M10 11v5M14 11v5" />
+            </svg>
             Delete {picked.length} contract{picked.length === 1 ? "" : "s"}
           </button>
         </div>
