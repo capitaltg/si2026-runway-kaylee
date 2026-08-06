@@ -1880,14 +1880,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 ...panelStyle,
                 padding: "12px 14px",
                 marginBottom: 12,
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
                 gap: 10,
                 alignItems: "flex-end",
-                flexWrap: "wrap",
               }}
             >
-              <div style={{ flexBasis: "100%", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>Add from</span>
+              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingBottom: 2 }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>1. Person</span>
                 <button
                   type="button"
                   onClick={() => setNewPerson((p) => ({ ...p, source: "directory" }))}
@@ -1906,7 +1906,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 {directory.error && <span style={{ fontSize: 11.5, color: "var(--warn)" }}>Directory unavailable — enter a new hire instead.</span>}
               </div>
               {newPerson.source === "directory" && (
-                <div style={{ flexBasis: "100%", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px", borderRadius: 8, background: "var(--panel2)" }}>
                   <input
                     value={newPerson.search}
                     placeholder="Search name, ID, or LCAT"
@@ -1935,7 +1935,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   placeholder="Name"
                   onChange={(e) => setNewPerson((p) => ({ ...p, name: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 200, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
                 />
               </div>
               <div>
@@ -1944,15 +1944,15 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   value={newPerson.employeeId}
                   placeholder="Optional"
                   onChange={(e) => setNewPerson((p) => ({ ...p, employeeId: e.target.value }))}
-                  style={{ height: 34, width: 130, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
                 />
               </div>
               <div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>CLIN</div>
+                <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 5 }}>2. Assignment · CLIN</div>
                 <select
                   value={newPerson.clin}
                   onChange={(e) => setNewPersonClin(e.target.value)}
-                  style={{ height: 34, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
                 >
                   {clins.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1966,7 +1966,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 <select
                   value={newPerson.lcatChoice}
                   onChange={(e) => selectPlannedLcat(e.target.value)}
-                  style={{ height: 34, minWidth: 210, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13 }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--text)", fontSize: 13 }}
                 >
                   <option value="">Select priced LCAT…</option>
                   {newPersonRateOptions.map((line) => (
@@ -1984,7 +1984,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                     value={newPerson.lcat}
                     placeholder="Negotiated category"
                     onChange={(e) => setNewPerson((p) => ({ ...p, lcat: e.target.value }))}
-                    style={{ height: 34, width: 190, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13 }}
                   />
                 </div>
               )}
@@ -1997,7 +1997,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   value={newPerson.rate}
                   placeholder={newPerson.lcatChoice === "other" ? "Required" : "Select LCAT"}
                   onChange={(e) => setNewPerson((p) => ({ ...p, rate: e.target.value }))}
-                  style={{ height: 34, width: 110, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
                 />
               </div>
               <div>
@@ -2009,10 +2009,11 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                   value={newPerson.hrs}
                   onChange={(e) => setNewPerson((p) => ({ ...p, hrs: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && addPerson()}
-                  style={{ height: 34, width: 90, padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
+                  style={{ boxSizing: "border-box", height: 34, width: "100%", padding: "0 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--inputBg)", color: "var(--text)", fontSize: 13, textAlign: "right", fontFamily: mono }}
                 />
               </div>
-              <div style={{ flexBasis: "100%", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <span style={{ flexBasis: "100%", fontSize: 11, fontWeight: 700, color: "var(--dim)" }}>3. Optional planning profile</span>
                 {[["education", "Education"], ["years_experience", "Years"], ["clearance", "Clearance"]].map(([field, label]) => (
                   <label key={field} style={{ fontSize: 11, color: "var(--dim)" }}>
                     {label} <span style={{ color: "var(--faint)" }}>(optional)</span><br />
@@ -2026,7 +2027,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 {newPerson.utilization != null && <span style={{ alignSelf: "end", fontSize: 11.5, color: "var(--dim)", paddingBottom: 7 }}>Current utilization: {Math.round(newPerson.utilization * 100)}%</span>}
               </div>
               {selectedRateOption && (
-                <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--dim)" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--dim)" }}>
                   Rate schedule minimums: {[
                     selectedRateOption.min_education,
                     selectedRateOption.min_experience_yrs != null ? `${selectedRateOption.min_experience_yrs} yrs experience` : null,
@@ -2035,14 +2036,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
                 </div>
               )}
               {!newPersonRateOptions.length && (
-                <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--warn)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--warn)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   This CLIN has no rate table. Enter an Other LCAT and explicit rate, or
                   <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
                 </div>
               )}
               <button
                 onClick={addPerson}
-                style={{ height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+                style={{ gridColumn: "-2", height: 34, padding: "0 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
               >
                 Add
               </button>
@@ -2052,7 +2053,7 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
               >
                 Cancel
               </button>
-              <div style={{ fontSize: 11.5, color: addPersonError ? "var(--bad)" : "var(--dim)", flexBasis: "100%" }}>
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: addPersonError ? "var(--bad)" : "var(--dim)" }}>
                 {addPersonError || "This is a what-if only. The plan uses the explicit rate shown above; it never falls back to the CLIN blended rate."}
               </div>
             </div>
