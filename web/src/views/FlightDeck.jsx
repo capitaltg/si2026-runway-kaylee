@@ -182,9 +182,9 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
   );
 }
 
-function moveText(move) {
-  const action = move.kind === "roll_off" ? `roll off ${move.clin}` : `trim to ${move.to_hours} hrs/wk on ${move.clin}`;
-  return `${action} · avoids ${money(move.weekly_savings)}/wk${move.clears_lcat_flag ? " · clears LCAT flag" : ""}`;
+function varianceText(move) {
+  const excess = move.from_hours - move.to_hours;
+  return `${excess} hrs/wk above plan on ${move.clin} · ${money(move.weekly_savings)}/wk overrun`;
 }
 
 function HotPeople({ people, onOpenPerson }) {
@@ -223,7 +223,7 @@ function HotPeople({ people, onOpenPerson }) {
                 <span style={{ color: "var(--accent)", fontWeight: 700 }}>avoids {money(person.avoidable_weekly_overrun)}/wk</span>
               </div>
               <div style={{ marginTop: 3, color: "var(--dim)", fontSize: 12 }}>
-                {person.moves.map(moveText).join(" · ")}
+                {person.moves.map(varianceText).join(" · ")}
               </div>
             </button>
           ))}
