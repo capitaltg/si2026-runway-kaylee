@@ -33,6 +33,13 @@ export async function listContracts() {
   return r.json();
 }
 
+// Hard-delete a contract and everything attached to it. Callers confirm first.
+export async function deleteContract(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`Delete failed (${r.status})`);
+  return r.json();
+}
+
 export async function getBurn(contractId) {
   const r = await fetch(`${BASE}/api/contracts/${contractId}/burn`);
   if (!r.ok) throw new Error(`Burn failed (${r.status})`);

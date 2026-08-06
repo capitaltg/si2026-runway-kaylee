@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getPortfolio, getAllocationConflicts } from "../api.js";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle } from "../format.js";
+import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -21,19 +22,37 @@ const initials = (name) =>
     .join("")
     .toUpperCase();
 
-export default function Portfolio({ onOpen }) {
+export default function Portfolio({ onOpen, onDeleted }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [conflicts, setConflicts] = useState(null);
+  // Contract ids ticked for bulk delete. Empty === no selection chrome on screen.
+  const [picked, setPicked] = useState([]);
+  // Contracts staged in the confirm dialog (one row's trash, or the whole selection).
+  const [pending, setPending] = useState(null);
 
-  useEffect(() => {
+  function load() {
     getPortfolio()
       .then(setData)
       .catch((e) => setError(e.message));
     getAllocationConflicts()
       .then(setConflicts)
       .catch(() => setConflicts(null));
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  const toggle = (id) =>
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  // Deleted contracts are gone from the server; drop them from the selection,
+  // refresh, and let App clear the active contract if it was one of them.
+  function afterDelete(ids) {
+    setPending(null);
+    setPicked((p) => p.filter((id) => !ids.includes(id)));
+    load();
+    if (onDeleted) onDeleted(ids);
+  }
 
   if (error) {
     return <div style={{ padding: 40, color: "var(--bad)" }}>Couldn't load portfolio: {error}</div>;
@@ -90,12 +109,19 @@ export default function Portfolio({ onOpen }) {
           const p = pill(c.status);
           const pillLabel = c.status_label || p.label;
           const barColor = c.pct > 0.85 ? "var(--bad)" : c.pct > 0.7 ? "var(--warn)" : hue;
+          const isPicked = picked.includes(c.id);
           return (
             <div
               key={c.id}
               onClick={() => onOpen(c.id)}
               style={{
-                border: `1px solid ${c.status === "over" || c.status === "unpriced" ? "var(--bad)" : "var(--border)"}`,
+                border: `1px solid ${
+                  isPicked
+                    ? "var(--accent)"
+                    : c.status === "over" || c.status === "unpriced"
+                      ? "var(--bad)"
+                      : "var(--border)"
+                }`,
                 borderRadius: 16,
                 padding: "16px 17px",
                 background: "var(--panel)",
@@ -163,6 +189,10 @@ export default function Portfolio({ onOpen }) {
                 <span>{money(c.weekly)}/wk</span>
               </div>
 
+              {/* Card footer — the only place delete lives. A small tick box for
+                  bulk selection and a low-contrast trash, both kept below the
+                  numbers so the destructive action never reads as an action you
+                  were meant to take. */}
               <div
                 style={{
                   display: "flex",
@@ -173,9 +203,21 @@ export default function Portfolio({ onOpen }) {
                   borderTop: "1px solid var(--border)",
                 }}
               >
+                <input
+                  type="checkbox"
+                  checked={isPicked}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggle(c.id)}
+                  aria-label={`Select ${c.piid || c.name} for deletion`}
+                  style={{ width: 14, height: 14, accentColor: "var(--accent)", cursor: "pointer" }}
+                />
                 <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "var(--accent)" }}>
                   Open flight deck →
                 </span>
+                <TrashButton
+                  label={`Delete ${c.piid || c.name}`}
+                  onClick={() => setPending([c])}
+                />
               </div>
             </div>
           );
@@ -255,6 +297,74 @@ export default function Portfolio({ onOpen }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Bulk action bar. Appears only once something is ticked, so the portfolio
+          carries no delete chrome at rest. */}
+      {picked.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 22,
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "11px 16px",
+            borderRadius: 13,
+            background: "var(--panel)",
+            border: "1px solid var(--border)",
+            boxShadow: "0 14px 40px rgba(18,24,38,.22)",
+            zIndex: 40,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+            {picked.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setPicked([])}
+            style={{
+              height: 30,
+              padding: "0 12px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--panel2)",
+              color: "var(--dim)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Clear selection
+          </button>
+          <button
+            type="button"
+            onClick={() => setPending(data.contracts.filter((c) => picked.includes(c.id)))}
+            style={{
+              height: 30,
+              padding: "0 13px",
+              borderRadius: 8,
+              border: "none",
+              background: "var(--bad)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Delete {picked.length} contract{picked.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      )}
+
+      {pending && (
+        <DeleteConfirm
+          contracts={pending}
+          onCancel={() => setPending(null)}
+          onDone={afterDelete}
+        />
       )}
     </div>
   );
