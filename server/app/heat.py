@@ -319,6 +319,32 @@ def _hours_ceilings(
     return out
 
 
+def absence_hours(contract: dict, rows: List[dict]) -> dict:
+    """`{employee_id: {leave, holiday}}` as hrs/wk on one contract (#116).
+
+    The companion to `allocation.booked_hours`, and needed for the same reason. Leave
+    is a property of the person's week, not of the contract that happened to record
+    it: someone on two contracts who takes a fortnight off books it wherever their
+    PTO code lives, and deducting it only there let the two contracts disagree about
+    how much of the same week the same person had available — one saying 10 hrs/wk
+    over, the other 30, about one person in one window.
+    """
+    period = burn._active_period(contract, rows)
+    window, _ = burn._effective_window(period, rows)
+    charges = _labor_charges(contract, period, rows, window)
+    weeks = _window_weeks(charges)
+    n_weeks = len(weeks) or 1
+    out = {}
+    for emp, rec in _person_window_hours(charges, weeks).items():
+        if not rec["leave"] and not rec["holiday"]:
+            continue
+        out[emp] = {
+            "leave": round(rec["leave"] / n_weeks, 2),
+            "holiday": round(rec["holiday"] / n_weeks, 2),
+        }
+    return out
+
+
 def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
     """The people running hot on one contract, ranked by what their excess hours
     cost an off-pace CLIN each week.
@@ -357,9 +383,14 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
             # No expectation resolved means there is nothing to be over. Missing
             # information is never reported as a finding.
             continue
-        available = max(
-            0.0, float(expected_wk) * n_weeks - rec["leave"] - rec["holiday"]
-        )
+        # Absence recorded on their other contracts, over the same window. Subtracted
+        # here for the same reason the hours below are added: both sides of this
+        # comparison have to describe the whole person, or two contracts reach two
+        # verdicts about one week.
+        away = (arow or {}).get("elsewhere") or []
+        leave = rec["leave"] + sum(_f(e.get("leave")) for e in away) * n_weeks
+        holiday = rec["holiday"] + sum(_f(e.get("holiday")) for e in away) * n_weeks
+        available = max(0.0, float(expected_wk) * n_weeks - leave - holiday)
         # What they are booked on every *other* contract, over the same window (#116).
         # The expectation on the left of this comparison is a whole-person week, so
         # the hours on the right have to be the whole person's: someone at 40 hrs/wk
@@ -433,8 +464,8 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
                 "available_hours": round(available, 1),
                 "over_hours": round(over, 1),
                 "over_hours_per_week": round(over_wk, 1),
-                "leave_hours": round(rec["leave"], 1),
-                "holiday_hours": round(rec["holiday"], 1),
+                "leave_hours": round(leave, 1),
+                "holiday_hours": round(holiday, 1),
                 # Payroll-confirmed overtime, when the feed sent the split. False
                 # `ot_known` means the hours are still over expected — we just may
                 # not call it overtime.

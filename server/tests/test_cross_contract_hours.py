@@ -44,7 +44,7 @@ def _contract(cid, piid, ceiling, rate=100.0):
     }
 
 
-def _rows(people):
+def _rows(people, leave=0.0):
     """`{name: hrs_per_wk}` charged flat across the window."""
     out = []
     for name, hours in people.items():
@@ -59,7 +59,7 @@ def _rows(people):
                     "total_hours": hours,
                     "reg_hours": min(hours, 40.0),
                     "ot_hours": max(0.0, hours - 40.0),
-                    "leave_hours": 0.0,
+                    "leave_hours": leave,
                     "holiday_hours": 0.0,
                 }
             )
@@ -68,25 +68,30 @@ def _rows(people):
 
 def _elsewhere(others):
     """`main._hours_elsewhere`'s payload, built the way the endpoint builds it:
-    `{employee_id: [{contract_id, contract, hours}]}` over every *other* contract."""
+    `{employee_id: [{contract_id, contract, hours, leave, holiday}]}` over every
+    *other* contract."""
     out = {}
     for contract, rows in others:
+        away = heat.absence_hours(contract, rows)
         for emp, hrs in allocation.booked_hours(contract, rows).items():
             out.setdefault(emp, []).append(
                 {
                     "contract_id": contract["id"],
                     "contract": contract["contract"]["piid"],
                     "hours": hrs,
+                    **(away.get(emp) or {"leave": 0.0, "holiday": 0.0}),
                 }
             )
     return out
 
 
-def _split(here, there, ceiling=900_000.0):
+def _split(here, there, ceiling=900_000.0, leave_here=0.0, leave_there=0.0):
     """One person on two contracts: `here` hrs/wk on the contract under test, `there`
     on another. Returns (alloc, heat payload, rows) for the contract under test."""
-    a, a_rows = _contract(1, "ALPHA", ceiling), _rows({"Dana Reed": here})
-    b, b_rows = _contract(2, "BRAVO", ceiling), _rows({"Dana Reed": there})
+    a = _contract(1, "ALPHA", ceiling)
+    a_rows = _rows({"Dana Reed": here}, leave=leave_here)
+    b = _contract(2, "BRAVO", ceiling)
+    b_rows = _rows({"Dana Reed": there}, leave=leave_there)
     alloc = allocation.compute_allocation(
         a, a_rows, hours_elsewhere_by_person=_elsewhere([(b, b_rows)])
     )
@@ -206,6 +211,35 @@ def test_this_contract_carries_only_its_share_of_the_excess():
     (impact,) = person["clins"]
     # 5 hrs/wk over x this contract's 25/45 share x $100.
     assert impact["weekly_dollars"] == pytest.approx(5 * (25 / 45) * 100.0, rel=1e-3)
+
+
+def test_leave_taken_on_another_contract_still_comes_off_their_week():
+    """Leave belongs to the person's week, not to the contract that recorded it.
+
+    Availability is an expectation minus absence, and once the hours above it are
+    counted across every contract the absence has to be too. Deducting leave only
+    where the PTO code happens to live let two contracts reach two verdicts about one
+    person in one window — live, one said 10 hrs/wk over and the other 30.
+    """
+    _alloc, hot_here, _rows_here = _split(
+        here=25.0, there=20.0, ceiling=110_000.0, leave_there=8.0
+    )
+    (from_here,) = hot_here["people"]
+    # The mirror image: same two contracts, same window, roles swapped. BRAVO gets a
+    # tighter ceiling because it burns less — #83's gate is the CLIN being off pace,
+    # and a comfortable line lists nobody no matter how over its people are.
+    b = _contract(2, "BRAVO", 80_000.0)
+    b_rows = _rows({"Dana Reed": 20.0}, leave=8.0)
+    a = _contract(1, "ALPHA", 110_000.0)
+    a_rows = _rows({"Dana Reed": 25.0})
+    alloc = allocation.compute_allocation(
+        b, b_rows, hours_elsewhere_by_person=_elsewhere([(a, a_rows)])
+    )
+    (from_there,) = heat.compute_heat(b, b_rows, alloc)["people"]
+
+    assert from_here["leave_hours"] == from_there["leave_hours"] == 32.0
+    assert from_here["available_hours"] == from_there["available_hours"]
+    assert from_here["over_hours_per_week"] == from_there["over_hours_per_week"]
 
 
 def test_nobody_inside_their_week_is_flagged_by_the_cross_contract_sum():

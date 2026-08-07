@@ -730,9 +730,18 @@ def _hours_elsewhere(contract_id: int) -> dict:
             or c.get("piid")
             or f"Contract {c['id']}"
         )
-        for emp, hrs in allocation.booked_hours(c, db.get_timesheets(c["id"])).items():
+        rows = db.get_timesheets(c["id"])
+        away = heat.absence_hours(c, rows)
+        for emp, hrs in allocation.booked_hours(c, rows).items():
             out.setdefault(emp, []).append(
-                {"contract_id": c["id"], "contract": name, "hours": hrs}
+                {
+                    "contract_id": c["id"],
+                    "contract": name,
+                    "hours": hrs,
+                    # Leave booked over there is leave out of the same week, so it
+                    # travels with the hours rather than staying where it was typed.
+                    **(away.get(emp) or {"leave": 0.0, "holiday": 0.0}),
+                }
             )
     return out
 
@@ -1156,6 +1165,7 @@ def _all_allocations() -> list:
     booked = {
         c["id"]: allocation.booked_hours(c, timesheets[c["id"]]) for c in contracts
     }
+    absence = {c["id"]: heat.absence_hours(c, timesheets[c["id"]]) for c in contracts}
     names = {}
     for c in contracts:
         header = c.get("contract") or {}
@@ -1178,6 +1188,9 @@ def _all_allocations() -> list:
                         "contract_id": other_id,
                         "contract": names[other_id],
                         "hours": hrs,
+                        **(
+                            absence[other_id].get(emp) or {"leave": 0.0, "holiday": 0.0}
+                        ),
                     }
                 )
         out.append(
