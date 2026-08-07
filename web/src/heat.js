@@ -37,8 +37,12 @@ export function windowPhrase(heat) {
  */
 export function personSentence(person, heat) {
   if (!person) return "";
+  // Booked hours, not this contract's (#116). The right-hand number is a whole-person
+  // expectation, so the left-hand one has to be the whole person's too — otherwise a
+  // row that reads "100 hrs against 152 available — 32 hrs over" does not add up.
+  const worked = person.worked_hours_booked ?? person.worked_hours;
   const parts = [
-    `${hrs(person.worked_hours)} hrs against ${hrs(person.available_hours)} available over ${windowPhrase(heat)}`,
+    `${hrs(worked)} hrs against ${hrs(person.available_hours)} available over ${windowPhrase(heat)}`,
     `${hrs(person.over_hours)} hrs over (${hrs(person.over_hours_per_week)} hrs/wk)`,
   ];
   const clins = (person.clins || []).map((c) => c.clin);
@@ -65,6 +69,20 @@ export function expectationNote(person) {
     return `${base} — assumed, nothing is set for them`;
   }
   return `${base} — ${person.expected_label || "set"}`;
+}
+
+/**
+ * Where the rest of their week is, when some of it is on another contract (#116).
+ *
+ * Without this the row is unanswerable: the hours it counts are not all on the
+ * contract whose dashboard is showing them, and a PM looking at their own grid would
+ * not find them. Names the contracts so the conversation has somewhere to go.
+ */
+export function elsewhereNote(person) {
+  const elsewhere = person?.elsewhere || [];
+  if (!elsewhere.length || !person?.worked_hours_elsewhere) return null;
+  const names = elsewhere.map((e) => e.contract).filter(Boolean);
+  return `${hrs(person.worked_hours_elsewhere)} hrs of that on ${names.join(", ") || "another contract"}`;
 }
 
 /** The payroll-confirmed overtime line, when the feed sent the split. */

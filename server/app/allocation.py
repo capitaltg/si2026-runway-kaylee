@@ -36,12 +36,67 @@ def _emp_name(rows: List[dict], emp_id: str) -> str:
     return emp_id
 
 
+def _clin_hours(clin: dict, rows: List[dict], window):
+    """Per-employee billable hours on one CLIN in its trailing window, the LCAT split
+    behind them, and how many weeks the window spans.
+
+    Shared by the matrix and by `booked_hours` below so a person's hrs/wk is one
+    number computed one way — the cross-contract sum has to reconcile with the cells
+    it is compared against, and two copies of this walk would drift.
+    """
+    clin_rows = burn._rows_for_clin(clin, rows, window)
+    recent = set(_recent_weeks(clin_rows))
+    n_weeks = len(recent) or 1
+
+    hrs_by_emp = {}
+    lcat_hrs = {}  # emp_id -> {lcat: hours}
+    for r in clin_rows:
+        if r.get("week_ending") not in recent:
+            continue
+        emp = r.get("employee_id")
+        if not emp:
+            continue
+        # Billable only (#85) — the matrix's starting hrs/wk has to reconcile with
+        # what burn.py priced, and a week with PTO in it billed fewer hours than it
+        # paid.
+        h = burn.billable_hours(r)
+        hrs_by_emp[emp] = hrs_by_emp.get(emp, 0.0) + h
+        lc = (r.get("labor_category") or "").strip()
+        lcat_hrs.setdefault(emp, {})[lc] = lcat_hrs.get(emp, {}).get(lc, 0.0) + h
+    return hrs_by_emp, lcat_hrs, n_weeks
+
+
+def booked_hours(contract: dict, rows: List[dict]) -> dict:
+    """`{employee_id: hrs/wk}` on one contract — the matrix's hours without the money.
+
+    The cheap half of `compute_allocation`, extracted for #116: a person's headroom is
+    their expected week minus what they are booked *everywhere*, so every consumer of
+    one contract's grid needs the hours on the others. Doing that with a full
+    `compute_allocation` per contract would run a burn pass — rates, funding, forecast
+    — to read a column of hours, on every allocation request.
+
+    Same window, same billable rule and the same per-CLIN rounding the cells use, so
+    summing this across contracts is summing the numbers the grid shows.
+    """
+    period = burn._active_period(contract, rows)
+    window, _ = burn._effective_window(period, rows)
+    out: dict = {}
+    for c in burn._period_clins(contract, period):
+        if not c.get("is_labor"):
+            continue
+        hrs_by_emp, _lcats, n_weeks = _clin_hours(c, rows, window)
+        for emp, total in hrs_by_emp.items():
+            out[emp] = out.get(emp, 0.0) + round(total / n_weeks, 1)
+    return {emp: round(h, 1) for emp, h in out.items() if h > 0}
+
+
 def compute_allocation(
     contract: dict,
     rows: List[dict],
     expenses: Optional[List[dict]] = None,
     cost_model: Optional[rates.CostModel] = None,
     expected_hours_by_person: Optional[dict] = None,
+    hours_elsewhere_by_person: Optional[dict] = None,
 ) -> dict:
     """Employee x labor-CLIN allocation for the active period, plus the per-CLIN
     budget/spend/clock the simulator recomputes runway against.
@@ -51,6 +106,15 @@ def compute_allocation(
     this module still cannot reach the people directory (a test pins that: allocation
     must never own a roster). Everyone in the grid is here because they charged time;
     a person with an expected week and no hours does not appear.
+
+    `hours_elsewhere_by_person` is `{employee_id: [{contract_id, contract, hours}]}`
+    for the *other* contracts this person charges (#116) — built by the caller from
+    `booked_hours`, passed in for the same reason. Without it, `headroom` on a row is
+    this contract's hours against a whole-person expectation, so someone at 20 hrs/wk
+    here and 20 elsewhere reads as having 20 hours of slack on both grids and the same
+    hours get offered to two different underburning lines. Omitted means "nobody
+    asked", which is why the payload says so on `cross_contract` rather than letting a
+    zero pass for a checked zero.
     """
     b = burn.compute(contract, rows, expenses, cost_model)
     # Level 1 when the caller supplied nothing: cost falls back to the billing rate
@@ -143,27 +207,9 @@ def compute_allocation(
     for c in labor:
         num = burn._clin_num(c)
         resolve = resolvers[num]
-        clin_rows = burn._rows_for_clin(c, rows, window)
-        recent = set(_recent_weeks(clin_rows))
-        n_weeks = len(recent) or 1
-
         # Per employee on this CLIN: total hrs in the recent window + their LCAT
         # (the one they logged the most hours under, so the rate is representative).
-        hrs_by_emp = {}
-        lcat_hrs = {}  # emp_id -> {lcat: hours}
-        for r in clin_rows:
-            if r.get("week_ending") not in recent:
-                continue
-            emp = r.get("employee_id")
-            if not emp:
-                continue
-            # Billable only (#85) — the matrix's starting hrs/wk has to reconcile
-            # with what burn.py priced, and a week with PTO in it billed fewer
-            # hours than it paid.
-            h = burn.billable_hours(r)
-            hrs_by_emp[emp] = hrs_by_emp.get(emp, 0.0) + h
-            lc = (r.get("labor_category") or "").strip()
-            lcat_hrs.setdefault(emp, {})[lc] = lcat_hrs.get(emp, {}).get(lc, 0.0) + h
+        hrs_by_emp, lcat_hrs, n_weeks = _clin_hours(c, rows, window)
 
         for emp, total in hrs_by_emp.items():
             lcat = (
@@ -218,6 +264,7 @@ def compute_allocation(
     # Contract- and LCAT-level expected hours, read once off the contract's blob.
     caps = capacity.contract_capacity(contract)
     overrides = expected_hours_by_person or {}
+    elsewhere_by_person = hours_elsewhere_by_person or {}
 
     # A person's headline LCAT/rate for the row = the CLIN they bill the most hrs on.
     emp_list = []
@@ -238,6 +285,19 @@ def compute_allocation(
         row["hours"] = round(sum(c["hours"] for c in row["cells"].values()), 1)
         row["utilization"] = capacity.utilization(
             row["hours"], row["expected"]["hours"]
+        )
+        # #116: the expectation is a whole-person week, so the hours it is measured
+        # against have to be the whole person's too. `hours` stays this contract's —
+        # it is what the grid's cells sum to and the simulator edits — and the
+        # cross-contract figures ride beside it.
+        elsewhere = elsewhere_by_person.get(row["id"]) or []
+        row["elsewhere"] = elsewhere
+        row["hours_elsewhere"] = round(sum(e["hours"] for e in elsewhere), 1)
+        row["hours_booked"] = round(row["hours"] + row["hours_elsewhere"], 1)
+        # What this person actually has left, everywhere. Never negative: someone
+        # already past their expectation has no slack to offer, not negative slack.
+        row["headroom"] = round(
+            max(0.0, float(row["expected"]["hours"]) - row["hours_booked"]), 1
         )
         emp_list.append(row)
     emp_list.sort(
@@ -268,6 +328,11 @@ def compute_allocation(
             "pop_start": bc["pop_start"],
             "pop_end": bc["pop_end"],
             "absence": bc["absence"],
+            # Whether anyone's other contracts were actually looked at (#116). False
+            # means every `headroom` on this payload is this contract's view alone —
+            # a surface that reads it as "hours this person has left" must say so, and
+            # the solver must not spend slack it has not checked.
+            "cross_contract": hours_elsewhere_by_person is not None,
         },
         "clins": clin_cards,
         "employees": emp_list,
