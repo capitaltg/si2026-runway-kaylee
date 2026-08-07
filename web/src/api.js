@@ -14,10 +14,15 @@ export async function getSources() {
   return r.json();
 }
 
-export async function confirm(extraction, seed) {
+export async function confirm(extraction, seed, documentId) {
   // seed (optional) records the Fixtura batch this award came from, so future
   // timesheet syncs for this contract stay coherent instead of using the default.
-  const q = seed != null && seed !== "" ? `?seed=${encodeURIComponent(seed)}` : "";
+  // documentId (optional) is the upload ingest stashed for this extraction —
+  // confirming is what attaches the source PDF to the contract it produced (#30).
+  const params = new URLSearchParams();
+  if (seed != null && seed !== "") params.set("seed", seed);
+  if (documentId != null) params.set("document_id", documentId);
+  const q = params.toString() ? `?${params}` : "";
   const r = await fetch(`${BASE}/api/contracts/confirm${q}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -151,6 +156,21 @@ export async function importRateSchedule(contractId, file) {
     throw new Error(detail);
   }
   return r.json();
+}
+
+// The source documents behind a contract's numbers (#30). An empty list is normal:
+// contracts ingested before this feature, and ones typed in by hand, have none.
+export async function listContractDocuments(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/documents`);
+  if (!r.ok) throw new Error(`Source documents failed (${r.status})`);
+  return r.json();
+}
+
+// A stored document's URL, for an <a> rather than a fetch — the browser's own PDF
+// viewer is the point, so this hands it the link instead of pulling the bytes
+// through JavaScript to hand them straight back.
+export function contractDocumentUrl(contractId, documentId) {
+  return `${BASE}/api/contracts/${contractId}/documents/${documentId}`;
 }
 
 // Every rate line in play on a contract, plus its saved LCAT mappings — the target

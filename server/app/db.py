@@ -4,6 +4,7 @@ import sqlite3
 from typing import Optional
 
 from . import absence as absence_mod
+from . import documents
 from . import lcat
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
@@ -193,6 +194,39 @@ def init_db():
             UNIQUE (employee_id, field)
         )"""
     )
+    # The uploaded award / rate schedule a contract's numbers were extracted from
+    # (#30) — the audit trail ingest used to discard.
+    #
+    # Its own table, not a column on `contracts`, for three reasons that all bite
+    # later: `get_contract` splats the whole row into every payload and would start
+    # carrying a multi-megabyte blob into the burn response; one contract can have
+    # more than one document (an award plus a rate schedule today, a cost buildup
+    # once #78 lands); and a blob column on the hot table makes every contract read
+    # pay for bytes it never uses.
+    #
+    # `contract_id` is nullable on purpose. Ingest is two steps — extract, then
+    # confirm — and the bytes arrive at step one, before the contract that will own
+    # them exists. A row with a NULL contract_id is an upload whose extraction the
+    # user has not confirmed yet; `purge_unclaimed_documents` sweeps the abandoned
+    # ones, so a review screen someone closed never leaves a document attached to
+    # nothing.
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS contract_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contract_id INTEGER,
+            kind TEXT CHECK (kind IN ('award','rate_schedule')),
+            filename TEXT,
+            content_type TEXT,
+            size_bytes INTEGER,
+            sha256 TEXT,
+            blob BLOB,
+            created_at TEXT DEFAULT (datetime('now'))
+        )"""
+    )
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_contract_documents_contract
+           ON contract_documents (contract_id)"""
+    )
     conn.commit()
     conn.close()
 
@@ -361,7 +395,14 @@ def delete_contract(cid: int) -> bool:
             is None
         ):
             return False
-        for table in ("timesheets", "expenses", "plans", "rate_sets", "direct_rates"):
+        for table in (
+            "timesheets",
+            "expenses",
+            "plans",
+            "rate_sets",
+            "direct_rates",
+            "contract_documents",
+        ):
             conn.execute(f"DELETE FROM {table} WHERE contract_id = ?", (cid,))
         conn.execute("DELETE FROM contracts WHERE id = ?", (cid,))
         conn.commit()
@@ -1001,6 +1042,125 @@ def save_person_attrs(
     conn.commit()
     conn.close()
     return list_person_attrs(employee_id)
+
+
+def save_document(
+    contract_id: Optional[int],
+    kind: str,
+    filename: str,
+    content_type: str,
+    blob: bytes,
+) -> dict:
+    """Keep one uploaded source document. Returns its metadata (never its bytes).
+
+    Deduplicated by content hash within a (contract, kind): re-uploading the exact
+    same award returns the row already on file rather than storing a second copy of
+    the same megabytes. A *different* file of the same kind is appended, not
+    overwritten — a corrected award is new evidence, and the panel reads the newest,
+    so replacing would destroy the older version that older numbers were derived
+    from.
+
+    Dedup is skipped while `contract_id` is NULL, because an unclaimed row belongs to
+    nobody yet and folding two users' identical uploads together would hand one of
+    them the other's row to claim.
+    """
+    conn = get_conn()
+    sha = documents.digest(blob)
+    if contract_id is not None:
+        existing = conn.execute(
+            """SELECT id, contract_id, kind, filename, content_type, size_bytes,
+                      sha256, created_at
+               FROM contract_documents
+               WHERE contract_id = ? AND kind = ? AND sha256 = ?""",
+            (contract_id, kind, sha),
+        ).fetchone()
+        if existing is not None:
+            conn.close()
+            return {**dict(existing), "duplicate": True}
+    cur = conn.execute(
+        """INSERT INTO contract_documents
+           (contract_id, kind, filename, content_type, size_bytes, sha256, blob)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (contract_id, kind, filename, content_type, len(blob), sha, blob),
+    )
+    conn.commit()
+    row = conn.execute(
+        """SELECT id, contract_id, kind, filename, content_type, size_bytes,
+                  sha256, created_at
+           FROM contract_documents WHERE id = ?""",
+        (cur.lastrowid,),
+    ).fetchone()
+    conn.close()
+    return {**dict(row), "duplicate": False}
+
+
+def claim_document(document_id: int, contract_id: int) -> bool:
+    """Attach an ingest-time upload to the contract its extraction was confirmed as.
+
+    Scoped to `contract_id IS NULL`, so this can only ever claim a document that
+    nobody owns — a confirm that passes some other contract's document id moves
+    nothing and returns False instead of quietly re-parenting evidence.
+    """
+    conn = get_conn()
+    cur = conn.execute(
+        """UPDATE contract_documents SET contract_id = ?
+           WHERE id = ? AND contract_id IS NULL""",
+        (contract_id, document_id),
+    )
+    conn.commit()
+    claimed = cur.rowcount > 0
+    conn.close()
+    return claimed
+
+
+def purge_unclaimed_documents(older_than_hours: int = 24) -> int:
+    """Drop uploads whose extraction was never confirmed. Returns rows removed.
+
+    Uploading an award and then closing the review screen is an ordinary thing to do,
+    and every one of those leaves bytes owned by no contract. Swept on a delay rather
+    than immediately because the review step has no bounded length — someone can
+    reasonably leave it open over lunch — and deleting the document out from under a
+    tab that is still going to confirm is the worse failure.
+    """
+    conn = get_conn()
+    cur = conn.execute(
+        f"""DELETE FROM contract_documents
+            WHERE contract_id IS NULL
+              AND created_at < datetime('now', '-{int(older_than_hours)} hours')"""
+    )
+    conn.commit()
+    removed = cur.rowcount
+    conn.close()
+    return removed
+
+
+def list_documents(contract_id: int) -> list:
+    """A contract's stored source documents, newest first. Metadata only — the blob
+    is served by `get_document`, one at a time, so listing stays cheap."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT id, contract_id, kind, filename, content_type, size_bytes,
+                  sha256, created_at
+           FROM contract_documents WHERE contract_id = ?
+           ORDER BY created_at DESC, id DESC""",
+        (contract_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_document(contract_id: int, document_id: int) -> Optional[dict]:
+    """One stored document with its bytes, scoped to its contract so a guessed id
+    can't read another contract's award. None if it isn't there."""
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT id, contract_id, kind, filename, content_type, size_bytes,
+                  sha256, created_at, blob
+           FROM contract_documents WHERE id = ? AND contract_id = ?""",
+        (document_id, contract_id),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row is not None else None
 
 
 def merge_person(from_id: str, into_id: str) -> bool:

@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import (
@@ -14,6 +14,7 @@ from . import (
     burn,
     capacity,
     db,
+    documents,
     draft,
     extract,
     heat,
@@ -62,12 +63,57 @@ def sources_list():
     return sources.list_sources()
 
 
+def _keep_source(
+    contract_id: Optional[int],
+    kind: str,
+    filename: Optional[str],
+    blob: bytes,
+    declared_type: Optional[str] = None,
+) -> tuple:
+    """Store one upload as a contract's source document (#30).
+
+    Returns `(document_id, note)` — exactly one of which is set. The note is the
+    reason a file was not kept, and callers pass it back to the client rather than
+    swallowing it: a dashboard whose source silently failed to store looks exactly
+    like one whose source is on file, which is the opposite of the point.
+
+    Called only *after* a successful extraction, so a document is never left behind
+    by an upload that produced no contract.
+    """
+    note = documents.rejection(filename, blob)
+    if note:
+        return None, note
+    row = db.save_document(
+        contract_id,
+        kind,
+        documents.safe_filename(filename),
+        documents.content_type(filename, declared_type),
+        blob,
+    )
+    return row["id"], None
+
+
 @app.post("/api/contracts/ingest")
 async def ingest(file: Optional[UploadFile] = File(default=None)):
-    """Extract structured award data from an uploaded PDF, or the bundled sample."""
+    """Extract structured award data from an uploaded PDF, or the bundled sample.
+
+    The uploaded bytes are kept (#30) so the numbers on the Flight Deck stay
+    checkable against the award they came from. They are stored unattached and the
+    id is handed back for `confirm` to claim, because the contract that will own
+    them does not exist until the user has reviewed the extraction — see the
+    `contract_documents` schema note.
+    """
+    # Sweep uploads whose review screen was closed without confirming. Done here
+    # rather than on a timer because this app has no scheduler, and a new ingest is
+    # both the cheapest and the most likely moment for stale ones to have piled up.
+    db.purge_unclaimed_documents()
+
+    source_name = os.path.basename(SAMPLE)
+    declared_type = None
     try:
         if file is not None:
             data = await file.read()
+            source_name, declared_type = file.filename, file.content_type
             if (file.filename or "").lower().endswith(".pdf"):
                 result = await asyncio.to_thread(extract.extract_from_pdf, data)
             else:
@@ -76,15 +122,30 @@ async def ingest(file: Optional[UploadFile] = File(default=None)):
                 )
         elif SAMPLE.lower().endswith(".pdf"):
             with open(SAMPLE, "rb") as f:
-                result = await asyncio.to_thread(extract.extract_from_pdf, f.read())
+                data = f.read()
+            result = await asyncio.to_thread(extract.extract_from_pdf, data)
         else:
-            with open(SAMPLE, "r", encoding="utf-8") as f:
-                result = await asyncio.to_thread(extract.extract_from_text, f.read())
+            with open(SAMPLE, "rb") as f:
+                data = f.read()
+            result = await asyncio.to_thread(
+                extract.extract_from_text, data.decode("utf-8", "ignore")
+            )
     except Exception as e:
         # Return a real error (with CORS headers) instead of an unhandled 500,
         # which Starlette leaves CORS-less so the browser reports "Load failed".
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
-    return result.model_dump()
+
+    # The bundled sample is stored too, not special-cased away: the demo path is how
+    # most people first see the Flight Deck, and a source panel that is empty there
+    # teaches everyone that the feature doesn't work.
+    document_id, note = _keep_source(
+        None, documents.AWARD, source_name, data, declared_type
+    )
+    return {
+        **result.model_dump(),
+        "source_document_id": document_id,
+        "source_document_note": note,
+    }
 
 
 def _seed_award_obligation(data: dict) -> None:
@@ -115,16 +176,31 @@ def _seed_award_obligation(data: dict) -> None:
 
 
 @app.post("/api/contracts/confirm")
-def confirm(extraction: Extraction, seed: Optional[int] = None):
+def confirm(
+    extraction: Extraction,
+    seed: Optional[int] = None,
+    document_id: Optional[int] = None,
+):
     """Save a reviewed extraction as a contract. An optional Fixtura `seed`
     records which data batch this award was generated against, so its timesheet
-    syncs stay coherent (see sync_timesheets' seed precedence)."""
+    syncs stay coherent (see sync_timesheets' seed precedence).
+
+    `document_id` is the upload ingest stashed for this extraction (#30); confirming
+    is what attaches it to the contract. Optional, and a stale or already-claimed id
+    is reported rather than raising — manual entry has no document at all, and a
+    contract must save either way. The source panel is evidence, not a gate.
+    """
     data = extraction.model_dump()
     _seed_award_obligation(data)
     if seed is not None:
         data["sync_seed"] = seed
     cid = db.save_contract(extraction.contract.piid, data)
-    return {"id": cid, "piid": extraction.contract.piid}
+    stored = db.claim_document(document_id, cid) if document_id is not None else False
+    return {
+        "id": cid,
+        "piid": extraction.contract.piid,
+        "source_document_stored": stored,
+    }
 
 
 @app.post("/api/contracts/{contract_id}/rates")
@@ -177,12 +253,63 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     # Store back just the extraction blob (id / piid / created_at are columns).
     blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
     db.update_contract(contract_id, blob)
+
+    # Keep the schedule itself (#30). The rates it just merged are the figures an
+    # accountant is least willing to take on faith, and this upload was the only
+    # copy Runway ever saw. Stored after the merge, so a schedule that parsed to
+    # nothing (the 422 above) leaves no document implying it did.
+    document_id, note = _keep_source(
+        contract_id,
+        documents.RATE_SCHEDULE,
+        file.filename,
+        data,
+        file.content_type,
+    )
     return {
         "id": contract_id,
         "clins_updated": merged,
         "rate_tables_found": len(incoming),
         "piid_mismatch": piid_mismatch,
+        "source_document_id": document_id,
+        "source_document_note": note,
     }
+
+
+@app.get("/api/contracts/{contract_id}/documents")
+def contract_documents(contract_id: int):
+    """The source documents behind this contract's numbers (#30) — metadata only.
+
+    An empty list is a normal answer, not an error: every contract ingested before
+    this feature existed, and every one typed in by hand, has no stored source. The
+    panel says so plainly rather than implying something is missing.
+    """
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {"id": contract_id, "documents": db.list_documents(contract_id)}
+
+
+@app.get("/api/contracts/{contract_id}/documents/{document_id}")
+def contract_document(contract_id: int, document_id: int):
+    """Serve one stored source document back for viewing or download.
+
+    `inline` so a PDF opens in the browser's viewer next to the dashboard — checking
+    an extracted number against the award is a side-by-side act, and forcing a
+    download to do it is friction on the one workflow this feature exists for.
+    """
+    row = db.get_document(contract_id, document_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    name = documents.safe_filename(row["filename"])
+    return Response(
+        content=row["blob"],
+        media_type=row["content_type"] or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{name}"',
+            # The hash an auditor can recompute against their own copy, without
+            # having to download it through this app to find it.
+            "X-Document-SHA256": row["sha256"] or "",
+        },
+    )
 
 
 def _merge_mod(existing: dict, mod: dict) -> dict:
@@ -296,8 +423,11 @@ def contracts():
 
 @app.delete("/api/contracts/{contract_id}")
 def remove_contract(contract_id: int):
-    """Hard-delete a contract and its timesheets, expenses, plans and
-    contract-scoped rates. Irreversible — the UI confirms by PIID first. Bulk
+    """Hard-delete a contract and its timesheets, expenses, plans,
+    contract-scoped rates and stored source documents (#30 — the award goes with
+    the contract it evidences, in the same transaction, or deleting a contract
+    would leave its PDF as an orphan nothing can reach or remove).
+    Irreversible — the UI confirms by PIID first. Bulk
     delete is the client calling this once per contract, so a partial failure
     reports honestly instead of pretending the whole batch went."""
     if not db.delete_contract(contract_id):
