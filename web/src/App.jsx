@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
 import Ingest from "./views/Ingest.jsx";
@@ -13,6 +13,7 @@ import Drafts from "./views/Drafts.jsx";
 import People from "./views/People.jsx";
 import { applyTheme } from "./theme.js";
 import { getBurn, renameContract } from "./api.js";
+import { createHistoryAdapter, parseLocation, pathFor } from "./navigation.js";
 
 function Placeholder({ name, note }) {
   return (
@@ -58,13 +59,33 @@ function exportCsv(burn) {
 }
 
 export default function App() {
-  const [view, setView] = useState("portfolio");
+  const initialRouteRef = useRef(null);
+  if (!initialRouteRef.current) initialRouteRef.current = parseLocation(window.location);
+  const [route, setRoute] = useState(() => initialRouteRef.current);
+  const [routeNotice, setRouteNotice] = useState(() => initialRouteRef.current.invalid);
   const [theme, setTheme] = useState("light");
   // App-wide AI preference (off by default). When on, Runway may use AI to
   // phrase things like Flight Deck suggestions; when off it uses built-in
   // deterministic copy. Read by any feature that wants an AI path.
   const [aiEnabled, setAiEnabled] = useState(() => localStorage.getItem("runway.ai") === "on");
-  const [activeId, setActiveId] = useState(null);
+  const view = route.view;
+  const activeId = route.activeId;
+  const historyAdapterRef = useRef(null);
+  if (!historyAdapterRef.current) {
+    historyAdapterRef.current = createHistoryAdapter({
+      onChange: (nextRoute) => {
+        if (nextRoute.invalid) {
+          window.history.replaceState({}, "", "/portfolio");
+          setRoute({ view: "portfolio", activeId: null, invalid: false });
+          setRouteNotice(true);
+        } else {
+          setRoute(nextRoute);
+          setRouteNotice(false);
+        }
+      },
+    });
+  }
+  const historyAdapter = historyAdapterRef.current;
   // Ask Runway is a slide-out drawer overlaid on any view, not a view itself.
   const [askOpen, setAskOpen] = useState(false);
   // The non-labor CLIN a Flight Deck card asked the Expenses view to open on.
@@ -80,6 +101,15 @@ export default function App() {
   // (sidebar health card + top-bar period bar + Export). Views still fetch
   // their own data; this refreshes whenever the active contract changes.
   const [chrome, setChrome] = useState(null);
+
+  useEffect(() => {
+    historyAdapter.start();
+    if (initialRouteRef.current.invalid) {
+      window.history.replaceState({}, "", "/portfolio");
+      setRoute({ view: "portfolio", activeId: null, invalid: false });
+    }
+    return () => historyAdapter.stop();
+  }, [historyAdapter]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -104,9 +134,25 @@ export default function App() {
     };
   }, [activeId]);
 
+  function navigate(nextView, nextId = activeId, options) {
+    historyAdapter.navigate(nextView, nextId, options);
+  }
+
+  // Child views use this when they discover or change the current contract.
+  // Replacing keeps passive data hydration from adding a history entry while
+  // still making the selected contract refresh-safe and shareable.
+  function setActiveId(next) {
+    setRoute((current) => {
+      const resolved = typeof next === "function" ? next(current.activeId) : next;
+      const normalized = resolved == null ? null : Number(resolved);
+      const nextPath = pathFor(current.view, normalized);
+      if (window.location.pathname !== nextPath) window.history.replaceState({}, "", nextPath);
+      return { ...current, activeId: normalized };
+    });
+  }
+
   function openContract(id) {
-    setActiveId(id);
-    setView("flightdeck");
+    navigate("flightdeck", id);
   }
 
   // Save a user-chosen nickname for the active contract, then refresh the chrome
@@ -124,15 +170,14 @@ export default function App() {
   // top-bar period bar too) and fall back to the portfolio.
   function onContractsDeleted(ids) {
     if (activeId != null && ids.includes(activeId)) {
-      setActiveId(null);
       setChrome(null);
-      setView("portfolio");
+      navigate("portfolio", null, { replace: true });
     }
   }
 
   function openExpenses(clin) {
     setExpenseClin(clin);
-    setView("expenses");
+    navigate("expenses");
   }
 
   // A trim/boost suggestion jumped us to the Allocation Matrix — flag it to
@@ -143,9 +188,13 @@ export default function App() {
   // the moves the suggestion named rather than a uniform scale that happens to hit the
   // same total. `true` still means "no move list — do the uniform rebalance", which is
   // what a CLIN the solver couldn't close falls back to.
+  //
+  // Routed through `navigate` rather than `setView` so the jump lands in browser history
+  // like every other view change (#115). The move list is a parameter of the navigation,
+  // not a reason to bypass it.
   function openAllocationBalanced(moves) {
     setPendingBalance(moves && moves.length ? moves : true);
-    setView("allocate");
+    navigate("allocate");
   }
 
   // Deep-link from the Flight Deck's "who's running hot" strip (#83) into the
@@ -154,19 +203,19 @@ export default function App() {
   // reports, the matrix is where hours change.
   function openAllocationForPerson(name) {
     setPendingPerson(name || null);
-    setView("allocate");
+    navigate("allocate");
   }
 
   // Deep-link from a suggestion into the Drafts view, pre-loaded for a contract.
   function openDrafts(id, docType) {
     if (id != null) setActiveId(id);
     setPendingDocType(docType || null);
-    setView("drafts");
+    navigate("drafts", id ?? activeId);
   }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar view={view} setView={setView} contract={chrome?.contract} hero={chrome?.hero} />
+      <Sidebar view={view} setView={(nextView) => navigate(nextView)} contract={chrome?.contract} hero={chrome?.hero} />
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <TopBar
           view={view}
@@ -190,10 +239,10 @@ export default function App() {
               contractId={activeId}
               setActiveId={setActiveId}
               onOpenExpenses={openExpenses}
-              onOpenAllocation={() => setView("allocate")}
+              onOpenAllocation={() => navigate("allocate")}
               onOpenPerson={openAllocationForPerson}
               onApplyFix={openAllocationBalanced}
-              onOpenFunding={() => setView("funding")}
+              onOpenFunding={() => navigate("funding")}
               onOpenDrafts={openDrafts}
               onRename={onRename}
               onDeleted={onContractsDeleted}
@@ -232,6 +281,37 @@ export default function App() {
         onClose={() => setAskOpen(false)}
         contractId={activeId}
       />
+      {routeNotice && (
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            right: 22,
+            bottom: 22,
+            zIndex: 20,
+            maxWidth: 360,
+            padding: "12px 14px",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            background: "var(--panel)",
+            color: "var(--text)",
+            boxShadow: "0 8px 24px rgba(26,34,51,.16)",
+            fontSize: 13,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <span>That page could not be opened, so Runway returned you to Portfolio.</span>
+            <button
+              type="button"
+              aria-label="Dismiss navigation notice"
+              onClick={() => setRouteNotice(false)}
+              style={{ border: 0, background: "transparent", color: "var(--dim)", cursor: "pointer", fontSize: 16 }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

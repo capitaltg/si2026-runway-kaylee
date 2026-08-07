@@ -5,6 +5,7 @@ import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, s
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import AlertCarouselCard from "../components/AlertCarouselCard.jsx";
+import ContractSource from "../components/ContractSource.jsx";
 import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 import { suggestFor } from "../suggest.js";
 import { scopeNotices } from "../scope-notice.js";
@@ -285,6 +286,14 @@ export default function FlightDeck({
   const cancelRename = useRef(false);
   // Contracts we've already auto-synced once, so we don't re-sync on every load.
   const autoSyncedRef = useRef(new Set());
+  // Bumped when an upload adds a source document, so the source panel picks up the
+  // schedule that was just imported instead of waiting for a page reload (#30).
+  const [sourceRefresh, setSourceRefresh] = useState(0);
+
+  function onRatesImported() {
+    load(contractId);
+    setSourceRefresh((n) => n + 1);
+  }
 
   // Resolve a contract to show: the one App picked, else the newest ingested.
   useEffect(() => {
@@ -507,6 +516,8 @@ export default function FlightDeck({
           {contract.nickname && contract.legal_name ? `${contract.legal_name} · ` : ""}
           {contract.agency || "—"} · {contract.piid}
         </div>
+        {/* The paperwork behind every number below it (#30). */}
+        <ContractSource contractId={contractId} refreshKey={sourceRefresh} />
       </div>
 
       {activeAlert && (
@@ -1009,7 +1020,7 @@ export default function FlightDeck({
               <ImportRateSchedule
                 contractId={contractId}
                 tone="var(--bad)"
-                onImported={() => load(contractId)}
+                onImported={onRatesImported}
               />
             </div>
           </div>
@@ -1055,7 +1066,7 @@ export default function FlightDeck({
             The burn figures are real, but nothing on this CLIN is per-person until the schedule lands.
           </div>
           <div style={{ marginTop: 10 }}>
-            <ImportRateSchedule contractId={contractId} onImported={() => load(contractId)} />
+            <ImportRateSchedule contractId={contractId} onImported={onRatesImported} />
           </div>
         </div>
         );
