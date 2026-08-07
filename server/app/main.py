@@ -21,6 +21,7 @@ from . import (
     people,
     rates,
     sources,
+    suggest,
 )
 from .schemas import Extraction, ExpenseIn
 
@@ -463,6 +464,11 @@ def contract_heat(contract_id: int):
     Composed from the allocation payload rather than recomputed, so the Flight Deck's
     person list and the allocation matrix cannot name different people or disagree
     about a rate.
+
+    `suggestions` (#63) rides along on the same response: the ordered, named moves that
+    close each off-pace CLIN's weekly gap. Same endpoint on purpose — the moves are
+    built *from* this payload's ranking and diagnosis, and a second request could serve
+    a plan derived from a different snapshot of the same contract.
     """
     contract = db.get_contract(contract_id)
     if contract is None:
@@ -475,7 +481,9 @@ def contract_heat(contract_id: int):
         _cost_model(contract_id),
         db.expected_hours_by_person(),
     )
-    return heat.compute_heat(contract, rows, alloc)
+    payload = heat.compute_heat(contract, rows, alloc)
+    payload["suggestions"] = suggest.solve_moves(alloc, payload)
+    return payload
 
 
 class CapacityIn(BaseModel):

@@ -57,6 +57,16 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
+  // #63's named move list. Rendered verbatim from the server's plan and deliberately
+  // NOT part of what the model may rewrite: AI phrases the lead-in sentence, and the
+  // actions themselves stay deterministic. That is what makes AI-on and AI-off
+  // recommend identical moves rather than merely similar advice — the model cannot
+  // invent, drop or reorder a move because it never writes this list.
+  const steps = heuristic.steps || [];
+  const notes = heuristic.notes || [];
+  // A stable dep for the AI effect: the move list can change without the lead-in
+  // sentence changing a character, and the grounding has to refire when it does.
+  const stepsKey = steps.join("|");
 
   useEffect(() => {
     // AI off: show the deterministic copy, nothing to fetch.
@@ -72,6 +82,11 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
     const q =
       `Advise the PM on CLIN ${item.code} (${item.name}). In 1–2 short, directive ` +
       `sentences, recommend the concrete next action. Grounding: ${heuristic.body} ` +
+      (steps.length
+        ? `The moves being recommended, shown to the user as a list directly below your ` +
+          `sentences: ${steps.join("; ")}. Introduce them — do not restate them, rename ` +
+          `anyone, or propose a different move. `
+        : "") +
       `Phrase it as advice — don't repeat the numbers as a list.`;
     askRunway({ question: q, history: [], contractId }, (chunk) => {
       if (cancelled) return;
@@ -93,7 +108,7 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
     // keeps its pre-diagnosis advice — which is the contradiction threading `heat`
     // through was meant to remove. Keyed on the text rather than on `heat` so it only
     // refires when the recommendation actually changed.
-  }, [aiEnabled, kind, item.code, contractId, heuristic.body]);
+  }, [aiEnabled, kind, item.code, contractId, heuristic.body, stepsKey]);
 
   return (
     <div
@@ -156,6 +171,42 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
         )}
       </div>
       <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55 }}>{body}</div>
+      {/* The design's bulleted move list (Runway.dc.html:217) — named people and the
+          hours they move to, one bullet per decision rather than one per person. */}
+      {steps.length > 0 && (
+        <ul
+          style={{
+            margin: "10px 0 0",
+            paddingLeft: 18,
+            fontSize: 13,
+            color: "var(--text)",
+            lineHeight: 1.7,
+          }}
+        >
+          {steps.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      )}
+      {/* Caveats the move list cannot express: an hours ceiling the dollars don't fix,
+          people whose hours have no printed rate, a gap no staffing change closes. The
+          ticket asks for these to be said plainly rather than dropped. */}
+      {notes.map((n) => (
+        <div
+          key={n}
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: "var(--faint)",
+            lineHeight: 1.5,
+            display: "flex",
+            gap: 6,
+          }}
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>{n}</span>
+        </div>
+      ))}
       {heuristic.action && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
           {heuristic.result && (
@@ -169,7 +220,14 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
                 <button onClick={() => onAction("simulator")} style={btnSecondary}>
                   Open simulator
                 </button>
-                <button onClick={() => onAction("apply-fix")} style={btnPrimary}>
+                {/* Carries the solved moves so the matrix applies exactly what is
+                    listed above. Without them it falls back to the uniform scale,
+                    which is the only honest thing to do for a CLIN the solver could
+                    not close. */}
+                <button
+                  onClick={() => onAction("apply-fix", heuristic.action.moves)}
+                  style={btnPrimary}
+                >
                   Apply fix
                 </button>
               </>
@@ -377,11 +435,12 @@ export default function FlightDeck({
   }
 
   // Route a suggestion's action buttons: "simulator" opens the Allocation Matrix
-  // untouched, "apply-fix" opens it with the rebalanced plan pre-applied, and
-  // "funding" opens the Funding History.
-  function onSuggestAction(kind) {
+  // untouched, "apply-fix" opens it with the plan pre-applied — the #63 move list when
+  // the solver produced one, the uniform rebalance when it didn't — and "funding" opens
+  // the Funding History.
+  function onSuggestAction(kind, moves) {
     if (kind === "simulator") onOpenAllocation?.();
-    else if (kind === "apply-fix") onApplyFix?.();
+    else if (kind === "apply-fix") onApplyFix?.(moves);
     else if (kind === "funding") onOpenFunding?.();
   }
 
