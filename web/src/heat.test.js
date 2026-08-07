@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  BY_COST,
+  BY_HOURS,
+  sortPeople,
   personSentence,
   expectationNote,
   overtimeNote,
@@ -212,4 +215,52 @@ test("the window reads as prose", () => {
   assert.equal(windowPhrase(HEAT), "the last 4 charged weeks");
   assert.equal(windowPhrase({ window: { weeks: 1 } }), "the last 1 charged week");
   assert.equal(windowPhrase({}), "no charged weeks");
+});
+
+// --- the ranking must not become a pay ranking ------------------------------
+
+const cheapOverworker = {
+  id: "cheap",
+  name: "Cheap Overworker",
+  over_hours_per_week: 12,
+  weekly_dollars: 1200,
+  clins: [{ clin: "0001", unpriced: false }],
+};
+const priceySteady = {
+  id: "pricey",
+  name: "Pricey Steady",
+  over_hours_per_week: 10,
+  weekly_dollars: 2500,
+  clins: [{ clin: "0001", unpriced: false }],
+};
+
+test("the default ordering is hours over expectation, not cost", () => {
+  const ranked = sortPeople([priceySteady, cheapOverworker], BY_HOURS);
+  assert.deepEqual(
+    ranked.map((p) => p.name),
+    ["Cheap Overworker", "Pricey Steady"],
+  );
+});
+
+test("the cost ordering exists but has to be asked for by name", () => {
+  const ranked = sortPeople([cheapOverworker, priceySteady], BY_COST);
+  assert.deepEqual(
+    ranked.map((p) => p.name),
+    ["Pricey Steady", "Cheap Overworker"],
+  );
+});
+
+test("equal excess hours fall back to dollars then name, never to rate alone", () => {
+  const a = { ...cheapOverworker, name: "Bea", over_hours_per_week: 6, weekly_dollars: 600 };
+  const b = { ...priceySteady, name: "Abe", over_hours_per_week: 6, weekly_dollars: 600 };
+  assert.deepEqual(
+    sortPeople([a, b], BY_HOURS).map((p) => p.name),
+    ["Abe", "Bea"],
+  );
+});
+
+test("sorting never mutates the payload order", () => {
+  const input = [priceySteady, cheapOverworker];
+  sortPeople(input, BY_HOURS);
+  assert.equal(input[0].name, "Pricey Steady");
 });

@@ -107,6 +107,32 @@ export function ceilingSentence(ceiling) {
   return `${who}${scope}: ${hrs(ceiling.charged_hours)} of ${hrs(ceiling.contracted_hours)} contracted hours charged${when}.`;
 }
 
+// The two orderings, both explicit. `hours` is the default because the finding is
+// the hours; `cost` exists because the money is why it's on this dashboard — but a
+// PM has to choose it and see it named, rather than getting a pay ranking by
+// accident. Sorting by dollars silently is how "who's working too much" turns into
+// "who is expensive", and those are not the same list.
+export const BY_HOURS = "hours";
+export const BY_COST = "cost";
+
+export function sortPeople(people, order) {
+  const rows = [...(people || [])];
+  if (order === BY_COST) {
+    return rows.sort(
+      (a, b) =>
+        b.weekly_dollars - a.weekly_dollars ||
+        b.over_hours_per_week - a.over_hours_per_week ||
+        a.name.localeCompare(b.name),
+    );
+  }
+  return rows.sort(
+    (a, b) =>
+      b.over_hours_per_week - a.over_hours_per_week ||
+      b.weekly_dollars - a.weekly_dollars ||
+      a.name.localeCompare(b.name),
+  );
+}
+
 /**
  * Everything the strip needs, or a reason there is nothing to show.
  *

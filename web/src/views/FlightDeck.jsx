@@ -50,8 +50,10 @@ const btnSecondary = {
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
 // stream fails (Bedrock down, etc.). The action button routes via onAction.
-function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts }) {
-  const heuristic = suggestFor(kind, item, contract);
+function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onAction, onOpenDrafts }) {
+  // `heat` (#83) is what keeps this strip and the "who's running hot" section from
+  // recommending opposite things about the same CLIN. See suggestFor.
+  const heuristic = suggestFor(kind, item, contract, heat);
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
@@ -86,7 +88,12 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiEnabled, kind, item.code, contractId]);
+    // `heuristic.body` is a dep because #83's heat payload lands *after* burn: the
+    // grounding text changes once the diagnosis arrives, and without this the strip
+    // keeps its pre-diagnosis advice — which is the contradiction threading `heat`
+    // through was meant to remove. Keyed on the text rather than on `heat` so it only
+    // refires when the recommendation actually changed.
+  }, [aiEnabled, kind, item.code, contractId, heuristic.body]);
 
   return (
     <div
@@ -610,6 +617,7 @@ export default function FlightDeck({
               )}
             </div>
             <Suggestion
+              heat={heat}
               kind="over"
               item={tw}
               contract={contract}
@@ -683,6 +691,7 @@ export default function FlightDeck({
               jeopardize option-year exercise.
             </div>
             <Suggestion
+              heat={heat}
               kind="underburn"
               item={ub}
               contract={contract}
@@ -843,6 +852,7 @@ export default function FlightDeck({
               {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
             </div>
             <Suggestion
+              heat={heat}
               kind="funding"
               item={fw}
               contract={contract}

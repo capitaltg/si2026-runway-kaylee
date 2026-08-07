@@ -80,10 +80,12 @@ from . import burn
 # a dashboard that names someone over 40 minutes a week trains people to ignore it.
 MIN_OVER_HOURS_PER_WEEK = 1.0
 
-# ...and has to be worth at least this much a week on an off-pace CLIN. The list
-# exists to explain an overrun; an excess that moves the weekly burn by less than a
-# rounding error on the CLIN card does not explain anything.
-MIN_WEEKLY_DOLLARS = 50.0
+# There is deliberately NO dollar floor to clear. An earlier draft had one, and it
+# was a rate-based *inclusion* filter: someone on $20/hr working 2 hrs/wk over
+# contributed $40/wk and was dropped from the list entirely, while someone on $250/hr
+# working the identical 2 hrs was kept. That makes the cheaper half of a team
+# invisible on a report about how much people are working, which is worse than a
+# noisy list. The hours floor above is rate-neutral and does the whole job.
 
 # CLIN states that open the gate. `watch` is included because the point of the
 # second forecast is to catch a CLIN whose overtime is *about* to push it over,
@@ -399,10 +401,6 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
             )
         if not clin_impacts:
             continue
-        if weekly_dollars < MIN_WEEKLY_DOLLARS and any(
-            not i["unpriced"] for i in clin_impacts
-        ):
-            continue
 
         people.append(
             {
@@ -431,7 +429,23 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
             }
         )
 
-    people.sort(key=lambda p: (-p["weekly_dollars"], p["name"]))
+    # Ranked by HOURS over expectation, not by dollars.
+    #
+    # Dollars were the first ordering and they encoded a pay ranking: on a live
+    # contract, someone 3.5 hrs/wk over on a $167 rate sorted above someone 4.0 hrs/wk
+    # over on $126, and people with identical excess hours came out ordered by their
+    # billing rate. That tells a PM their expensive people are the problem, which is
+    # both the wrong message and useless advice — you cannot make someone cheaper, and
+    # a rate is a property of the award's price list rather than of how much anyone is
+    # working. Two people equally over their hours are equally over.
+    #
+    # The dollars are still computed, still shown per row, and still summed per CLIN,
+    # because that is what earns this a slot on a money dashboard and what the second
+    # forecast is built from. They are a consequence here, not the rank. A surface that
+    # wants the cost ordering has to ask for it and say so.
+    people.sort(
+        key=lambda p: (-p["over_hours_per_week"], -p["weekly_dollars"], p["name"])
+    )
 
     clins = []
     for cid in sorted(hot_clins):

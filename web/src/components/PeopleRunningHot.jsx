@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { panelStyle, money } from "../format.js";
 import {
+  BY_COST,
+  BY_HOURS,
   COLLAPSED_ROWS,
   heatSummary,
+  sortPeople,
   personSentence,
   expectationNote,
   overtimeNote,
@@ -28,6 +31,9 @@ const label = {
 
 export default function PeopleRunningHot({ heat, onOpenPerson }) {
   const [expanded, setExpanded] = useState(false);
+  // Hours by default. The cost ordering is one click away and labelled, because a
+  // silent sort by dollars is a pay ranking wearing an overtime report's clothes.
+  const [order, setOrder] = useState(BY_HOURS);
   if (!heat) return null;
   const summary = heatSummary(heat);
 
@@ -40,15 +46,42 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
     );
   }
 
-  const shown = expanded ? summary.people : summary.people.slice(0, COLLAPSED_ROWS);
-  const hidden = summary.people.length - shown.length;
+  const ranked = sortPeople(summary.people, order);
+  const shown = expanded ? ranked : ranked.slice(0, COLLAPSED_ROWS);
+  const hidden = ranked.length - shown.length;
 
   return (
     <div style={{ ...panelStyle, marginTop: 18 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
         <div style={label}>Who's running hot</div>
-        <div style={{ fontSize: 11.5, color: "var(--faint)" }}>
-          hours above each person's expected week, on a CLIN that's off pace
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
+            hours above each person's expected week, on a CLIN that's off pace
+          </span>
+          <span style={{ display: "flex", gap: 2, fontSize: 11.5 }}>
+            {[
+              [BY_HOURS, "most hours over"],
+              [BY_COST, "highest cost"],
+            ].map(([key, text]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={order === key}
+                onClick={() => setOrder(key)}
+                style={{
+                  padding: "2px 7px",
+                  borderRadius: 7,
+                  border: "1px solid var(--border)",
+                  cursor: "pointer",
+                  background: order === key ? "var(--panel2)" : "transparent",
+                  color: order === key ? "var(--text)" : "var(--dim)",
+                  fontWeight: order === key ? 600 : 400,
+                }}
+              >
+                {text}
+              </button>
+            ))}
+          </span>
         </div>
       </div>
 
@@ -140,7 +173,7 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
         })}
       </ul>
 
-      {summary.people.length > COLLAPSED_ROWS && (
+      {ranked.length > COLLAPSED_ROWS && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -154,7 +187,7 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
             cursor: "pointer",
           }}
         >
-          {expanded ? "Show fewer" : `Show all ${summary.people.length} (${hidden} more)`}
+          {expanded ? "Show fewer" : `Show all ${ranked.length} (${hidden} more)`}
         </button>
       )}
 

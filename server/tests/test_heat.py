@@ -189,13 +189,75 @@ def test_nobody_surfaces_when_the_clin_is_healthy():
     assert result["clins"] == []
 
 
-def test_people_are_ranked_by_weekly_dollars():
+def test_people_are_ranked_by_excess_hours():
     rows = _rows_for({"Alex Cole": 44.0}) + [
         _row("Priya Raman", wk, 50.0, lcat="Systems Engineer") for wk in WEEKS
     ]
     result, _ = _run(_contract(), rows)
     assert [p["name"] for p in result["people"]] == ["Priya Raman", "Alex Cole"]
-    assert result["people"][0]["weekly_dollars"] > result["people"][1]["weekly_dollars"]
+
+
+def _two_rate_contract():
+    """Two priced categories on one CLIN — a $250 senior and a $100 engineer."""
+    contract = _contract()
+    contract["clins"][0]["labor_rates"] = [
+        {"lcat": "Systems Engineer", "loaded_rate": 100.0},
+        {"lcat": "Principal Engineer", "loaded_rate": 250.0},
+    ]
+    return contract
+
+
+def test_a_higher_rate_never_outranks_more_excess_hours():
+    """The defect this pins was live: 3.5 hrs/wk over on $167 sorted above 4.0 hrs/wk
+    over on $126. Ranking by dollars encodes a pay ranking, and a PM cannot act on
+    someone's rate — it is a property of the award's price list, not of how much they
+    are working."""
+    # 12 hrs/wk over at $100 = $1,200/wk; 10 hrs/wk over at $250 = $2,500/wk. So the
+    # two orderings genuinely disagree, which is the whole point of the case.
+    rows = [
+        _row("Cheap Overworker", wk, 52.0, lcat="Systems Engineer") for wk in WEEKS
+    ] + [_row("Pricey Steady", wk, 50.0, lcat="Principal Engineer") for wk in WEEKS]
+    result, _ = _run(_two_rate_contract(), rows)
+    by_name = {p["name"]: p for p in result["people"]}
+    assert (
+        by_name["Pricey Steady"]["weekly_dollars"]
+        > by_name["Cheap Overworker"]["weekly_dollars"]
+    )
+    # Hours win the ranking anyway.
+    assert [p["name"] for p in result["people"]] == [
+        "Cheap Overworker",
+        "Pricey Steady",
+    ]
+
+
+def test_equal_excess_hours_are_not_ordered_by_pay():
+    """Two people the same distance over their expectation are equally over. Dollars
+    only break the tie, and the dollars are still reported."""
+    rows = [_row("Zeta Cheap", wk, 46.0, lcat="Systems Engineer") for wk in WEEKS] + [
+        _row("Alpha Pricey", wk, 46.0, lcat="Principal Engineer") for wk in WEEKS
+    ]
+    result, _ = _run(_two_rate_contract(), rows)
+    assert [p["over_hours_per_week"] for p in result["people"]] == [6.0, 6.0]
+    assert all(p["weekly_dollars"] > 0 for p in result["people"])
+
+
+def test_a_low_rate_can_never_filter_somebody_out():
+    """There is no dollar floor, on purpose. One used to exist and it dropped a
+    $20/hr person 2 hrs/wk over ($40/wk) while keeping a $250/hr person at the
+    identical 2 hrs — making the cheaper half of a team invisible on a report about
+    how much people are working."""
+    contract = _contract()
+    contract["clins"][0]["labor_rates"] = [
+        {"lcat": "Systems Engineer", "loaded_rate": 100.0},
+        {"lcat": "Intern", "loaded_rate": 20.0},
+    ]
+    rows = _rows_for({"Alex Cole": 50.0}) + [
+        _row("Sam Intern", wk, 42.0, lcat="Intern") for wk in WEEKS
+    ]
+    result, _ = _run(contract, rows)
+    intern = next(p for p in result["people"] if p["name"] == "Sam Intern")
+    assert intern["over_hours_per_week"] == 2.0
+    assert intern["weekly_dollars"] == 40.0
 
 
 def test_unpriced_hours_are_carried_without_a_made_up_rate():
