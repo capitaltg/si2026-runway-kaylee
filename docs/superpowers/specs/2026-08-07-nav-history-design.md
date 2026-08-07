@@ -15,6 +15,12 @@ The route table is:
 | `/portfolio` | `portfolio` | none |
 | `/people` | `people` | none |
 | `/ingest` | `ingest` | none |
+| `/flight-deck` | `flightdeck` | selected lazily |
+| `/allocate` | `allocate` | selected lazily |
+| `/expenses` | `expenses` | selected lazily |
+| `/funding` | `funding` | selected lazily |
+| `/rates` | `rates` | selected lazily |
+| `/drafts` | `drafts` | selected lazily |
 | `/contract/:id/flight-deck` | `flightdeck` | required |
 | `/contract/:id/allocate` | `allocate` | required |
 | `/contract/:id/expenses` | `expenses` | required |
