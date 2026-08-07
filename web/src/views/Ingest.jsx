@@ -403,7 +403,11 @@ export default function Ingest({ onSaved }) {
       return;
     }
     try {
-      const saved = await confirm(result, seed === "" ? null : Number(seed));
+      const saved = await confirm(
+        result,
+        seed === "" ? null : Number(seed),
+        result.source_document_id ?? null,
+      );
       reset();
       onSaved?.(saved.id); // jump straight to the new contract's flight deck
     } catch (e) {
@@ -530,6 +534,25 @@ export default function Ingest({ onSaved }) {
         </div>
       )}
 
+      {/* The upload was read but not kept as a source document (#30) — too big, or a
+          format we don't store. Said out loud here, because the contract saves either
+          way and a dashboard with no auditable source must not look like one that
+          has one. */}
+      {stage === "review" && result?.source_document_note && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 14px",
+            borderRadius: 10,
+            border: "1px solid var(--border)",
+            background: "var(--panel2)",
+            color: "var(--dim)",
+            fontSize: 12.5,
+          }}
+        >
+          {result.source_document_note}
+        </div>
+      )}
       {stage === "review" && result && (
         <Review
           value={result}
