@@ -1,6 +1,7 @@
 import asyncio
 import os
-from typing import Optional
+import re
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -313,9 +314,137 @@ def contract_document(contract_id: int, document_id: int):
     )
 
 
+def _clin_key(num) -> str:
+    """A CLIN's identity for matching a mod's funding line to an award CLIN.
+
+    Case- and whitespace-insensitive, nothing more. Deliberately NOT the "slot"
+    normalisation burn.py uses for cross-period line-item identity: 0001 and 1001
+    are the same line item in different years, and a mod that funds 1001 must not
+    be allowed to land on 0001.
+    """
+    return str(num or "").strip().upper()
+
+
+def _period_key(name) -> Optional[str]:
+    """A period's identity for matching a mod's `period_exercised` to a period on
+    the award. Award and mod name the same period in different words — 'Option
+    Year 1' vs 'Option 1' vs 'OY1' — so match on base-or-which-option, not text.
+    """
+    s = str(name or "").strip().lower()
+    if not s:
+        return None
+    if "base" in s:
+        return "base"
+    digits = re.search(r"(\d+)", s)
+    if digits and ("option" in s or s.startswith("oy")):
+        return f"option{int(digits.group(1))}"
+    return re.sub(r"[^a-z0-9]", "", s) or None
+
+
+def _apply_clin_funding(existing: dict) -> int:
+    """Rebuild every CLIN's `obligated` from the award baseline plus the per-CLIN
+    funding lines of every mod ingested so far. Returns the CLIN count touched.
+
+    Why a full recompute rather than adding this mod's lines to what is stored:
+    `obligated` is a single cumulative number, so incrementing it in place is not
+    idempotent — re-ingesting P00002 (a normal thing to do, the endpoint is
+    replace-by-mod-number) would fund those CLINs twice. Recomputing from the
+    award figure plus the whole history is idempotent by construction, and it is
+    also the only way a mod *correction* can lower a CLIN back down.
+
+    `funded_at_award` holds what the award's own signature obligated. It is
+    snapshotted from `obligated` the first time mod money is folded in, before
+    anything is written, and is then the fixed floor of every later recompute.
+    That distinction is the one Fixtura draws upstream: an award form can only
+    report what it obligated (funded_at_award); current funding is the award plus
+    every mod since.
+    """
+    clins = existing.get("clins") or []
+    history = existing.get("obligation_history") or []
+    lines = [ln for h in history for ln in (h.get("funding_lines") or [])]
+    if not lines:
+        return 0
+
+    for c in clins:
+        c.setdefault("funded_at_award", c.get("obligated"))
+
+    added: Dict[str, float] = {}
+    acrns: Dict[str, str] = {}
+    for ln in lines:
+        key = _clin_key(ln.get("clin"))
+        if not key or ln.get("amount") is None:
+            continue
+        added[key] = added.get(key, 0.0) + float(ln["amount"])
+        if ln.get("acrn"):
+            acrns[key] = ln["acrn"]
+
+    touched = 0
+    for c in clins:
+        key = _clin_key(c.get("clin"))
+        if key not in added:
+            continue
+        # A CLIN the award never funded starts at 0, not null: it has money on it
+        # now, and null means "the documents don't say" — which is no longer true.
+        c["obligated"] = round(float(c.get("funded_at_award") or 0) + added[key], 2)
+        # Keep the award's ACRN when it printed one; a later fiscal year's mod
+        # citing a different ACRN doesn't retract the original citation.
+        if not c.get("acrn") and acrns.get(key):
+            c["acrn"] = acrns[key]
+        touched += 1
+    return touched
+
+
+def _apply_option_exercises(existing: dict) -> List[str]:
+    """Flip to exercised=True every period an ingested mod put into effect.
+    Returns the names of the periods newly flipped.
+
+    This is what makes a mid-contract onboarding read correctly. An award form is
+    signed once and cannot report an option exercised years later, so a contract
+    now performing in Option Year 1 ingests from its award with that period
+    un-exercised — and `burn._active_period` then anchors the whole burn clock to
+    the closed base year, comparing cumulative obligation against a ceiling that
+    stopped being spendable. The SF-30 that exercised the option is the document
+    that says otherwise; ingesting it is what corrects the period status.
+
+    Two independent reads, because either can be missing: the narrative's
+    `period_exercised`, and the periods owning the CLINs the mod actually funded
+    (money landing on 1001 is an Option Year 1 obligation whatever the prose
+    says). Never flips a period *off* — a mod can only ever add.
+    """
+    periods = existing.get("periods") or []
+    if not periods:
+        return []
+    clin_period = {
+        _clin_key(c.get("clin")): c.get("period")
+        for c in (existing.get("clins") or [])
+        if (c.get("period") or "").strip()
+    }
+
+    wanted = set()
+    for h in existing.get("obligation_history") or []:
+        if (h.get("action") or "") != "option_exercise":
+            continue
+        wanted.add(_period_key(h.get("period")))
+        for ln in h.get("funding_lines") or []:
+            wanted.add(_period_key(clin_period.get(_clin_key(ln.get("clin")))))
+    wanted.discard(None)
+    if not wanted:
+        return []
+
+    flipped = []
+    for p in periods:
+        if p.get("exercised") or _period_key(p.get("name")) not in wanted:
+            continue
+        p["exercised"] = True
+        flipped.append(p.get("name"))
+    return flipped
+
+
 def _merge_mod(existing: dict, mod: dict) -> dict:
     """Fold one extracted SF-30 action into a contract's stored obligation
-    history and refresh total_obligated. Pure (no I/O) so it's unit-testable.
+    history, refresh total_obligated, and re-derive the two things only the mod
+    trail can know: per-CLIN funding and which option periods are in effect. Pure
+    (no I/O) so it's unit-testable.
 
     Idempotent by mod number: re-ingesting the same SF-30 replaces its entry
     rather than double-counting the dollars. total_obligated tracks the highest
@@ -328,6 +457,8 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         "action": mod.get("action_type") or "modification",
         "amount": mod.get("amount_obligated"),
         "cumulative_obligated": mod.get("cumulative_obligated"),
+        "funding_lines": mod.get("funding_lines") or None,
+        "period": mod.get("period_exercised"),
         "description": mod.get("description"),
     }
     by_num = {h.get("mod"): h for h in history}
@@ -354,11 +485,17 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         header["incrementally_funded"] = float(header["total_obligated"]) < float(
             ceiling
         )
+    # Order matters: the exercise read consults the CLIN->period labels, and the
+    # funding recompute must see the full merged history, so both run last.
+    clins_funded = _apply_clin_funding(existing)
+    periods_exercised = _apply_option_exercises(existing)
     return {
         "mod": entry["mod"],
         "replaced": replaced,
         "history_len": len(merged),
         "total_obligated": header.get("total_obligated"),
+        "clins_funded": clins_funded,
+        "periods_exercised": periods_exercised,
     }
 
 

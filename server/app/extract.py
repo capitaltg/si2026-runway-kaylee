@@ -71,6 +71,16 @@ SYSTEM = (
     "null: an unfunded line on a funded award is a real, reportable state, and "
     "null means only 'the document does not say'. Reserve null for CLINs the "
     "accounting block never mentions. "
+    "A period's `exercised` flag is read from what the document marks, not from "
+    "what an award form is normally able to say. Award documents annotate the "
+    "periods NOT yet in effect — '(option not exercised)', 'unexercised', "
+    "'reserved' or similar against that period in the schedule — and print the "
+    "ones already in effect plain. So set exercised=true for the base period and "
+    "for every option period the document does not mark as un-exercised, even "
+    "when the award's own signature date predates that option: you are reading a "
+    "document that may have been reissued or conformed mid-performance, and a "
+    "period whose dates have already begun is in effect. Set exercised=false only "
+    "where the document says so. "
     "Use null for any field not present in the document — never invent or "
     "estimate values. Money is in US dollars as a number (no '$' or commas). "
     "For every field, also report your extraction confidence as a 0.0-1.0 number. "
@@ -105,6 +115,18 @@ SYSTEM_MOD = (
     "from $X to $Y' phrasing is present) the previous cumulative. Classify the "
     "action_type from the narrative: 'incremental_funding' (FAR 52.232-22 "
     "Limitation of Funds), 'option_exercise' (FAR 52.217-9), or 'administrative'. "
+    "Capture the per-CLIN breakout of this action's money into `funding_lines`: "
+    "one entry per CLIN named, with its ACRN and the dollars obligated to that "
+    "CLIN by this action. It is printed in the ACCOUNTING AND APPROPRIATION DATA "
+    "block and usually restated in the narrative ('funds are obligated by CLIN as "
+    "follows: CLIN 1001 (ACRN AB) $...'); the two say the same thing, so read "
+    "either and do not list a CLIN twice. Each line's amount is this action's "
+    "increment for that CLIN, not a running total — the lines should sum to "
+    "amount_obligated. Leave `funding_lines` null when the mod states only a "
+    "contract-level figure. "
+    "When action_type is 'option_exercise', put the period the mod brings into "
+    "effect in `period_exercised`, named as the document names it (e.g. 'Option "
+    "Year 1'); leave it null otherwise. "
     "Money is a number in US dollars (no '$' or commas). Use null for anything "
     "the document does not state — never invent or estimate."
 )
@@ -112,8 +134,9 @@ SYSTEM_MOD = (
 INSTRUCTION_MOD = (
     "Extract the single funding action recorded on this SF-30 contract "
     "modification: which contract (PIID) it modifies, the mod number, effective "
-    "date, dollars obligated by this action, and the resulting cumulative "
-    "obligated."
+    "date, dollars obligated by this action (in total and broken out by CLIN), "
+    "the resulting cumulative obligated, and — if it exercises an option — which "
+    "period of performance it brings into effect."
 )
 
 
@@ -135,12 +158,16 @@ def _parse_schema(
     response still raises rather than returning half-populated data.
 
     `constrained=False` skips the parse attempt and goes straight to plain JSON.
-    Callers pass this when they already know the grammar won't compile (the award
-    `Extraction` schema on Bedrock), so we don't pay the full grammar-compilation
-    *timeout* on every ingest just to prove a call that always fails. Providers
-    that *can* enforce the schema keep `constrained=True` and still do — the
-    smaller `Modification` schema compiles on Bedrock, as does everything on the
-    RUNWAY_PROVIDER=anthropic path.
+    Callers pass this when they already know the grammar won't compile, so we don't
+    pay the full grammar-compilation *timeout* on every ingest just to prove a call
+    that always fails. On Bedrock that is now *both* schemas: `Modification` was
+    flat enough to compile until `funding_lines` gave it a nested object list too.
+    Everything on the RUNWAY_PROVIDER=anthropic path still enforces its schema in
+    the decoder.
+
+    Treat this as the rule rather than two special cases: any nested object list
+    added to a schema here costs a dead grammar-compilation timeout per call on
+    Bedrock until its caller passes constrained=False.
     """
     if constrained:
         try:
@@ -251,7 +278,16 @@ def extract_from_pdf(pdf_bytes: bytes) -> Extraction:
 def _parse_mod(content) -> Modification:
     # 8000, not 2000: see the max_tokens note in _parse — thinking shares the
     # budget, and 2000 leaves little room for it plus the JSON.
-    return _parse_schema(content, SYSTEM_MOD, Modification, 8000)
+    #
+    # Unconstrained on Bedrock, same as _parse and for the same reason. Modification
+    # used to be flat enough to compile there, so it asked for constrained decoding
+    # and got it; `funding_lines` made it a schema with a nested object list — the
+    # shape Bedrock's decoder won't build (see _parse_schema) — so the parse attempt
+    # became a guaranteed grammar-compilation timeout paid before every single mod
+    # ingest, then thrown away for the plain-JSON fallback that always answers.
+    return _parse_schema(
+        content, SYSTEM_MOD, Modification, 8000, constrained=(PROVIDER != "bedrock")
+    )
 
 
 def extract_mod_from_text(text: str) -> Modification:

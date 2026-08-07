@@ -135,6 +135,28 @@ class Extraction(BaseModel):
     clins: List[CLIN]
 
 
+class FundingLine(BaseModel):
+    """One CLIN-level obligation recorded by a modification.
+
+    A mod states its money twice — once as a contract total, once broken out by
+    CLIN and ACRN — and only the breakout says which line item the dollars landed
+    on. An award form can only ever report what its own signature obligated, so
+    for any contract past its award (an exercised option year especially) this is
+    the only document-backed route to current per-CLIN funding.
+    """
+
+    clin: str = Field(description="CLIN the dollars are obligated to, e.g. '1001'")
+    acrn: Optional[str] = Field(
+        default=None,
+        description="Accounting Classification Reference Number cited for this "
+        "line, e.g. 'AB'",
+    )
+    amount: float = Field(
+        description="Dollars obligated to this CLIN BY THIS ACTION (the "
+        "increment for this line, not a cumulative total)"
+    )
+
+
 class Modification(BaseModel):
     """One contract modification (SF-30) — a single dated funding action against
     an already-awarded contract. Flat on purpose: the whole obligation history is
@@ -149,6 +171,11 @@ class Modification(BaseModel):
     piid: str = Field(
         description="Contract/order number being modified (SF-30 block 10A)"
     )
+    # (The "flat on purpose" note above still holds for the *action* itself —
+    # one record per document. `funding_lines` below is the one nesting that
+    # earns its keep: without it a mod's money can only be known as a contract
+    # total, and per-CLIN funding on any contract past its award is exactly what
+    # the mod trail is for.)
     mod_number: str = Field(
         description="Amendment/modification number, e.g. 'P00001' (SF-30 block 2)"
     )
@@ -181,6 +208,19 @@ class Modification(BaseModel):
         default=None,
         description="True if a bilateral supplemental agreement (both parties "
         "sign, block 13C); False if a unilateral change order (CO only, 13A)",
+    )
+    funding_lines: Optional[List[FundingLine]] = Field(
+        default=None,
+        description="The per-CLIN breakout of THIS action's money, if the mod "
+        "prints one — the ACCOUNTING AND APPROPRIATION DATA block and/or a "
+        "'funds are obligated by CLIN as follows' clause in the narrative. Null "
+        "when the mod states only a contract-level figure.",
+    )
+    period_exercised: Optional[str] = Field(
+        default=None,
+        description="For an option_exercise action, the period of performance "
+        "this mod brings into effect, named as the document names it, e.g. "
+        "'Option Year 1'. Null for any other action type.",
     )
     description: Optional[str] = Field(
         default=None, description="The modification narrative (SF-30 block 14)"
