@@ -16,6 +16,7 @@ from . import (
     db,
     draft,
     extract,
+    heat,
     lcat,
     people,
     rates,
@@ -451,6 +452,30 @@ def contract_allocation(contract_id: int):
         _cost_model(contract_id),
         db.expected_hours_by_person(),
     )
+
+
+@app.get("/api/contracts/{contract_id}/heat")
+def contract_heat(contract_id: int):
+    """Who's running hot (#83): the people whose hours above their expected week are
+    driving an off-pace CLIN, what those hours cost it weekly, and whether the fix is
+    to stop the overtime or to cut staffing. See heat.py.
+
+    Composed from the allocation payload rather than recomputed, so the Flight Deck's
+    person list and the allocation matrix cannot name different people or disagree
+    about a rate.
+    """
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    rows = db.get_timesheets(contract_id)
+    alloc = allocation.compute_allocation(
+        contract,
+        rows,
+        db.list_expenses(contract_id),
+        _cost_model(contract_id),
+        db.expected_hours_by_person(),
+    )
+    return heat.compute_heat(contract, rows, alloc)
 
 
 class CapacityIn(BaseModel):

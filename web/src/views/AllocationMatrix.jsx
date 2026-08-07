@@ -178,7 +178,14 @@ function causeText(x) {
   }
 }
 
-export default function AllocationMatrix({ contractId, setActiveId, autoBalance, onAutoBalanced }) {
+export default function AllocationMatrix({
+  contractId,
+  setActiveId,
+  autoBalance,
+  onAutoBalanced,
+  focusPerson,
+  onFocusedPerson,
+}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   // draft[empId][clinId] = hrs/wk. The editable overlay on the synced actuals.
@@ -188,6 +195,14 @@ export default function AllocationMatrix({ contractId, setActiveId, autoBalance,
   const [clinFilter, setClinFilter] = useState(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState({ key: null, dir: "desc" });
+  // Arriving from the Flight Deck's "who's running hot" strip (#83): put that person
+  // in view. Consumed once and cleared, so a later manual visit isn't still filtered.
+  useEffect(() => {
+    if (!focusPerson) return;
+    setQuery(focusPerson);
+    setClinFilter(null);
+    onFocusedPerson?.();
+  }, [focusPerson]);
   // What-if roster edits: `added` are planned new people, `removed` are ids rolled
   // off the plan. Both are simulation-only — they change no employee record — but they
   // do go into `plans.data` on save, and Discard puts the roster back.

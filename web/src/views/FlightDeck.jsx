@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
+import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
+import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
@@ -190,6 +191,7 @@ export default function FlightDeck({
   setActiveId,
   onOpenExpenses,
   onOpenAllocation,
+  onOpenPerson,
   onApplyFix,
   onOpenFunding,
   onOpenDrafts,
@@ -202,6 +204,9 @@ export default function FlightDeck({
   // the portfolio.
   const [pendingDelete, setPendingDelete] = useState(false);
   const [burn, setBurn] = useState(null);
+  // Person-level heat (#83). Its own fetch: the Flight Deck renders without it, so a
+  // failure here must never blank the dashboard.
+  const [heat, setHeat] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [alertIndex, setAlertIndex] = useState(0);
@@ -226,6 +231,9 @@ export default function FlightDeck({
     try {
       const b = await getBurn(id);
       setBurn(b);
+      getHeat(id)
+        .then(setHeat)
+        .catch(() => setHeat(null));
       setAlertIndex(0);
       const labor = b.clins.filter((c) => c.is_labor);
       setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
@@ -1462,6 +1470,10 @@ export default function FlightDeck({
           );
         })}
       </div>
+
+      {/* Who's running hot (#83) — under the CLIN cards on purpose: it explains the
+          cards above rather than competing with them. */}
+      <PeopleRunningHot heat={heat} onOpenPerson={onOpenPerson} />
 
       {/* Bottom of the view, deliberately far from the tripwires: remove this
           contract entirely. Same quiet trash as the portfolio cards. */}
