@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
 import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
-import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
+import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase, asOfLabel } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import AlertCarouselCard from "../components/AlertCarouselCard.jsx";
@@ -67,10 +67,17 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
   // A stable dep for the AI effect: the move list can change without the lead-in
   // sentence changing a character, and the grounding has to refire when it does.
   const stepsKey = steps.join("|");
+  // AI phrases the lead-in only when there is nothing but prose to phrase. Once the
+  // solver has produced a named move list, the deterministic sentence is already the
+  // right one — it carries the CLIN's clock and hands off to the bullets — and every
+  // rewrite of it was a downgrade: the model either restated the names sitting right
+  // below it or talked itself into a different remedy than the one on screen. The
+  // strip is a plan, not a paragraph, so the plan is what it shows.
+  const useAi = aiEnabled && !!contractId && steps.length === 0;
 
   useEffect(() => {
-    // AI off: show the deterministic copy, nothing to fetch.
-    if (!aiEnabled || !contractId) {
+    // Nothing to fetch: show the deterministic copy.
+    if (!useAi) {
       setBody(heuristic.body);
       setAiActive(false);
       return;
@@ -82,11 +89,6 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
     const q =
       `Advise the PM on CLIN ${item.code} (${item.name}). In 1–2 short, directive ` +
       `sentences, recommend the concrete next action. Grounding: ${heuristic.body} ` +
-      (steps.length
-        ? `The moves being recommended, shown to the user as a list directly below your ` +
-          `sentences: ${steps.join("; ")}. Introduce them — do not restate them, rename ` +
-          `anyone, or propose a different move. `
-        : "") +
       `Phrase it as advice — don't repeat the numbers as a list.`;
     askRunway({ question: q, history: [], contractId }, (chunk) => {
       if (cancelled) return;
@@ -108,7 +110,7 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
     // keeps its pre-diagnosis advice — which is the contradiction threading `heat`
     // through was meant to remove. Keyed on the text rather than on `heat` so it only
     // refires when the recommendation actually changed.
-  }, [aiEnabled, kind, item.code, contractId, heuristic.body, stepsKey]);
+  }, [useAi, kind, item.code, contractId, heuristic.body, stepsKey]);
 
   return (
     <div
@@ -164,7 +166,7 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
             ⚠ 30-DAY FUNDING DEADLINE
           </span>
         )}
-        {aiEnabled && (
+        {useAi && (
           <span style={{ fontSize: 10.5, color: "var(--faint)", marginLeft: "auto" }}>
             {aiActive ? "✨ thinking…" : "✨ AI"}
           </span>
@@ -402,6 +404,9 @@ export default function FlightDeck({
           : hero?.status === "watch"
             ? "lands tight against the finish line"
             : "clears the finish line";
+  // The date the runway is measured from, printed next to every figure derived from
+  // it so an as-of reading can't be mistaken for a live countdown.
+  const asOf = asOfLabel(sync);
   const notices = scopeNotices(contract);
   const alerts = orderedFlightDeckAlerts({
     dataQuality: data_quality,
@@ -673,6 +678,14 @@ export default function FlightDeck({
                     </>
                   )}
                 </>
+              )}
+              {/* Every figure in the sentence above — the burn %, the day count and
+                  the stop date — is measured from the newest synced timesheet week,
+                  so the banner says which week that was. On a weekly-synced contract
+                  this is a quiet footnote; on a stale one it is the difference between
+                  "you have 99 days" and "you had 99 days, in April". */}
+              {asOf && (
+                <span style={{ color: "var(--faint)" }}> Measured {asOf}.</span>
               )}
             </div>
             <Suggestion
@@ -1252,6 +1265,12 @@ export default function FlightDeck({
                 ? `Limited by ${hero.clin} · ${heroSub}`
                 : "No burn logged yet — sync timesheets"}
           </div>
+          {/* The runway's vantage point (see `asOfLabel`). Withheld on the margin
+              tile: fixed-price work reports no runway, so there is no as-of reading
+              to qualify. */}
+          {!marginOnly && hero && asOf && (
+            <div style={{ fontSize: 11, opacity: 0.75, marginTop: 6 }}>{asOf}</div>
+          )}
         </div>
         <div style={panelStyle}>
           {/* Named denominators (#39). The headline is spend against the *binding*

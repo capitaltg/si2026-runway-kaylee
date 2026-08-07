@@ -163,9 +163,61 @@ export function suggestFor(kind, item, contract, heat) {
   if (kind === "over") {
     const ceiling = item.limited_by === "funding" ? item.funded : item.budget;
     const label = item.limited_by === "funding" ? "funded amount" : "ceiling";
+    // A funding-limited line asks for a mod, and that answer outranks every branch
+    // below including the realized one — checked FIRST on purpose.
+    //
+    // Money having already run out makes the obligation *more* urgent, not less, so
+    // routing the realized case to the staffing paragraph answered the most urgent
+    // funding situation in the app with "trim the off-pace lines back to plan", a green
+    // "Lands every line right at PoP end" and an Open-simulator button. On live contract
+    // 23 (7026HEXDVC0001043) — $2.5M charged against an $800K obligation with $3.5M of
+    // ceiling still underneath — rebalancing recovers nothing already spent, and no
+    // staffing change turns unobligated ceiling into money the government owes.
+    //
+    // Decided from the tripwire item, NOT from the solved plan. `heat` (and with it
+    // `suggestions`) is fetched after burn and can fail on its own, and while it is
+    // pending `plan` is null — so gating the remedy on the plan meant a funding gap
+    // rendered the staffing paragraph on first paint and permanently if that request
+    // failed. Both sources derive from the same `ceiling_breached`, so they agree; the
+    // plan is preferred only for its already-rounded dollars.
+    const funded = plan?.funded ?? item.funded ?? item.budget ?? 0;
+    const headroom = plan?.ceiling_headroom ?? (item.ceiling ?? 0) - funded;
+    const overspent = plan?.overspent ?? item.overspent ?? 0;
+    //
+    // `!hasMoves` keeps this in step with the server's extra condition — it also
+    // requires headroom to beat a week of burn, which the item cannot express. If the
+    // solver produced real moves it judged this a ceiling story, so the staffing answer
+    // stands; if it produced none (or hasn't answered yet) the funding answer does.
+    const fundingLimited =
+      item.limited_by === "funding" &&
+      item.ceiling_breached === false &&
+      headroom > 0 &&
+      !hasMoves;
+    if (fundingLimited) {
+      const spentThrough = overspent > 0;
+      return {
+        body: spentThrough
+          ? `${item.code} spent through its obligated ${moneyM(funded)} around ` +
+            `${shortDate(item.stop_date)} — ${moneyM(overspent)} has been charged since, ` +
+            `and that cost stays at risk until a mod lands. Its ` +
+            `${moneyM(item.ceiling ?? plan?.ceiling)} ceiling still has ${moneyM(headroom)} ` +
+            `underneath, so this is an obligation gap, not overstaffing: get the ` +
+            `incremental-funding mod moving now.`
+          : `${item.code} spends through its obligated ${moneyM(funded)} in ` +
+            `${wk(item.exhaust_week)}${at}, but its ${moneyM(item.ceiling ?? plan?.ceiling)} ` +
+            `ceiling still has ${moneyM(headroom)} beneath that — an obligation gap, not ` +
+            `overstaffing. Get the next incremental-funding mod moving; no staffing change ` +
+            `is needed to deliver the work already funded.`,
+        result: spentThrough
+          ? "Puts the mod on the clock — the only thing that clears the risk."
+          : "Keeps the team in place and puts the mod on the clock.",
+        action: { kind: "funding", urgent: spentThrough },
+      };
+    }
     // Already spent through: rebalancing forward can't recover money that's gone,
     // so the advice leads with the realized fact and the date it happened rather
-    // than an exhaustion week that's already behind the current week.
+    // than an exhaustion week that's already behind the current week. Reached only
+    // when the ceiling is the binding limit — a funding-limited line returned above.
     if (item.stop_date_passed) {
       return {
         body:

@@ -93,6 +93,16 @@ def compute_allocation(
                 "ceiling": card.get("ceiling", 0.0),
                 "mod_in_progress": card.get("mod_in_progress", False),
                 "funding_keeps_pace": card.get("funding_keeps_pace", True),
+                # Whether the *actual* ceiling is the limit in jeopardy, not just the
+                # current tranche. This is the difference between "you need a mod" and
+                # "you need to spend less", and the solver cannot tell them apart
+                # without it: ceiling headroom alone doesn't settle it, because a line
+                # can be projected past its ceiling *and* hold an unobligated slice at
+                # the same time (live: contract 12, $277K unobligated under a ceiling
+                # it is projected to blow by week 35). Defaults True so a payload
+                # without the flag keeps the staffing answer rather than silently
+                # deciding a breach is somebody else's paperwork.
+                "ceiling_breached": card.get("ceiling_breached", True),
                 # Actuals baseline the simulator diffs against.
                 "base_weekly": card.get("weekly", 0.0),
                 "base_status": card.get("status"),

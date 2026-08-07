@@ -447,3 +447,83 @@ test("an underburn with nobody to raise falls back to add-staff advice", () => {
   assert.match(s.body, /Add staff or raise hours/);
   assert.deepEqual(s.steps ?? [], []);
 });
+
+// ---- a funding gap asks for a mod, with or without the solved plan ----------
+//
+// Live contract 23 (7026HEXDVC0001043): $2.5M charged against an $800K obligation with
+// $3.5M of ceiling still underneath. The remedy is the mod. The realized-loss branch
+// used to preempt this and answer it with "trim the off-pace lines back to plan", a
+// green "Lands every line right at PoP end" and an Open-simulator button.
+
+const FUNDING_GAP_ITEM = {
+  code: "CLIN 0001",
+  limited_by: "funding",
+  ceiling_breached: false,
+  ceiling: 4_314_562,
+  funded: 800_000,
+  budget: 800_000,
+  overspent: 1_703_050,
+  spent: 2_503_050,
+  exhaust_week: 8.22,
+  runway_days: 0,
+  stop_date: "2026-03-15",
+  stop_date_passed: true,
+};
+
+test("a funding gap whose money already ran out asks for the mod, not a trim", () => {
+  const s = suggestFor("over", FUNDING_GAP_ITEM, {}, null);
+  assert.equal(s.action.kind, "funding");
+  assert.equal(s.action.urgent, true);
+  assert.match(s.body, /obligation gap, not overstaffing/);
+  assert.match(s.body, /incremental-funding mod moving now/);
+  // The failure this pins: staffing vocabulary and the rebalance action.
+  assert.doesNotMatch(s.body, /[Tt]rim the off-pace lines/);
+  assert.notEqual(s.result, "Lands every line right at PoP end.");
+});
+
+test("the funding remedy does not depend on the heat payload arriving", () => {
+  // `heat` is fetched after burn and can fail on its own. While it is pending there is
+  // no solved plan, and gating the remedy on the plan meant the first paint recommended
+  // cutting staff — permanently if that request failed. Same answer either way.
+  const withoutHeat = suggestFor("over", FUNDING_GAP_ITEM, {}, null);
+  const withHeat = suggestFor("over", FUNDING_GAP_ITEM, {}, {
+    clins: [],
+    people: [],
+    suggestions: [
+      {
+        clin: "0001",
+        funding_limited: true,
+        moves: [],
+        groups: [],
+        notes: [],
+        funded: 800_000,
+        ceiling: 4_314_562,
+        ceiling_headroom: 3_514_562,
+        overspent: 1_703_050,
+      },
+    ],
+  });
+  assert.equal(withoutHeat.action.kind, withHeat.action.kind);
+  assert.equal(withoutHeat.body, withHeat.body);
+});
+
+test("real dollars, never a $0.00M placeholder", () => {
+  // The tripwire item ships `funded`/`budget` but originally carried no `ceiling`, so
+  // prose reaching for `item.ceiling` rendered "$0.00M" at the reader.
+  const s = suggestFor("over", FUNDING_GAP_ITEM, {}, null);
+  assert.doesNotMatch(s.body, /\$0\.00M/);
+  assert.match(s.body, /\$4\.31M ceiling/);
+  assert.match(s.body, /\$3\.51M/);
+});
+
+test("a genuine ceiling breach still gets the staffing answer", () => {
+  // Unobligated headroom must not divert a line that is projected past its ceiling —
+  // no obligation raises a ceiling. This is the contract 12 shape.
+  const s = suggestFor(
+    "over",
+    { ...FUNDING_GAP_ITEM, ceiling_breached: true, overspent: 0, stop_date_passed: false },
+    {},
+    null,
+  );
+  assert.notEqual(s.action.kind, "funding");
+});

@@ -490,3 +490,92 @@ def test_a_trim_apportions_a_multi_clin_week_by_where_the_hours_are():
     move = {m["person"]: m for m in _plan(plans)["moves"]}["Split Dev"]
     assert move["from_hours"] == 30.0
     assert move["to_hours"] == 24.0  # 40 × (30/50)
+
+
+# ---- funding-limited lines get the mod, never a staffing cut ----------------
+#
+# Driven through a minimal allocation payload rather than the real chain above, which
+# is the exception this file's preamble allows for: the guard is pure over the CLIN
+# card's own funding fields (`incrementally_funded`, `ceiling`, `budget`,
+# `base_weekly`) and never consults the heat payload, so there is no wiring for a
+# fixture to get wrong. Building the same state through `allocation` would mean
+# constructing a contract that has genuinely overspent its tranche just to reach a
+# branch that reads four numbers.
+
+
+def _funding_limited_alloc(ceiling, budget, weekly=10_000.0, status="over"):
+    """One incrementally funded CLIN, red, with ceiling still under its funded slice."""
+    return {
+        "contract": {"total_weeks": 52, "current_week": 12, "past_pop": False},
+        "clins": [
+            {
+                "id": "0001",
+                "code": "CLIN 0001",
+                "incrementally_funded": True,
+                "ceiling": ceiling,
+                "budget": budget,
+                "remaining": 0.0,
+                "base_weekly": weekly,
+                "base_status": status,
+                "base_exhaust_week": 26.0,
+                # The ceiling holds — this is a tranche gap, not an overrun. The
+                # breached case has its own test below.
+                "ceiling_breached": False,
+            }
+        ],
+        "employees": [],
+    }
+
+
+def test_a_funding_gap_proposes_no_staffing_moves():
+    # The live failure on 7024HEXDVC0001043: the binding budget is the obligated slice,
+    # so sizing a staffing gap against it recommended clearing a team the contract holds
+    # $1.5M of ceiling to pay for. No moves, and the reason is stated.
+    plans = suggest.solve_moves(_funding_limited_alloc(3_076_112, 1_572_366), {})
+
+    assert len(plans) == 1
+    plan = plans[0]
+    assert plan["funding_limited"] is True
+    assert plan["moves"] == []
+    assert plan["groups"] == []
+    # Not silent. Returning nothing would route the client to its CLIN-level fallback
+    # paragraph — "trim the off-pace lines back to plan" — which is the exact advice
+    # this branch exists to suppress, so the plan has to exist to carry the reason.
+    assert "short an obligation, not overstaffed" in plan["notes"][0]
+    assert "$1.50M of ceiling" in plan["notes"][0]
+    assert plan["ceiling_headroom"] == 1_503_746.0
+
+
+def test_a_projected_ceiling_breach_is_never_a_funding_gap():
+    # The guard's original bug, and the sharpest case: unobligated headroom AND a
+    # ceiling the line is projected to blow. A mod does not raise a ceiling, so this
+    # needs the staffing plan — withholding it on headroom alone left live contract 12
+    # ($277K unobligated under a $4.17M ceiling breached by week 35) with "get a mod"
+    # as the answer to an overrun no obligation can fix.
+    alloc = _funding_limited_alloc(4_172_771, 3_895_169, weekly=117_513.0)
+    alloc["clins"][0]["ceiling_breached"] = True
+    assert not suggest._funding_limited(alloc["clins"][0])
+
+
+def test_a_missing_breach_flag_keeps_the_staffing_answer():
+    # An allocation payload predating the flag must not have its move list silently
+    # withheld — defaulting to "breached" fails safe toward saying something.
+    card = _funding_limited_alloc(3_076_112, 1_572_366)["clins"][0]
+    del card["ceiling_breached"]
+    assert not suggest._funding_limited(card)
+
+
+def test_headroom_must_beat_a_week_of_burn():
+    # A line that has eaten its ceiling to within days of the end is a ceiling story
+    # whichever number happens to bind.
+    plans = suggest.solve_moves(
+        _funding_limited_alloc(1_005_000, 1_000_000, weekly=10_000.0), {}
+    )
+    assert plans == [] or not plans[0].get("funding_limited")
+
+
+def test_a_fully_obligated_line_is_never_funding_limited():
+    # budget == ceiling: there is no unobligated slice to be short of, so an overrun
+    # here is a spending problem and the solver must engage normally.
+    alloc = _funding_limited_alloc(1_000_000, 1_000_000)
+    assert not suggest._funding_limited(alloc["clins"][0])

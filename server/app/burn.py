@@ -34,6 +34,31 @@ _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
 # until this fraction of the PoP *past* the finish line — a large unspent
 # balance / slipping delivery signal, symmetric to the over-ceiling tripwire.
 _UNDER_SLACK_FRAC = 0.15
+# The over-ceiling counterpart to `_UNDER_SLACK_FRAC`, and the reason it exists at
+# all: `_forward_band`'s red edge is a flat one week, so a projection that lands
+# 1.6 weeks shy of a 52-week finish line was called a ceiling breach. That is a 2%
+# tolerance on a forecast built by taking a *four-week* trailing average
+# (`_PACE_WEEKS`) and extrapolating it across the whole remaining PoP — months of
+# leverage on a one-month sample. One 4-day holiday week, one person on leave, one
+# late timesheet moves the landing week further than the old margin allowed, so the
+# flag fired on contracts sitting dead on plan: CLIN 2001 of 7024HEXDVC0001043 read
+# "Over ceiling" at 22.5% of its ceiling spent against 23.1% of its PoP elapsed.
+#
+# The honest question is not "does the landing week miss?" but "is the pace
+# materially hotter than the budget affords?", so red is gated on the pace overrun
+# instead. Affordable weekly = remaining / weeks_to_go, and
+#
+#     weekly / affordable - 1  ==  weeks_to_go / weeks_left - 1
+#
+# so the test is made in weeks and needs no dollars. 5% is wider than the sampling
+# noise and far narrower than a real overrun: on CLIN 2001 the pace is 4% hot with 40
+# weeks to go, while a line genuinely outrunning its funded slice there is 182% hot.
+#
+# This is the RED edge only. An overrun inside it is amber `watch`, not silence — the
+# pace genuinely is above what the budget affords, so it earns a colour; what it does
+# not earn is an alarm and a staffing plan, because a four-week sample cannot resolve
+# a few percent that confidently. Only `ok` means the pace is at or under affordable.
+_PACE_TOLERANCE = 0.05
 # Margin-erosion watch on fixed-price work (#79). Projected cost this close to the
 # firm price means the fee is nearly gone — amber, because there is still a PoP left
 # to correct in and no funding cliff to hit. Set alongside the 0.8 realized-spend
@@ -332,6 +357,54 @@ def _forward_band(exhaust: Optional[float], total_weeks: int) -> str:
     return "ok"
 
 
+def _ceiling_band(
+    ceiling_exhaust: Optional[float], current_week: int, total_weeks: int
+) -> str:
+    """How the *actual* ceiling's projection reads: `over` | `watch` | `ok`.
+
+    Not the same question as `_forward_band`, and it must not be answered with that
+    function's flat one-week edge — see `_PACE_TOLERANCE` for why the edge reported a
+    breach on a CLIN sitting on plan. This asks whether the forward pace is materially
+    hotter than the ceiling can afford across the weeks that are left, which is the
+    question a PM can act on.
+
+    Deliberately conservative about red, because `over` here is not just a label: it
+    is the gate that switches off the incremental-funding softening in
+    `_funded_shortfall_status`. A false positive doesn't merely mislabel a card, it
+    promotes routine tranche funding into a red "Over ceiling" and hands the Flight
+    Deck a staffing-cut recommendation for a contract that has the money to pay its
+    team.
+
+    Any overrun inside the tolerance is amber `watch`. A small overrun is not silence:
+    the pace really is above what the budget affords, so it earns a colour and a place
+    on the card. What it does not earn is a red alarm and a staffing plan, because a
+    four-week sample cannot resolve a few percent that confidently. `ok` therefore
+    means what it says — the pace is at or under what the remaining budget affords.
+
+    There is deliberately no `under` band: unspent ceiling is scope the contract never
+    had to use, and "you are not going to breach your ceiling" is not a finding.
+
+    Two edges resolved before the pace test, neither expressible as a ratio: no
+    headroom left is a breach that has already happened, and past the finish line with
+    headroom intact there is no remaining PoP to project into and so nothing to breach.
+    """
+    if ceiling_exhaust is None:
+        return "ok"
+    weeks_left = ceiling_exhaust - current_week
+    if weeks_left <= 0:
+        return "over"
+    weeks_to_go = total_weeks - current_week
+    if weeks_to_go <= 0:
+        return "ok"
+    # weekly / affordable - 1, said in weeks. See _PACE_TOLERANCE for the identity.
+    overrun = weeks_to_go / weeks_left - 1
+    if overrun > _PACE_TOLERANCE:
+        return "over"
+    if overrun > 0:
+        return "watch"
+    return "ok"
+
+
 def _funds_exceeded(
     spent: float, budget: float, ceiling: float, incrementally_funded: bool
 ) -> bool:
@@ -356,10 +429,8 @@ def _funds_exceeded(
 
 def _funded_shortfall_status(
     runway_days: Optional[int],
-    ceiling_exhaust: Optional[float],
-    total_weeks: int,
+    ceiling_band: str,
     incrementally_funded: bool,
-    ceiling_breached: bool,
     mod_in_progress: bool,
     funding_keeps_pace: bool,
     funds_exceeded: bool = False,
@@ -371,6 +442,14 @@ def _funded_shortfall_status(
     says anything about *funding* once the money is close to gone
     (`_FUNDING_DUE_DAYS`); until then the CLIN is judged on its ceiling projection,
     because that's the long-run truth for a CLIN that keeps getting funded.
+
+    `ceiling_band` is `_ceiling_band`'s tolerance-aware read, and it replaced a
+    `ceiling_breached` boolean plus a re-band through `_forward_band` computed right
+    here. That re-band was where the funding read broke: it judged the ceiling on the
+    same flat one-week edge, so a CLIN whose *ceiling* was fine to within a rounding
+    error still came back red and the softening above it never got to matter. Taking
+    the band ready-made also means the breach flag on the payload, the pill and this
+    status can no longer disagree about the same ceiling — they are one derivation.
 
     The softening is forward-looking only. Once spend is already past the allotted
     funding (`funds_exceeded`) there is nothing left to warn about: FAR 52.232-22's
@@ -389,6 +468,7 @@ def _funded_shortfall_status(
     """
     if funds_exceeded:
         return "over"
+    ceiling_breached = ceiling_band == "over"
     if (
         incrementally_funded
         and not ceiling_breached
@@ -396,16 +476,28 @@ def _funded_shortfall_status(
     ):
         if runway_days is not None and runway_days <= _FUNDING_DUE_DAYS:
             return "funding"
-        # Re-band on the ceiling, but never as an under-burn. Reaching this function
-        # means the funded slice runs dry before PoP end, so "spend faster" is advice
-        # the CLIN cannot take — it runs out of money first. The ceiling projection
-        # is the right instrument for how much *scope* trouble there is, not for
-        # whether to staff up, and the two disagree here by construction: the
-        # under-burn card is built from the funded slice, so it rendered "projected to
-        # under-spend its funded $2.7M by $0.0M ... ~-5 weeks after the PoP ends" —
-        # self-contradictory numbers under a label taken from the other denominator.
-        band = _forward_band(ceiling_exhaust, total_weeks)
-        return "ok" if band == "under" else band
+        # Outside the FAR window the CLIN is judged on its ceiling, so the ceiling's
+        # own band *is* the answer. It can only be `ok` or `watch` here (`over` is
+        # excluded by the guard above) and `_ceiling_band` has no `under` state, which
+        # is what makes the old "spend faster" bug structurally impossible rather than
+        # clamped: reaching this function means the funded slice runs dry before PoP
+        # end, and a CLIN that runs out of money cannot take advice to spend faster.
+        # It used to be able to — the under-burn card is built from the funded slice
+        # while the label came from the ceiling, so the seed-19 demo rendered
+        # "projected to under-spend its funded $2.7M by $0.0M ... ~-5 weeks after the
+        # PoP ends" and advised staffing up on a CLIN 74 days from dry.
+        return ceiling_band
+    # Not softenable. Either the ceiling is genuinely going (`over`), or obligations
+    # are lagging the burn with no mod moving — #22's red, which stays red however
+    # comfortable the ceiling looks, because the money to pay for that ceiling is not
+    # arriving. The one case left is a CLIN that is *not* incrementally funded: its
+    # budget IS the ceiling, so this function was reached by that terminal budget
+    # projecting dry. Inside the tolerance that is a watch and not an alarm, but it is
+    # never silent the way the incremental case is — there is no next tranche to
+    # replenish it, so 5% hot on the only money the contract will ever get is worth
+    # saying out loud.
+    if not incrementally_funded and not ceiling_breached:
+        return "watch"
     return "over"
 
 
@@ -896,7 +988,12 @@ def _compute_clin(
         funding_keeps_pace = funded_frac >= elapsed_frac - _FUND_LAG_SLACK
         pace_source = "proxy"
     ceiling_exhaust = current_week + (ceiling - spent) / weekly if weekly > 0 else None
-    ceiling_breached = ceiling_exhaust is not None and ceiling_exhaust < total_weeks - 1
+    # Tolerance-aware (see `_ceiling_band` / `_PACE_TOLERANCE`). This used to be
+    # `ceiling_exhaust < total_weeks - 1` — a flat one-week margin that called a
+    # projection landing 1.6 weeks shy of a 52-week finish line a breach, and so read
+    # "Over ceiling" on a CLIN 22.5% through its ceiling at 23.1% elapsed.
+    ceiling_band = _ceiling_band(ceiling_exhaust, current_week, total_weeks)
+    ceiling_breached = ceiling_band == "over"
     # Realized, not projected: the allotted funding is already spent through. Both
     # branches below stay red on it and the pill says so in the past tense.
     # Never raised on fixed-price work: there is no allotment to exceed, and "Funds
@@ -952,10 +1049,8 @@ def _compute_clin(
             if band != "over"
             else _funded_shortfall_status(
                 runway_days,
-                ceiling_exhaust,
-                total_weeks,
+                ceiling_band,
                 incrementally_funded,
-                ceiling_breached,
                 mod_in_progress,
                 funding_keeps_pace,
                 funds_exceeded,
@@ -979,6 +1074,18 @@ def _compute_clin(
     # `exhaust_week` (keeps the true crossing) already make. `stop_date_passed`
     # flags it so the UI can say "charging stops today" instead of naming a date
     # that has been and gone.
+    #
+    # Read `stop_date_passed` precisely: it means *the binding budget is spent
+    # through as of the latest sync*, which is a spend fact, not a calendar one. It
+    # is not `stop_date <= today` and must not be swapped for it. Because the whole
+    # clock is anchored to the newest timesheet week (`_anchor_date`), a contract
+    # that has not synced in months can carry a `stop_date` genuinely behind us with
+    # this flag still False — and that is the honest answer, because there are no
+    # timesheets for those weeks: we know the projection is old, not that the wall
+    # was hit. Testing against today instead would assert a breach nobody has
+    # measured, and would paint "charging stopped" on a CLIN whose own pill reads
+    # "On pace". Naming the vantage point is what resolves the tension — see
+    # `sync.as_of` / `data_age_days` on the payload and `asOfLabel` in the UI.
     #
     # Nulled only for `paused` / `unpriced`, exactly like `exhaust_week` and
     # `weeks_left` — there is no pace to project from, and `_PAUSED_WEEKS_LEFT`
@@ -1728,6 +1835,17 @@ def compute(
             "stop_date_passed": c["stop_date_passed"],
             "funded": c["funded"],
             "budget": c["budget"],
+            # Enough to tell an obligation gap from an overrun without a second
+            # request. `limited_by` says which limit binds, but not whether the
+            # *ceiling* is also going — and those two want opposite remedies (a mod
+            # vs. fewer hours). The suggestion layer used to get this from the heat
+            # payload's solved plan, which is fetched after burn and can fail on its
+            # own; on that path a funding gap was answered with a staffing cut. The
+            # remedy must not depend on a second fetch, so the facts ride here.
+            "ceiling": c["ceiling"],
+            "ceiling_breached": c["ceiling_breached"],
+            # Realized dollars past the obligation — the "already at risk" figure.
+            "overspent": c["overspent"],
         }
         # Non-labor CLINs over their binding budget are Limitation of Funds
         # problems too (#41), so they roll into the red list alongside labor.
@@ -2034,6 +2152,19 @@ def compute(
             "people": len({r.get("employee_id") for r in rows if r.get("employee_id")}),
             "weeks": len({r.get("week_ending") for r in rows if r.get("week_ending")}),
             "latest_week": clk["latest_week"],
+            # The vantage point every forward number on this payload is measured from,
+            # and how old it is. `runway_days`, `exhaust_week` and `stop_date` are all
+            # anchored to `_anchor_date` — the newest synced timesheet week — not to
+            # today, because pace can only be measured from hours that have actually
+            # been reported. That is the right denominator, but it makes the day counts
+            # *as-of* figures rather than live countdowns: they move when a sync lands,
+            # not when the clock ticks. With weekly timekeeping the gap is a few days
+            # and nobody needs to think about it; on a contract that hasn't synced in
+            # months the same "99 days of runway" is a claim from a season ago, and a
+            # reader has no way to know unless the payload says so. So it says so, and
+            # every surface printing one of those numbers labels it "as of <date>".
+            "as_of": anchor.isoformat(),
+            "data_age_days": (date.today() - anchor).days,
         },
     }
 

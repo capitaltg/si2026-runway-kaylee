@@ -100,6 +100,13 @@ def _norm(lcat) -> str:
     return (lcat or "").strip().lower()
 
 
+def _moneyM(n) -> str:
+    """`$1.50M`, matching the client's `moneyM` so a note reads like the copy
+    around it. The only place this module formats dollars — everything else hands
+    raw numbers to the prose layer."""
+    return f"${_f(n) / 1e6:.2f}M"
+
+
 def _priced_lcats(card: dict) -> set:
     """The categories a CLIN actually prices, for deciding whether a shift is real.
     Proposing that someone move to a line that cannot pay their category is how you
@@ -419,6 +426,84 @@ def _ceiling_notes(heat_payload, cid, moves) -> List[str]:
     return notes
 
 
+def _funding_limited(card: dict) -> bool:
+    """True when this line's shortfall is an unobligated slice, not a spending problem.
+
+    Three conditions, and the middle one is the one this guard originally got wrong.
+
+    The ceiling must actually hold. Headroom under the funded slice does *not* settle
+    that on its own: a line can carry an unobligated slice and still be projected past
+    its ceiling, and then a mod is not the remedy — the ceiling is a hard limit and no
+    obligation raises it. Live contract 12 is exactly that shape ($277K unobligated
+    beneath a $4.17M ceiling it is projected to blow by week 35 of 52), and on headroom
+    alone this function called it a funding matter and withheld the staffing plan a
+    genuine breach needs. So the engine's own verdict decides it.
+
+    Headroom must also beat a week of burn: a line that has eaten its ceiling to within
+    days of the end is a ceiling story whether or not the last increment happens to be
+    the binding number.
+    """
+    if not card.get("incrementally_funded"):
+        return False
+    if card.get("ceiling_breached", True):
+        return False
+    headroom = _f(card.get("ceiling")) - _f(card.get("budget"))
+    return headroom > _f(card.get("base_weekly"))
+
+
+def _funding_limited_plan(card: dict, cid: str, total_weeks: float) -> dict:
+    """A plan that declines to move anyone, and says why.
+
+    Withdrawing the move list is not the same as having nothing to say, and the
+    difference matters more here than anywhere else in this module. Returning nothing
+    routes the client to its CLIN-level fallback paragraph, which is "trim the off-pace
+    lines back to plan" — the exact staffing advice this branch exists to prevent. So
+    the plan is emitted with an empty move list and a note, the same shape the
+    stop-billing case above uses, and `funding_limited` tells the prose layer to
+    recommend the mod instead of a trim.
+    """
+    headroom = _f(card.get("ceiling")) - _f(card.get("budget"))
+    return {
+        "clin": cid,
+        "direction": "reduce",
+        "diagnosis": None,
+        "weekly": round(_f(card.get("base_weekly")), 2),
+        "target_weekly": None,
+        "gap_weekly": 0.0,
+        "freed_weekly": 0.0,
+        "new_weekly": round(_f(card.get("base_weekly")), 2),
+        "exhaust_week": card.get("base_exhaust_week"),
+        "new_exhaust_week": card.get("base_exhaust_week"),
+        "total_weeks": round(total_weeks, 2) if total_weeks else None,
+        "closed": False,
+        "shortfall_weekly": 0.0,
+        "escalated": False,
+        "moves": [],
+        "groups": [],
+        "unpriced": [],
+        # The dollars that make this an obligation gap rather than an overrun: ceiling
+        # the contract holds but has not yet been given the money to spend.
+        #
+        # `ceiling` and `overspent` ride along because the Flight Deck's tripwire item
+        # does NOT carry them — it ships `funded`/`budget` and the percentages, so prose
+        # reaching for `item.ceiling` renders "$0.00M". This plan is the one place that
+        # already holds both numbers, so it hands them over rather than making the
+        # client find a second source for the same contract.
+        "funding_limited": True,
+        "ceiling_headroom": round(headroom, 2),
+        "ceiling": round(_f(card.get("ceiling")), 2),
+        "funded": round(_f(card.get("budget")), 2),
+        # Positive only once spend has passed the obligation — the realized case, where
+        # the money is already gone rather than merely forecast to go.
+        "overspent": round(max(0.0, _f(card.get("spent")) - _f(card.get("budget"))), 2),
+        "notes": [
+            "This line is short an obligation, not overstaffed — there is still "
+            f"{_moneyM(headroom)} of ceiling beneath its funded slice, so no staffing "
+            "move is proposed. The fix is the next incremental-funding mod."
+        ],
+    }
+
+
 def solve_moves(alloc: dict, heat_payload: dict) -> List[dict]:
     """One plan per off-pace CLIN: ordered named moves, grouped, with the result line.
 
@@ -462,6 +547,18 @@ def solve_moves(alloc: dict, heat_payload: dict) -> List[dict]:
         weekly = _f(card.get("base_weekly"))
         if weekly <= 0:
             continue  # nothing charging yet — there is nothing to move
+
+        # Running out of *funding* is not running out of *money*, and the two want
+        # opposite remedies. On an incrementally funded line the binding budget is the
+        # obligated slice, not the ceiling — so a line burning through that slice with
+        # ceiling still underneath it is short an obligation, not overstaffed, and the
+        # fix is the next mod. Sizing a staffing gap against the funded slice instead
+        # proposed rolling a fully-funded team off a contract that has the money to pay
+        # them: that is how 7024HEXDVC0001043 came to recommend clearing its own staff.
+        # A real ceiling breach still gets the move list.
+        if status in REDUCE_STATES and _funding_limited(card):
+            plans.append(_funding_limited_plan(card, cid, total_weeks))
+            continue
         target = max(0.0, _f(card.get("remaining"))) / weeks_remaining
 
         rows_on_clin = [

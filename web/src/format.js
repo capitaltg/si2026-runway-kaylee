@@ -34,6 +34,34 @@ export function stopPhrase(stopDate, reason, passed) {
     : `Charging stops ~${shortDate(stopDate)} at ceiling`;
 }
 
+// How stale a sync has to be before the "as of" label also says how old it is.
+// Weekly timekeeping means a healthy contract is always a few days behind, and
+// printing "· 6 days ago" on every card would train people to ignore the one that
+// says 119. Two weeks is past any normal timesheet lag.
+const STALE_DAYS = 14;
+
+// The vantage point a runway figure is measured from (`sync.as_of` / `data_age_days`).
+//
+// Every forward number the engine produces — `runway_days`, `exhaust_week`,
+// `stop_date` — is anchored to the newest synced timesheet week, not to today,
+// because pace can only be measured from hours that have actually been reported.
+// That is the right denominator and it is deliberately not being changed: a burn rate
+// invented for the weeks nobody has filed yet would be a guess wearing an actual's
+// clothes. But it makes those figures *as-of* readings rather than live countdowns —
+// they move when a sync lands, not when the clock ticks — and a reader has no way to
+// know that from the number alone. Contract 5 rendered "99 days of runway" measured
+// from a week four months gone, which is why the count appeared frozen.
+//
+// So the number keeps its meaning and gains its date. Inside a normal sync lag that
+// is just a quiet "as of 10 Apr"; past `STALE_DAYS` it says how far behind it is,
+// because at that point the staleness is the more useful fact.
+export function asOfLabel(sync) {
+  if (!sync?.as_of) return null;
+  const age = sync.data_age_days;
+  const stale = age != null && age >= STALE_DAYS;
+  return `as of ${shortDate(sync.as_of)}${stale ? ` · ${age} days ago` : ""}`;
+}
+
 // Per-CLIN accent hues, assigned by index (design's avPal).
 const HUES = ["#4361ee", "#06b6d4", "#7c5cff", "#ef8f2a", "#10b981", "#f05252"];
 export const hueFor = (i) => HUES[i % HUES.length];
