@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
 import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
-import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
+import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase, asOfLabel } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import AlertCarouselCard from "../components/AlertCarouselCard.jsx";
@@ -58,10 +58,27 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
+  // #63's named move list. Rendered verbatim from the server's plan and deliberately
+  // NOT part of what the model may rewrite: AI phrases the lead-in sentence, and the
+  // actions themselves stay deterministic. That is what makes AI-on and AI-off
+  // recommend identical moves rather than merely similar advice — the model cannot
+  // invent, drop or reorder a move because it never writes this list.
+  const steps = heuristic.steps || [];
+  const notes = heuristic.notes || [];
+  // A stable dep for the AI effect: the move list can change without the lead-in
+  // sentence changing a character, and the grounding has to refire when it does.
+  const stepsKey = steps.join("|");
+  // AI phrases the lead-in only when there is nothing but prose to phrase. Once the
+  // solver has produced a named move list, the deterministic sentence is already the
+  // right one — it carries the CLIN's clock and hands off to the bullets — and every
+  // rewrite of it was a downgrade: the model either restated the names sitting right
+  // below it or talked itself into a different remedy than the one on screen. The
+  // strip is a plan, not a paragraph, so the plan is what it shows.
+  const useAi = aiEnabled && !!contractId && steps.length === 0;
 
   useEffect(() => {
-    // AI off: show the deterministic copy, nothing to fetch.
-    if (!aiEnabled || !contractId) {
+    // Nothing to fetch: show the deterministic copy.
+    if (!useAi) {
       setBody(heuristic.body);
       setAiActive(false);
       return;
@@ -94,7 +111,7 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
     // keeps its pre-diagnosis advice — which is the contradiction threading `heat`
     // through was meant to remove. Keyed on the text rather than on `heat` so it only
     // refires when the recommendation actually changed.
-  }, [aiEnabled, kind, item.code, contractId, heuristic.body]);
+  }, [useAi, kind, item.code, contractId, heuristic.body, stepsKey]);
 
   return (
     <div
@@ -150,13 +167,49 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
             ⚠ 30-DAY FUNDING DEADLINE
           </span>
         )}
-        {aiEnabled && (
+        {useAi && (
           <span style={{ fontSize: 10.5, color: "var(--faint)", marginLeft: "auto" }}>
             {aiActive ? "✨ thinking…" : "✨ AI"}
           </span>
         )}
       </div>
       <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55 }}>{body}</div>
+      {/* The design's bulleted move list (Runway.dc.html:217) — named people and the
+          hours they move to, one bullet per decision rather than one per person. */}
+      {steps.length > 0 && (
+        <ul
+          style={{
+            margin: "10px 0 0",
+            paddingLeft: 18,
+            fontSize: 13,
+            color: "var(--text)",
+            lineHeight: 1.7,
+          }}
+        >
+          {steps.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      )}
+      {/* Caveats the move list cannot express: an hours ceiling the dollars don't fix,
+          people whose hours have no printed rate, a gap no staffing change closes. The
+          ticket asks for these to be said plainly rather than dropped. */}
+      {notes.map((n) => (
+        <div
+          key={n}
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: "var(--faint)",
+            lineHeight: 1.5,
+            display: "flex",
+            gap: 6,
+          }}
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>{n}</span>
+        </div>
+      ))}
       {heuristic.action && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
           {heuristic.result && (
@@ -170,7 +223,14 @@ function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onActio
                 <button onClick={() => onAction("simulator")} style={btnSecondary}>
                   Open simulator
                 </button>
-                <button onClick={() => onAction("apply-fix")} style={btnPrimary}>
+                {/* Carries the solved moves so the matrix applies exactly what is
+                    listed above. Without them it falls back to the uniform scale,
+                    which is the only honest thing to do for a CLIN the solver could
+                    not close. */}
+                <button
+                  onClick={() => onAction("apply-fix", heuristic.action.moves)}
+                  style={btnPrimary}
+                >
                   Apply fix
                 </button>
               </>
@@ -353,6 +413,9 @@ export default function FlightDeck({
           : hero?.status === "watch"
             ? "lands tight against the finish line"
             : "clears the finish line";
+  // The date the runway is measured from, printed next to every figure derived from
+  // it so an as-of reading can't be mistaken for a live countdown.
+  const asOf = asOfLabel(sync);
   const notices = scopeNotices(contract);
   const alerts = orderedFlightDeckAlerts({
     dataQuality: data_quality,
@@ -386,11 +449,12 @@ export default function FlightDeck({
   }
 
   // Route a suggestion's action buttons: "simulator" opens the Allocation Matrix
-  // untouched, "apply-fix" opens it with the rebalanced plan pre-applied, and
-  // "funding" opens the Funding History.
-  function onSuggestAction(kind) {
+  // untouched, "apply-fix" opens it with the plan pre-applied — the #63 move list when
+  // the solver produced one, the uniform rebalance when it didn't — and "funding" opens
+  // the Funding History.
+  function onSuggestAction(kind, moves) {
     if (kind === "simulator") onOpenAllocation?.();
-    else if (kind === "apply-fix") onApplyFix?.();
+    else if (kind === "apply-fix") onApplyFix?.(moves);
     else if (kind === "funding") onOpenFunding?.();
   }
 
@@ -625,6 +689,14 @@ export default function FlightDeck({
                     </>
                   )}
                 </>
+              )}
+              {/* Every figure in the sentence above — the burn %, the day count and
+                  the stop date — is measured from the newest synced timesheet week,
+                  so the banner says which week that was. On a weekly-synced contract
+                  this is a quiet footnote; on a stale one it is the difference between
+                  "you have 99 days" and "you had 99 days, in April". */}
+              {asOf && (
+                <span style={{ color: "var(--faint)" }}> Measured {asOf}.</span>
               )}
             </div>
             <Suggestion
@@ -1204,6 +1276,12 @@ export default function FlightDeck({
                 ? `Limited by ${hero.clin} · ${heroSub}`
                 : "No burn logged yet — sync timesheets"}
           </div>
+          {/* The runway's vantage point (see `asOfLabel`). Withheld on the margin
+              tile: fixed-price work reports no runway, so there is no as-of reading
+              to qualify. */}
+          {!marginOnly && hero && asOf && (
+            <div style={{ fontSize: 11, opacity: 0.75, marginTop: 6 }}>{asOf}</div>
+          )}
         </div>
         <div style={panelStyle}>
           {/* Named denominators (#39). The headline is spend against the *binding*

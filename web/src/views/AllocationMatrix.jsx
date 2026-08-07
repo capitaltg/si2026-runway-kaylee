@@ -967,10 +967,52 @@ export default function AllocationMatrix({
     setSavedFp(null);
   }
 
+  // Apply #63's solved move list into the grid, exactly as the suggestion listed it.
+  //
+  // This replaces the uniform scale for the tripwire path. `applyBalance` above stays
+  // as the manual "⚡ Balance to finish on plan" toolbar action, because scaling every
+  // line to land at PoP end is still a legitimate thing to ask for on purpose — it is
+  // just the wrong thing to hand someone who asked "what do I do about CLIN 0002",
+  // since it silently trims people who are already at their expected hours.
+  //
+  // The moves are applied verbatim. Nothing is re-derived here: the target hours, the
+  // floors and the destination CLIN were all decided server-side, and recomputing any
+  // of them client-side is how the button and the bullet list above it would start
+  // disagreeing.
+  function applyMoves(moves) {
+    setDraft((d) => {
+      const nd = { ...d };
+      const cell = (id) => nd[id] || d[id] || {};
+      for (const m of moves) {
+        const to = Math.max(0, Math.min(HOURS_CAP, Math.round(m.to_hours || 0)));
+        nd[m.person_id] = { ...cell(m.person_id), [m.clin]: to };
+        // A shift moves the hours rather than deleting them, so the destination line
+        // has to gain what the source line gave up — otherwise "move Wei to 0003"
+        // reads as a roll-off in the grid and the underburn it was meant to fix
+        // stays open.
+        if (m.kind === "shift" && m.to_clin) {
+          const dest = cell(m.person_id)[m.to_clin] || 0;
+          nd[m.person_id] = {
+            ...nd[m.person_id],
+            [m.to_clin]: Math.max(0, Math.min(HOURS_CAP, Math.round(dest + m.hours_moved))),
+          };
+        }
+      }
+      return nd;
+    });
+    setLoadedPlan(null);
+    setLoadedPlanName(null);
+    setSavedFp(null);
+  }
+
   // Deep-link from a Flight Deck "Apply fix" suggestion: once the grid has
-  // loaded, fire applyBalance once, then tell App to clear the flag so a later
+  // loaded, apply the plan once, then tell App to clear the flag so a later
   // manual visit isn't auto-rebalanced. balancedRef guards double-fires within a
   // single mount while the flag-clear propagates.
+  //
+  // `autoBalance` is either #63's array of moves or `true` — the latter meaning the
+  // solver had no move set for this line, so the uniform rebalance is the honest
+  // fallback (and the shape older callers pass).
   const balancedRef = useRef(false);
   useEffect(() => {
     if (!autoBalance) {
@@ -979,7 +1021,8 @@ export default function AllocationMatrix({
     }
     if (!data || !draft || balancedRef.current) return;
     balancedRef.current = true;
-    applyBalance();
+    if (Array.isArray(autoBalance) && autoBalance.length) applyMoves(autoBalance);
+    else applyBalance();
     onAutoBalanced?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoBalance, data, draft]);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shortDate, stopPhrase } from "./format.js";
+import { shortDate, stopPhrase, asOfLabel } from "./format.js";
 
 test("shortDate renders an ISO date without shifting it", () => {
   // The reason this is regex-parsed and not `new Date(s)`: that parses a bare ISO
@@ -43,4 +43,50 @@ test("no stop date renders nothing at all", () => {
   // Paused, unpriced and non-labor CLINs. The caller hides the row on null rather
   // than printing an em dash where a date would go.
   assert.equal(stopPhrase(null, null, false), null);
+});
+
+// ---- asOfLabel: the vantage point a runway figure is measured from ----------
+//
+// Every forward figure the engine reports is anchored to the newest synced timesheet
+// week, not to today, because pace can only be measured from reported hours. That
+// makes them as-of readings rather than live countdowns, and live contract 5 showed
+// "99 days of runway" measured from a week four months gone — which is why the count
+// looked frozen. The label is what stops the number reading as a live one.
+
+test("asOfLabel names the week the figures are measured from", () => {
+  assert.equal(asOfLabel({ as_of: "2026-04-10", data_age_days: 6 }), "as of 10 Apr 26");
+});
+
+test("asOfLabel stays quiet about a normal timesheet lag", () => {
+  // Weekly timekeeping means a healthy contract is always a few days behind. Adding
+  // "· 6 days ago" to every card trains people to ignore the one that says 119.
+  assert.equal(asOfLabel({ as_of: "2026-04-10", data_age_days: 13 }), "as of 10 Apr 26");
+});
+
+test("asOfLabel says how far behind a stale sync is", () => {
+  // Past any normal lag the staleness is the more useful fact — this is the contract
+  // 5 case, where the difference is "you have 99 days" vs "you had 99 days, in April".
+  assert.equal(
+    asOfLabel({ as_of: "2026-04-10", data_age_days: 119 }),
+    "as of 10 Apr 26 · 119 days ago",
+  );
+  // The boundary itself counts as stale.
+  assert.equal(
+    asOfLabel({ as_of: "2026-04-10", data_age_days: 14 }),
+    "as of 10 Apr 26 · 14 days ago",
+  );
+});
+
+test("asOfLabel renders nothing without an anchor date", () => {
+  // A payload older than this bundle has no `as_of`. The callers hide the line on
+  // null rather than printing "as of —", which would read as a failed lookup.
+  assert.equal(asOfLabel({ rows: 0 }), null);
+  assert.equal(asOfLabel(null), null);
+  assert.equal(asOfLabel(undefined), null);
+});
+
+test("asOfLabel still labels a sync whose age is unknown", () => {
+  // `data_age_days` absent but `as_of` present: name the date, claim nothing about
+  // how old it is.
+  assert.equal(asOfLabel({ as_of: "2026-04-10" }), "as of 10 Apr 26");
 });

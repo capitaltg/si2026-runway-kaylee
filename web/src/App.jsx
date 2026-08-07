@@ -181,10 +181,19 @@ export default function App() {
   }
 
   // A trim/boost suggestion jumped us to the Allocation Matrix — flag it to
-  // pre-apply the rebalanced plan on arrival. AllocationMatrix clears the flag
+  // pre-apply the plan on arrival. AllocationMatrix clears the flag
   // (onAutoBalanced) once it fires, so a later manual visit stays untouched.
-  function openAllocationBalanced() {
-    setPendingBalance(true);
+  //
+  // The flag carries #63's solved move list when there is one, so the grid gets exactly
+  // the moves the suggestion named rather than a uniform scale that happens to hit the
+  // same total. `true` still means "no move list — do the uniform rebalance", which is
+  // what a CLIN the solver couldn't close falls back to.
+  //
+  // Routed through `navigate` rather than `setView` so the jump lands in browser history
+  // like every other view change (#115). The move list is a parameter of the navigation,
+  // not a reason to bypass it.
+  function openAllocationBalanced(moves) {
+    setPendingBalance(moves && moves.length ? moves : true);
     navigate("allocate");
   }
 
