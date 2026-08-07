@@ -21,9 +21,18 @@ import {
   absenceWorkdays,
   shiftDate,
 } from "../absence.js";
-import { planFingerprint, isUnsaved } from "../plans.js";
-import { money, panelStyle, hueFor, statusColor, pill } from "../format.js";
+import {
+  planFingerprint,
+  isUnsaved,
+  newAddedId,
+  isAddedId,
+  scoringSnapshot,
+  snapshotChanges,
+} from "../plans.js";
+import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
+import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
+import { TrashButton } from "../components/DeleteContract.jsx";
 import {
   prefillPerson,
   rateOptions,
@@ -211,7 +220,6 @@ export default function AllocationMatrix({
   const [newPerson, setNewPerson] = useState(null); // the open "add person" form
   const [addPersonError, setAddPersonError] = useState(null);
   const [directory, setDirectory] = useState({ people: [], utilization: {}, loading: false, error: null });
-  const addSeq = useRef(0);
   // #85 — dated absence. Two tiers, deliberately:
   //   `absences` is the what-if list: PTO, start and roll-off dates typed into *this*
   //   plan. Client-side and saved into `plans.data`, like `added` / `removed`.
@@ -241,6 +249,11 @@ export default function AllocationMatrix({
   const [cmpA, setCmpA] = useState("current");
   const [cmpB, setCmpB] = useState("current");
   const [plansMenuOpen, setPlansMenuOpen] = useState(false);
+  // The plan the delete dialog is asking about (#67). Held as the row itself, not an
+  // id, so the dialog can name and date what is about to go.
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   // LCAT → rate-line mapping (#64). `rateLines` is every line in play on this
   // contract plus the mappings already saved; `mapping` is the open affordance
   // ({ lcat, clinId, cause, suggestion, priced_on }), which is what the ⚠ opens
@@ -683,6 +696,20 @@ export default function AllocationMatrix({
     dirty,
   });
 
+  // A third question (#67): has the *contract* moved under a saved plan? Not an edit
+  // and not a sync — a mod that re-funded a CLIN, an imported rate schedule, an
+  // exercised option year. Those change what a saved plan's numbers mean while its
+  // name stays the same. Derived per plan rather than stored, so the badge is a
+  // reading of the live contract and can never itself go stale.
+  const liveSnapshot = useMemo(() => scoringSnapshot(data), [data]);
+  const staleReasons = useMemo(() => {
+    const m = {};
+    for (const p of plans)
+      m[p.id] = snapshotChanges(p.data?.scored_against, liveSnapshot, p.data);
+    return m;
+  }, [plans, liveSnapshot]);
+  const loadedStale = (loadedPlan && staleReasons[loadedPlan]) || [];
+
   // Per-person avatar hue keyed to roster order, so a person keeps their color
   // regardless of filtering/sorting.
   const hueOf = useMemo(() => {
@@ -862,7 +889,13 @@ export default function AllocationMatrix({
     const nm = typed || (updating ? loadedPlanName : "") || "Untitled plan";
     // Snapshot what we send, not what's on screen when the response lands: an edit
     // made mid-flight must still read as unsaved afterwards.
-    const sent = { draft, added, removed, absences };
+    //
+    // `scored_against` rides along (#67): the contract terms these hours were priced
+    // under, so a reload after a mod can say the plan's numbers no longer mean what
+    // they meant. It is deliberately outside `planFingerprint` — the terms moving is
+    // not an edit the user made, and lighting up Save because a mod landed would put
+    // us back where #62 started.
+    const sent = { draft, added, removed, absences, scored_against: liveSnapshot };
     const sentFp = fingerprint;
     setSaveBusy(true);
     try {
@@ -904,31 +937,48 @@ export default function AllocationMatrix({
     // plan. (The contract's *committed* absences and holidays do apply to every
     // plan, old and new — those are facts about the contract, not about the plan.)
     setAbsences(d.absences || []);
-    // Keep new-add ids from colliding with the reloaded plan's.
-    const maxSeq = (d.added || []).reduce((m, a) => {
-      const n = parseInt(String(a.id).replace("added-", ""), 10);
-      return Number.isFinite(n) ? Math.max(m, n + 1) : m;
-    }, addSeq.current);
-    addSeq.current = maxSeq;
+    // Planned-add ids used to be a per-session counter, which meant a reload had to
+    // push the counter past whatever the plan held — and two plans saved in separate
+    // sessions still both owned `added-0`, so comparing them read two different
+    // people as one. Ids are minted unique now (see plans.newAddedId), so there is
+    // nothing left to reseed.
     setLoadedPlan(plan.id);
     setLoadedPlanName(plan.name);
     // What's on screen now IS the saved plan, so nothing is pending (#62).
     setSavedFp(planFingerprint({ ...d, draft: d.draft || (data ? buildDraft(data) : {}) }));
   }
 
-  async function deletePlanById(id) {
+  // Deleting is the one irreversible thing in this view and it sat on a bare × next
+  // to the button you click to *load* a plan — a 26px miss threw the work away with
+  // no undo. It asks first now, through the app's own dialog rather than the
+  // browser's: the question a mis-click raises is "which plan is this?", and only a
+  // dialog that can name the plan and date it answers that.
+  function requestDeletePlan(id) {
+    setDeleteError(null);
+    setPendingDelete(plans.find((p) => p.id === id) || null);
+  }
+
+  async function confirmDeletePlan() {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
     try {
-      await deletePlan(contractId, id);
-      if (loadedPlan === id) {
+      await deletePlan(contractId, pendingDelete.id);
+      if (loadedPlan === pendingDelete.id) {
         // The grid keeps the deleted plan's numbers — they're still a valid what-if —
         // but it is no longer anybody's saved plan, so Save has to name a new one.
         setLoadedPlan(null);
         setLoadedPlanName(null);
         setSavedFp(null);
       }
+      setPendingDelete(null);
       refreshPlans();
     } catch (e) {
-      setError(e.message);
+      // Kept in the dialog rather than thrown up to the page banner: the failure
+      // belongs next to the button that caused it, and the plan is still there.
+      setDeleteError(e.message);
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -1041,7 +1091,7 @@ export default function AllocationMatrix({
   // Roll someone off the plan. A planned add just disappears; a synced person is
   // marked removed (excluded from burn) — Discard brings everyone back.
   function removePerson(id) {
-    if (String(id).startsWith("added-")) setAdded((a) => a.filter((p) => p.id !== id));
+    if (isAddedId(id)) setAdded((a) => a.filter((p) => p.id !== id));
     else setRemoved((r) => (r.includes(id) ? r : [...r, id]));
   }
 
@@ -1125,7 +1175,7 @@ export default function AllocationMatrix({
       return;
     }
     const hrs = Math.max(0, Math.min(80, +newPerson.hrs || 0));
-    const id = `added-${addSeq.current++}`;
+    const id = newAddedId();
     const rate = Number(newPerson.rate);
     setAdded((a) => [
       ...a,
@@ -1155,7 +1205,7 @@ export default function AllocationMatrix({
   // Clone a person as a planned add — same LCAT, rates and hours. "Add another
   // like this LCAT" without retyping.
   function duplicatePerson(e) {
-    const id = `added-${addSeq.current++}`;
+    const id = newAddedId();
     const rates = {};
     clins.forEach((c) => (rates[c.id] = rateFor(e.id, c.id)));
     // "Another like this one" carries their expected week too — a copy of a 32-hr
@@ -1216,6 +1266,21 @@ export default function AllocationMatrix({
               "modelling from the synced actuals"
             )}
           </div>
+          {/* #67 — the plan is still scored live, against today's funding, rates and
+              calendar. That is the right arithmetic and the wrong silence: the same
+              plan, under the same name, now says something it didn't say when it was
+              written. Saying which terms moved is what makes the numbers on screen
+              readable; saving over it re-baselines the snapshot. */}
+          {loadedStale.length > 0 && (
+            <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 6, display: "flex", gap: 6 }}>
+              <span aria-hidden="true">⚠</span>
+              <span>
+                Scored against terms that have changed since it was saved —{" "}
+                {loadedStale.join("; ")}. Its numbers are current; what it was written
+                against is not. Save it again to re-baseline.
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* Which plan you are in, and whether it's saved. The badge this replaces
@@ -1694,13 +1759,40 @@ export default function AllocationMatrix({
                           <div style={menuLabel}>Saved plans</div>
                           {plans.map((p) => (
                             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <button onClick={() => { loadPlan(p.id); setPlansMenuOpen(false); }} style={{ ...menuItem, flex: 1, color: loadedPlan === p.id ? "var(--accent)" : "var(--text)" }}>
-                                {loadedPlan === p.id ? "✓ " : ""}
-                                {p.name}
+                              <button
+                                onClick={() => { loadPlan(p.id); setPlansMenuOpen(false); }}
+                                title={staleReasons[p.id]?.length ? staleTitle(staleReasons[p.id]) : ""}
+                                style={{ ...menuItem, flex: 1, color: loadedPlan === p.id ? "var(--accent)" : "var(--text)" }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {loadedPlan === p.id ? "✓ " : ""}
+                                    {p.name}
+                                  </span>
+                                  {staleReasons[p.id]?.length > 0 && (
+                                    <span style={staleChip}>STALE</span>
+                                  )}
+                                </div>
+                                {/* Whether a plan has been touched since it was written,
+                                    which is what tells two similar names apart. A plan
+                                    that was never saved over shows only when it was
+                                    written — claiming an edit that never happened would
+                                    be worse than saying nothing. */}
+                                <div style={{ fontSize: 10.5, color: "var(--faint)", fontWeight: 400 }}>
+                                  {p.updated_at
+                                    ? `Updated ${shortDate(p.updated_at)}`
+                                    : `Saved ${shortDate(p.created_at)}`}
+                                </div>
                               </button>
-                              <button onClick={() => deletePlanById(p.id)} title="Delete plan" style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "transparent", color: "var(--faint)", cursor: "pointer", fontSize: 14 }}>
-                                ×
-                              </button>
+                              {/* The same quiet trash the contract delete uses (#29),
+                                  rather than a × that could be a close button. It
+                                  names the plan, so the control isn't "delete
+                                  something" to a screen reader. */}
+                              <TrashButton
+                                size={13}
+                                label={`Delete the saved plan ${p.name}`}
+                                onClick={() => requestDeletePlan(p.id)}
+                              />
                             </div>
                           ))}
                         </>
@@ -2197,14 +2289,14 @@ export default function AllocationMatrix({
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
                                 {e.name}
-                                {String(e.id).startsWith("added-") && (
+                                {isAddedId(e.id) && (
                                   <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--accent)", background: "var(--panel2)", padding: "1px 6px", borderRadius: 5 }}>
                                     PLANNED
                                   </span>
                                 )}
                               </div>
                               <div style={{ fontSize: 11.5, color: "var(--dim)", fontFamily: mono }}>
-                                {String(e.id).startsWith("added-") ? "—" : e.id}
+                                {isAddedId(e.id) ? "—" : e.id}
                               </div>
                             </div>
                             {/* #85 — dated absence, entered from the person's row
@@ -2660,6 +2752,57 @@ export default function AllocationMatrix({
           }}
         />
       )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete “${pendingDelete.name || "Untitled plan"}”?`}
+          confirmLabel="Delete plan"
+          busy={deleteBusy}
+          error={deleteError}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmDeletePlan}
+        >
+          {/* What actually goes, and — the part worth saying out loud — what doesn't.
+              A plan is a question, not a record of work: no synced hours, no rates and
+              no funding are touched by deleting one. */}
+          <div>
+            This saved plan — its hours grid, planned adds, roll-offs and any absences
+            typed into it — will be removed.{" "}
+            <b style={{ color: "var(--text)" }}>This can't be undone.</b>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            No synced hours, rates or funding change. Only the plan goes.
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              padding: "8px 11px",
+              borderRadius: 10,
+              background: "var(--panel2)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontWeight: 600, color: "var(--text)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {pendingDelete.name || "Untitled plan"}
+            </span>
+            {staleReasons[pendingDelete.id]?.length > 0 && <span style={staleChip}>STALE</span>}
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--faint)", whiteSpace: "nowrap" }}>
+              {pendingDelete.updated_at
+                ? `Updated ${shortDate(pendingDelete.updated_at)}`
+                : `Saved ${shortDate(pendingDelete.created_at)}`}
+            </span>
+          </div>
+          {loadedPlan === pendingDelete.id && (
+            // Deleting the plan you're in doesn't clear the grid, and a dialog that
+            // let you assume it did would be scarier than the truth.
+            <div style={{ marginTop: 10, color: "var(--dim)" }}>
+              You're editing this plan. The numbers stay on screen as an unsaved
+              what-if — you'd just have to name it again to save it.
+            </div>
+          )}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
@@ -3082,6 +3225,21 @@ const menuLabel = {
   padding: "4px 10px",
 };
 const menuDivider = { height: 1, background: "var(--border)", margin: "6px 4px" };
+// A plan whose contract has moved under it (#67). Only ever set from real evidence:
+// a plan saved before snapshots existed carries no chip, because "we can't tell" and
+// "it's stale" are different answers.
+const staleChip = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: ".05em",
+  color: "var(--warn)",
+  border: "1px solid var(--warn)",
+  borderRadius: 5,
+  padding: "0 4px",
+  flexShrink: 0,
+};
+const staleTitle = (reasons) =>
+  `Saved under terms that have since changed — ${reasons.join("; ")}.`;
 const row = {
   display: "flex",
   justifyContent: "space-between",

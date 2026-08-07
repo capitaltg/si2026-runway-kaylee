@@ -101,7 +101,9 @@ def init_db():
     )
     # Saved allocation-matrix what-if plans, keyed to a contract. `data` is the
     # JSON sim state (per-person hrs grid + planned adds + rolled-off people) so a
-    # plan reloads exactly as it was modeled.
+    # plan reloads exactly as it was modeled, plus `scored_against` — the contract
+    # terms in force when it was saved, which is how the matrix knows a plan has
+    # gone stale (#67).
     conn.execute(
         """CREATE TABLE IF NOT EXISTS plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +113,10 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # NULL until the plan is first saved over, which is the distinction the menu
+    # draws: "Saved 12 Jun" vs "Updated 3 Aug". A default of `created_at` would
+    # claim every plan had been edited.
+    _add_missing_columns(conn, "plans", {"updated_at": "TEXT"})
     # Indirect rate pools — fringe / overhead / G&A (#77). `contract_id IS NULL` is
     # a company-wide default; a row with a contract_id overrides it for that award.
     # Fiscal-year-keyed from day one (see rates.RateSet) and status-tagged, because
@@ -746,7 +752,7 @@ def save_plan(contract_id: int, name: str, data: dict) -> dict:
     conn.commit()
     pid = cur.lastrowid
     row = conn.execute(
-        "SELECT id, name, created_at FROM plans WHERE id = ?", (pid,)
+        "SELECT id, name, created_at, updated_at FROM plans WHERE id = ?", (pid,)
     ).fetchone()
     conn.close()
     return dict(row)
@@ -761,7 +767,8 @@ def update_plan(contract_id: int, plan_id: int, name: str, data: dict):
     """
     conn = get_conn()
     cur = conn.execute(
-        "UPDATE plans SET name = ?, data = ? WHERE id = ? AND contract_id = ?",
+        """UPDATE plans SET name = ?, data = ?, updated_at = datetime('now')
+           WHERE id = ? AND contract_id = ?""",
         (name, json.dumps(data), plan_id, contract_id),
     )
     conn.commit()
@@ -769,7 +776,7 @@ def update_plan(contract_id: int, plan_id: int, name: str, data: dict):
         conn.close()
         return None
     row = conn.execute(
-        "SELECT id, name, created_at FROM plans WHERE id = ?", (plan_id,)
+        "SELECT id, name, created_at, updated_at FROM plans WHERE id = ?", (plan_id,)
     ).fetchone()
     conn.close()
     return dict(row)
@@ -779,7 +786,7 @@ def list_plans(contract_id: int) -> list:
     """A contract's saved plans, newest first, with their full sim state."""
     conn = get_conn()
     rows = conn.execute(
-        """SELECT id, name, data, created_at FROM plans
+        """SELECT id, name, data, created_at, updated_at FROM plans
            WHERE contract_id = ? ORDER BY id DESC""",
         (contract_id,),
     ).fetchall()
@@ -789,6 +796,7 @@ def list_plans(contract_id: int) -> list:
             "id": r["id"],
             "name": r["name"],
             "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
             "data": json.loads(r["data"]),
         }
         for r in rows
