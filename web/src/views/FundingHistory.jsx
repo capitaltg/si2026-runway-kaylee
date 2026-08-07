@@ -109,10 +109,18 @@ function ModUpload({ contractId, onUploaded }) {
     try {
       const r = await addMod(contractId, file);
       const what = r.replaced ? "replaced" : "added";
+      // The two things only a mod can tell us are worth saying out loud: they
+      // change which period the burn clock reads and how funding is split, so
+      // seeing them confirmed is the difference between "a file uploaded" and
+      // "the contract now knows it's in Option Year 1".
+      const opened = (r.periods_exercised || []).join(", ");
       setNote(
         `Mod ${r.mod || "(unnumbered)"} ${what}. Obligated now ${money(
           r.total_obligated
-        )}.` + (r.piid_mismatch ? " ⚠ Contract number on the doc didn't match." : "")
+        )}.` +
+          (r.clins_funded ? ` Funded ${r.clins_funded} CLIN(s).` : "") +
+          (opened ? ` ${opened} is now in effect.` : "") +
+          (r.piid_mismatch ? " ⚠ Contract number on the doc didn't match." : "")
       );
       onUploaded?.(r);
     } catch (e) {
