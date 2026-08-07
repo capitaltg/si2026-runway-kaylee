@@ -7,6 +7,7 @@ import {
   heatSummary,
   sortPeople,
   personSentence,
+  elsewhereNote,
   expectationNote,
   overtimeNote,
   diagnosisSentence,
@@ -121,6 +122,7 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
       <ul style={{ listStyle: "none", margin: "12px 0 0", padding: 0 }}>
         {shown.map((p) => {
           const ot = overtimeNote(p);
+          const away = elsewhereNote(p);
           return (
             <li
               key={p.id}
@@ -144,6 +146,7 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
                 </div>
                 <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 3 }}>
                   {expectationNote(p)}
+                  {away ? ` · ${away}` : ""}
                   {ot ? ` · ${ot}` : ""}
                 </div>
               </div>

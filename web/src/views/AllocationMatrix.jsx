@@ -2423,7 +2423,20 @@ export default function AllocationMatrix({
                                   : "var(--dim)";
                             return (
                               <span
-                                title={`${rowHrsOf(e).toFixed(1)} hrs/wk against ${exp.hours} expected — ${exp.label}.`}
+                                // The percentage is this contract's hours over a
+                                // whole-person expectation, so a person billing
+                                // elsewhere reads as having slack they do not have
+                                // (#116). The cell keeps this contract's number —
+                                // it is the column the grid edits — and the tooltip
+                                // names the rest of their week.
+                                title={
+                                  `${rowHrsOf(e).toFixed(1)} hrs/wk against ${exp.hours} expected — ${exp.label}.` +
+                                  (e?.hours_elsewhere
+                                    ? ` Also booked ${e.hours_elsewhere} hrs/wk on ${(e.elsewhere || [])
+                                        .map((x) => x.contract)
+                                        .join(", ")} — ${e.headroom} hrs/wk left.`
+                                    : "")
+                                }
                                 style={{ fontFamily: mono, fontSize: 12.5, fontWeight: 600, color: uc }}
                               >
                                 {Math.round(util * 100)}%

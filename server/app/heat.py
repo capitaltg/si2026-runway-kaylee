@@ -360,12 +360,22 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
         available = max(
             0.0, float(expected_wk) * n_weeks - rec["leave"] - rec["holiday"]
         )
-        over = rec["billable"] - available
+        # What they are booked on every *other* contract, over the same window (#116).
+        # The expectation on the left of this comparison is a whole-person week, so
+        # the hours on the right have to be the whole person's: someone at 40 hrs/wk
+        # across two contracts clears the threshold on neither and never surfaces as
+        # running hot, which is exactly the person a PM needs named.
+        elsewhere_wk = _f((arow or {}).get("hours_elsewhere"))
+        elsewhere = elsewhere_wk * n_weeks
+        worked = rec["billable"] + elsewhere
+        over = worked - available
         over_wk = over / n_weeks
         if over_wk < MIN_OVER_HOURS_PER_WEEK:
             continue
 
-        total_hours = rec["billable"] or 1.0
+        # The excess apportions across everywhere their hours are, so this contract's
+        # CLINs carry their share of it and not another contract's overtime.
+        total_hours = worked or 1.0
         clin_impacts = []
         weekly_dollars = 0.0
         for cid, hours in sorted(rec["by_clin"].items()):
@@ -414,6 +424,12 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
                 # presenting an unconfigured 40 as a setting.
                 "expected_assumed": bool(expected.get("assumed")),
                 "worked_hours": round(rec["billable"], 1),
+                # This contract's hours, their other contracts', and the total the
+                # excess is actually measured from — so a row whose overtime is
+                # somebody else's line can say so instead of reading as unexplained.
+                "worked_hours_elsewhere": round(elsewhere, 1),
+                "worked_hours_booked": round(worked, 1),
+                "elsewhere": (arow or {}).get("elsewhere") or [],
                 "available_hours": round(available, 1),
                 "over_hours": round(over, 1),
                 "over_hours_per_week": round(over_wk, 1),

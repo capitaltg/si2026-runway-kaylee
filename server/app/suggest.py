@@ -107,6 +107,25 @@ def _moneyM(n) -> str:
     return f"${_f(n) / 1e6:.2f}M"
 
 
+def _booked(row: dict) -> float:
+    """A person's hrs/wk across every contract Runway can see (#116).
+
+    Their expected week is a whole-person figure, so anything measured against it has
+    to be a whole-person figure too. Falls back to this contract's hours when the
+    payload was built without the cross-contract sweep — the old, contract-blind
+    behaviour, kept only so a hand-built payload still solves.
+    """
+    booked = row.get("hours_booked")
+    return _f(booked) if booked is not None else _f(row.get("hours"))
+
+
+def _headroom(row: dict) -> float:
+    """Hours this person actually has left before their expected week is full."""
+    if row.get("headroom") is not None:
+        return _f(row.get("headroom"))
+    return _f((row.get("expected") or {}).get("hours")) - _booked(row)
+
+
 def _priced_lcats(card: dict) -> set:
     """The categories a CLIN actually prices, for deciding whether a shift is real.
     Proposing that someone move to a line that cannot pay their category is how you
@@ -262,7 +281,12 @@ def _reduce_plan(card, heat_clin, rows_on_clin, cid, target, weekly, under_cards
 
     for row, cell in rows_on_clin:
         cell_hours = _f(cell.get("hours"))
-        total_hours = _f(row.get("hours")) or cell_hours or 1.0
+        # Cross-contract (#116), because the expectation being apportioned is a
+        # whole-person week. Scoped to this contract the share inflated toward 1.0 and
+        # `at_expected` landed at the full expectation against a part-time booking, so
+        # a person genuinely over their week — 30 here, 30 elsewhere, 40 expected —
+        # was offered no trim at all.
+        total_hours = _booked(row) or cell_hours or 1.0
         expected_wk = _f((row.get("expected") or {}).get("hours"))
 
         # The at-expected level for *this* CLIN: the person's whole week scaled back to
@@ -378,9 +402,13 @@ def _raise_plan(card, rows_on_clin, cid, target, weekly):
     candidates: List[dict] = []
     unpriced: dict = {}
     for row, cell in rows_on_clin:
-        expected = _f((row.get("expected") or {}).get("hours"))
-        total_hours = _f(row.get("hours"))
-        headroom = expected - total_hours
+        # Headroom is measured against what they are booked *everywhere* (#116).
+        # Against this contract alone, someone at 20 hrs/wk here and 20 on another
+        # contract reads as 20 hours of slack — and the other contract's payload does
+        # the identical sum, so the same 20 hours get offered to two underburning
+        # lines and this function books a 60-hour week while promising it never books
+        # anyone past their expectation.
+        headroom = _headroom(row)
         if headroom <= 0:
             continue
         to_hours = min(_f(cell.get("hours")) + headroom, HOURS_CAP)

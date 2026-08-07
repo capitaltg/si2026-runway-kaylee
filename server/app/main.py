@@ -705,6 +705,38 @@ def rename_contract(contract_id: int, body: RenameIn):
     }
 
 
+def _hours_elsewhere(contract_id: int) -> dict:
+    """`{employee_id: [{contract_id, contract, hours}]}` for every contract *except*
+    this one (#116).
+
+    A person's expected week belongs to the person, so headroom is only honest once
+    the hours they bill elsewhere are subtracted from it. Computed by the caller and
+    passed in, for the same reason the expected-hours overrides are: `allocation` must
+    not reach across contracts on its own.
+
+    `allocation.booked_hours` rather than a full `compute_allocation` per contract —
+    this needs a column of hours, not a burn pass each.
+    """
+    out: dict = {}
+    for c in db.list_contracts():
+        if c["id"] == contract_id:
+            continue
+        # The same display name burn resolves, so a "20 hrs on FALCON" note names the
+        # contract the way every other surface does.
+        header = c.get("contract") or {}
+        name = (
+            c.get("nickname")
+            or header.get("contractor")
+            or c.get("piid")
+            or f"Contract {c['id']}"
+        )
+        for emp, hrs in allocation.booked_hours(c, db.get_timesheets(c["id"])).items():
+            out.setdefault(emp, []).append(
+                {"contract_id": c["id"], "contract": name, "hours": hrs}
+            )
+    return out
+
+
 @app.get("/api/contracts/{contract_id}/allocation")
 def contract_allocation(contract_id: int):
     """Allocation matrix (#21): the employee x labor-CLIN hrs/wk grid for the
@@ -719,6 +751,7 @@ def contract_allocation(contract_id: int):
         db.list_expenses(contract_id),
         _cost_model(contract_id),
         db.expected_hours_by_person(),
+        _hours_elsewhere(contract_id),
     )
 
 
@@ -747,6 +780,7 @@ def contract_heat(contract_id: int):
         db.list_expenses(contract_id),
         _cost_model(contract_id),
         db.expected_hours_by_person(),
+        _hours_elsewhere(contract_id),
     )
     payload = heat.compute_heat(contract, rows, alloc)
     payload["suggestions"] = suggest.solve_moves(alloc, payload)
@@ -1113,15 +1147,49 @@ def _all_allocations() -> list:
     behind both portfolio utilisation and conflicts."""
     # One query for every per-person expected week (#84), not one per contract.
     overrides = db.expected_hours_by_person()
-    return [
-        allocation.compute_allocation(
-            c,
-            db.get_timesheets(c["id"]),
-            db.list_expenses(c["id"]),
-            expected_hours_by_person=overrides,
+    contracts = db.list_contracts()
+    timesheets = {c["id"]: db.get_timesheets(c["id"]) for c in contracts}
+
+    # Everyone's hours on every contract, once (#116), so each payload's "elsewhere"
+    # is this map minus its own. `_hours_elsewhere` per contract would be the same
+    # sweep N times over.
+    booked = {
+        c["id"]: allocation.booked_hours(c, timesheets[c["id"]]) for c in contracts
+    }
+    names = {}
+    for c in contracts:
+        header = c.get("contract") or {}
+        names[c["id"]] = (
+            c.get("nickname")
+            or header.get("contractor")
+            or c.get("piid")
+            or f"Contract {c['id']}"
         )
-        for c in db.list_contracts()
-    ]
+
+    out = []
+    for c in contracts:
+        elsewhere: dict = {}
+        for other_id, hours in booked.items():
+            if other_id == c["id"]:
+                continue
+            for emp, hrs in hours.items():
+                elsewhere.setdefault(emp, []).append(
+                    {
+                        "contract_id": other_id,
+                        "contract": names[other_id],
+                        "hours": hrs,
+                    }
+                )
+        out.append(
+            allocation.compute_allocation(
+                c,
+                timesheets[c["id"]],
+                db.list_expenses(c["id"]),
+                expected_hours_by_person=overrides,
+                hours_elsewhere_by_person=elsewhere,
+            )
+        )
+    return out
 
 
 @app.get("/api/allocation/conflicts")

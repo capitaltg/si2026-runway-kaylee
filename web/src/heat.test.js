@@ -5,6 +5,7 @@ import {
   BY_HOURS,
   sortPeople,
   personSentence,
+  elsewhereNote,
   expectationNote,
   overtimeNote,
   diagnosisSentence,
@@ -70,6 +71,29 @@ test("every CLIN the excess lands on is listed", () => {
 test("a genuine half hour survives, but whole hours print clean", () => {
   assert.ok(personSentence(person({ over_hours_per_week: 2.5 }), HEAT).includes("(2.5 hrs/wk)"));
   assert.ok(personSentence(person(), HEAT).includes("(8 hrs/wk)"));
+});
+
+// --- hours billed on another contract (#116) ---------------------------------
+
+test("the sentence counts the whole person's booked hours, not this contract's", () => {
+  // 100 here + 84 elsewhere against a 152-hour availability. Leading with the 100
+  // would print "100 hrs against 152 available — 32 hrs over", which does not add up.
+  const p = person({ worked_hours: 100, worked_hours_elsewhere: 84, worked_hours_booked: 184 });
+  assert.ok(personSentence(p, HEAT).startsWith("184 hrs against 152 available"));
+});
+
+test("a row whose hours are partly on another contract says which one", () => {
+  const p = person({
+    worked_hours_elsewhere: 84,
+    worked_hours_booked: 184,
+    elsewhere: [{ contract_id: 2, contract: "BRAVO", hours: 21 }],
+  });
+  assert.equal(elsewhereNote(p), "84 hrs of that on BRAVO");
+});
+
+test("someone on one contract gets no elsewhere note at all", () => {
+  assert.equal(elsewhereNote(person()), null);
+  assert.equal(elsewhereNote(person({ worked_hours_elsewhere: 0, elsewhere: [] })), null);
 });
 
 // --- the expectation is never presented as settled when it is a guess --------
