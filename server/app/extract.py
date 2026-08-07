@@ -158,12 +158,16 @@ def _parse_schema(
     response still raises rather than returning half-populated data.
 
     `constrained=False` skips the parse attempt and goes straight to plain JSON.
-    Callers pass this when they already know the grammar won't compile (the award
-    `Extraction` schema on Bedrock), so we don't pay the full grammar-compilation
-    *timeout* on every ingest just to prove a call that always fails. Providers
-    that *can* enforce the schema keep `constrained=True` and still do — the
-    smaller `Modification` schema compiles on Bedrock, as does everything on the
-    RUNWAY_PROVIDER=anthropic path.
+    Callers pass this when they already know the grammar won't compile, so we don't
+    pay the full grammar-compilation *timeout* on every ingest just to prove a call
+    that always fails. On Bedrock that is now *both* schemas: `Modification` was
+    flat enough to compile until `funding_lines` gave it a nested object list too.
+    Everything on the RUNWAY_PROVIDER=anthropic path still enforces its schema in
+    the decoder.
+
+    Treat this as the rule rather than two special cases: any nested object list
+    added to a schema here costs a dead grammar-compilation timeout per call on
+    Bedrock until its caller passes constrained=False.
     """
     if constrained:
         try:
@@ -274,7 +278,16 @@ def extract_from_pdf(pdf_bytes: bytes) -> Extraction:
 def _parse_mod(content) -> Modification:
     # 8000, not 2000: see the max_tokens note in _parse — thinking shares the
     # budget, and 2000 leaves little room for it plus the JSON.
-    return _parse_schema(content, SYSTEM_MOD, Modification, 8000)
+    #
+    # Unconstrained on Bedrock, same as _parse and for the same reason. Modification
+    # used to be flat enough to compile there, so it asked for constrained decoding
+    # and got it; `funding_lines` made it a schema with a nested object list — the
+    # shape Bedrock's decoder won't build (see _parse_schema) — so the parse attempt
+    # became a guaranteed grammar-compilation timeout paid before every single mod
+    # ingest, then thrown away for the plain-JSON fallback that always answers.
+    return _parse_schema(
+        content, SYSTEM_MOD, Modification, 8000, constrained=(PROVIDER != "bedrock")
+    )
 
 
 def extract_mod_from_text(text: str) -> Modification:

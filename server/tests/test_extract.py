@@ -88,3 +88,44 @@ def test_mixed_block_normalizes_only_the_named_zeros():
 
     assert [c.obligated for c in e.clins] == [800_000.0, 0.0, 0.0]
     assert all(c.obligated is not None for c in e.clins)
+
+
+# --- Constrained-decoding wiring ---------------------------------------------
+# Not a normalization rule, but it belongs next to one: on Bedrock a schema with
+# a nested object list never compiles, so asking for constrained decoding buys a
+# guaranteed grammar-compilation timeout before the plain-JSON fallback that
+# always answers. It is invisible in behaviour and only shows up as an ingest
+# that takes far too long, which is how it shipped once already — `funding_lines`
+# gave `Modification` a nested list and left its constrained request in place.
+
+
+def _record_constrained(monkeypatch):
+    seen = {}
+
+    def fake(content, system, output_format, max_tokens, constrained=True):
+        seen["constrained"] = constrained
+        raise RuntimeError("stop here — only the wiring is under test")
+
+    monkeypatch.setattr(extract, "_parse_schema", fake)
+    return seen
+
+
+def _call(fn, monkeypatch):
+    seen = _record_constrained(monkeypatch)
+    try:
+        fn("some document text")
+    except RuntimeError:
+        pass
+    return seen["constrained"]
+
+
+def test_bedrock_skips_constrained_decoding_on_both_schemas(monkeypatch):
+    monkeypatch.setattr(extract, "PROVIDER", "bedrock")
+    assert _call(extract.extract_mod_from_text, monkeypatch) is False
+    assert _call(extract.extract_from_text, monkeypatch) is False
+
+
+def test_the_anthropic_path_still_enforces_its_schema(monkeypatch):
+    monkeypatch.setattr(extract, "PROVIDER", "anthropic")
+    assert _call(extract.extract_mod_from_text, monkeypatch) is True
+    assert _call(extract.extract_from_text, monkeypatch) is True
