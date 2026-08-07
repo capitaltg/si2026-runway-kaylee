@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getBurn, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
+import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
+import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
@@ -49,8 +50,10 @@ const btnSecondary = {
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
 // stream fails (Bedrock down, etc.). The action button routes via onAction.
-function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onOpenDrafts }) {
-  const heuristic = suggestFor(kind, item, contract);
+function Suggestion({ kind, item, contract, heat, aiEnabled, contractId, onAction, onOpenDrafts }) {
+  // `heat` (#83) is what keeps this strip and the "who's running hot" section from
+  // recommending opposite things about the same CLIN. See suggestFor.
+  const heuristic = suggestFor(kind, item, contract, heat);
   const urgent = heuristic.action && heuristic.action.urgent;
   const [body, setBody] = useState(heuristic.body);
   const [aiActive, setAiActive] = useState(false);
@@ -85,7 +88,12 @@ function Suggestion({ kind, item, contract, aiEnabled, contractId, onAction, onO
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiEnabled, kind, item.code, contractId]);
+    // `heuristic.body` is a dep because #83's heat payload lands *after* burn: the
+    // grounding text changes once the diagnosis arrives, and without this the strip
+    // keeps its pre-diagnosis advice — which is the contradiction threading `heat`
+    // through was meant to remove. Keyed on the text rather than on `heat` so it only
+    // refires when the recommendation actually changed.
+  }, [aiEnabled, kind, item.code, contractId, heuristic.body]);
 
   return (
     <div
@@ -190,6 +198,7 @@ export default function FlightDeck({
   setActiveId,
   onOpenExpenses,
   onOpenAllocation,
+  onOpenPerson,
   onApplyFix,
   onOpenFunding,
   onOpenDrafts,
@@ -202,6 +211,9 @@ export default function FlightDeck({
   // the portfolio.
   const [pendingDelete, setPendingDelete] = useState(false);
   const [burn, setBurn] = useState(null);
+  // Person-level heat (#83). Its own fetch: the Flight Deck renders without it, so a
+  // failure here must never blank the dashboard.
+  const [heat, setHeat] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [alertIndex, setAlertIndex] = useState(0);
@@ -226,6 +238,9 @@ export default function FlightDeck({
     try {
       const b = await getBurn(id);
       setBurn(b);
+      getHeat(id)
+        .then(setHeat)
+        .catch(() => setHeat(null));
       setAlertIndex(0);
       const labor = b.clins.filter((c) => c.is_labor);
       setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
@@ -602,6 +617,7 @@ export default function FlightDeck({
               )}
             </div>
             <Suggestion
+              heat={heat}
               kind="over"
               item={tw}
               contract={contract}
@@ -675,6 +691,7 @@ export default function FlightDeck({
               jeopardize option-year exercise.
             </div>
             <Suggestion
+              heat={heat}
               kind="underburn"
               item={ub}
               contract={contract}
@@ -835,6 +852,7 @@ export default function FlightDeck({
               {fw.mod_in_progress ? " A funding modification is already outstanding." : ""}
             </div>
             <Suggestion
+              heat={heat}
               kind="funding"
               item={fw}
               contract={contract}
@@ -1462,6 +1480,10 @@ export default function FlightDeck({
           );
         })}
       </div>
+
+      {/* Who's running hot (#83) — under the CLIN cards on purpose: it explains the
+          cards above rather than competing with them. */}
+      <PeopleRunningHot heat={heat} onOpenPerson={onOpenPerson} />
 
       {/* Bottom of the view, deliberately far from the tripwires: remove this
           contract entirely. Same quiet trash as the portfolio cards. */}

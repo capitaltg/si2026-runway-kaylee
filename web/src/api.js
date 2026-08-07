@@ -46,6 +46,12 @@ export async function getBurn(contractId) {
   return r.json();
 }
 
+export async function getHeat(contractId) {
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/heat`);
+  if (!r.ok) throw new Error(`Heat failed (${r.status})`);
+  return r.json();
+}
+
 export async function getPortfolio() {
   const r = await fetch(`${BASE}/api/portfolio`);
   if (!r.ok) throw new Error(`Portfolio failed (${r.status})`);
