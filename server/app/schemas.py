@@ -318,7 +318,11 @@ class Modification(BaseModel):
     )
     cumulative_obligated: Optional[float] = Field(
         default=None,
-        description="Total cumulative obligated AFTER this action, in dollars",
+        description="Total obligated on the WHOLE CONTRACT after this action, in "
+        "dollars — and only when the document states a running total ('increased "
+        "from $X to $Y', 'total obligated to date'). Most SF-30s state none: leave "
+        "it null. 'Obligated this action $X' is `amount_obligated`, never this "
+        "field.",
     )
     total_ceiling: Optional[float] = Field(
         default=None,
