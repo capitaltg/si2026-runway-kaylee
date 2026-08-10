@@ -78,12 +78,16 @@ def test_a_mod_that_states_no_cumulative_at_all_still_adds_its_money():
 
 
 def test_a_genuine_cumulative_above_the_sum_still_wins():
-    """The reason the stated figure is consulted at all: a trail missing a mod sums
-    to less than the contract really carries, and the running total on the mod we DO
-    have is the only evidence of the one we don't. Stays inside the ceiling, which
-    is what separates it from a misread — see the ceiling test below."""
+    """The reason the stated figure is consulted at all: a trail missing a mod sums to
+    less than the contract really carries, and the running total on the mod we DO hold
+    is the only evidence of the one we don't.
+
+    The trail has to actually omit that mod for this to be the missing-mod case. P00001
+    is absent here, and the hole below P00002 in the numbering is what makes the excess
+    explicable. A *contiguous* trail stating the same figure is indistinguishable from a
+    misread digit, and is rejected — see below."""
     c = _contract()
-    _merge_mod(c, _option_mod(cumulative_obligated=7_500_000.0))
+    _merge_mod(c, _option_mod(mod_number="P00002", cumulative_obligated=7_500_000.0))
 
     assert c["contract"]["total_obligated"] == 7_500_000.0
 
@@ -130,9 +134,15 @@ def test_a_cumulative_above_the_ceiling_is_a_misread_not_an_over_obligation():
 
 
 def test_a_cumulative_at_the_ceiling_exactly_is_still_trusted():
+    """The ceiling bound is inclusive: obligating a contract to exactly its ceiling is
+    a fully-funded contract, not an over-obligation. Needs the gapped trail for the
+    same reason as above — a figure this far above the sum is only admissible as
+    evidence of the mod that is missing."""
     c = _contract()
     c["contract"]["total_ceiling"] = 14_535_792.80
-    summary = _merge_mod(c, _option_mod(cumulative_obligated=14_535_792.80))
+    summary = _merge_mod(
+        c, _option_mod(mod_number="P00002", cumulative_obligated=14_535_792.80)
+    )
 
     assert c["contract"]["total_obligated"] == 14_535_792.80
     assert summary["cumulative_ignored"] == []
@@ -144,3 +154,101 @@ def test_a_well_read_trail_reports_nothing_ignored():
     summary = _merge_mod(c, _option_mod(cumulative_obligated=6_709_487.60))
 
     assert summary["cumulative_ignored"] == []
+
+
+# --- The band between the sum and the ceiling ---------------------------------
+#
+# The ceiling gate alone leaves a window: on this contract, anything a misread lands
+# between $6,709,487.60 and $14,535,792.80 clears the ceiling check and beats the
+# arithmetic. Three live attempts at one figure returned $16,709,487.80, $5,709,487.80
+# and $1,873,252.80, so a fourth landing in the band is not a hypothetical.
+
+
+def test_an_in_band_misread_on_a_contiguous_trail_is_discarded():
+    """One bad leading digit, comfortably inside the ceiling. The trail is contiguous —
+    Award then P00001, nothing absent — so there is no missing mod whose money could
+    account for the excess, and the arithmetic every other figure agrees with wins."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=9_709_487.60))
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert summary["cumulative_ignored"] == [9_709_487.60]
+
+
+def test_an_inflated_total_would_have_read_as_better_funded():
+    """Why the band matters rather than being a cosmetic wrong number: obligated is the
+    numerator the funding tripwires watch, so a figure that is too high makes the
+    contract look better funded than it is and quietens the warning."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    _merge_mod(c, _option_mod(cumulative_obligated=9_709_487.60))
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert c["contract"]["incrementally_funded"] is True
+
+
+def test_no_known_ceiling_means_no_override_at_all():
+    """With no ceiling the upper bound cannot be checked, and the guard that depends on
+    it silently passes everything. An override that cannot be validated is not one
+    worth taking, so the arithmetic holds and the figure is reported."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = None
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=16_709_487.80))
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert summary["cumulative_ignored"] == [16_709_487.80]
+
+
+def test_a_hole_after_the_stating_mod_does_not_excuse_its_excess():
+    """P00003 is absent, but it comes *after* P00001 — a later action cannot be the
+    source of money P00001 already claims to have counted."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    _merge_mod(c, _option_mod(mod_number="P00002", cumulative_obligated=None))
+    summary = _merge_mod(
+        c,
+        _option_mod(
+            mod_number="P00001",
+            effective_date="2025-06-01",
+            cumulative_obligated=9_709_487.60,
+        ),
+    )
+
+    assert summary["cumulative_ignored"] == [9_709_487.60]
+
+
+def test_a_hole_in_another_mod_series_does_not_excuse_an_excess():
+    """Administrative and procurement mods number independently, so a gap in the A
+    series says nothing about whether a P mod is missing. A00001/A00002 present with
+    P00001 contiguous leaves the excess unexplained."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    for num in ("A00001", "A00002"):
+        _merge_mod(
+            c,
+            {
+                "mod_number": num,
+                "effective_date": "2025-03-01",
+                "action_type": "administrative",
+                "amount_obligated": None,
+            },
+        )
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=9_709_487.60))
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert summary["cumulative_ignored"] == [9_709_487.60]
+
+
+def test_a_contract_onboarded_mid_performance_keeps_its_award_money():
+    """The arithmetic is only safe if it starts where the money did. A contract whose
+    award obligation sits in the header with an empty trail must not have its base
+    period dropped when the first mod is folded in — the award is materialised as the
+    trail's first row so there is something to sum."""
+    c = _contract()
+    c["obligation_history"] = []
+    _merge_mod(c, _option_mod())
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert c["obligation_history"][0]["mod"] == "Award"
+    assert c["obligation_history"][0]["amount"] == AWARD_OBLIGATED
