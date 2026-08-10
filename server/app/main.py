@@ -24,6 +24,7 @@ from . import (
     lcat,
     people,
     periods as period_ids,
+    pricing,
     rates,
     sources,
     suggest,
@@ -1519,6 +1520,58 @@ def set_contract_absence(contract_id: int, body: AbsenceIn):
     if updated is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
     return absence.contract_absence(updated)
+
+
+class FeePeriodsIn(BaseModel):
+    """A CPAF contract's award-fee evaluation periods (#80).
+
+    Replaced wholesale, the same convention `CapacityIn` and `AbsenceIn` use — sending
+    an empty list clears the plan. Each entry carries `name`, optional `start`/`end`
+    dates, an optional `pool_share` in dollars (absent shares split the pool evenly),
+    a `status` of 'pending' or 'determined', and — once determined — the
+    `determined_amount` and optional `score`. `clin` names the CLIN whose pool the
+    period draws on and is only needed when an award carries more than one.
+    """
+
+    periods: list = []
+
+
+@app.get("/api/contracts/{contract_id}/fee-periods")
+def get_contract_fee_periods(contract_id: int):
+    """A contract's award-fee evaluation periods (#80)."""
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {
+        "periods": [
+            dict(p) for p in pricing.normalize_fee_periods(contract.get("fee_periods"))
+        ]
+    }
+
+
+@app.put("/api/contracts/{contract_id}/fee-periods")
+def set_contract_fee_periods(contract_id: int, body: FeePeriodsIn):
+    """Record the government's award-fee determinations (#80).
+
+    Validated before it lands, because this is the one fee input that is typed rather
+    than read off a document, and an undetermined period saved as determined is the
+    error that books fee nobody has awarded. Returns the stored periods rather than an
+    ack: a determination moves earned fee on the Flight Deck, and the caller has to be
+    able to show the number move.
+    """
+    for entry in body.periods or []:
+        problem = pricing.validate_fee_period(entry)
+        if problem:
+            raise HTTPException(status_code=400, detail=problem)
+
+    updated = db.set_contract_fee_periods(contract_id, body.periods)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    return {
+        "periods": [
+            dict(p) for p in pricing.normalize_fee_periods(updated.get("fee_periods"))
+        ]
+    }
 
 
 class LcatAliasIn(BaseModel):

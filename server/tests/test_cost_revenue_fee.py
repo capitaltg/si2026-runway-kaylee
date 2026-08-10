@@ -164,8 +164,9 @@ def test_the_measured_quantity_also_drives_the_pace_and_the_chart():
 def test_a_cpff_clin_reports_cost_and_fee_separately_and_they_reconcile():
     card, p = _card("CPFF", _model())
     assert card["cost"] + card["fee_earned"] == card["revenue"]
-    # The fee *rate* is #80. Until then there is no honest fee number, so it is zero
-    # and declares itself rather than being estimated off the billing spread.
+    # This CLIN prints no fee figures, so #80's engine has nothing to earn against:
+    # the fee is zero and declares itself rather than being estimated off the billing
+    # spread. See `test_fee_engine.py` for the same card with a fixed fee on it.
     assert card["fee_earned"] == 0.0
     assert card["fee_known"] is False
     assert card["margin_pct"] is None
