@@ -995,9 +995,13 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
                     background: "var(--goodBg)", color: "var(--good)",
                     fontFamily: "'Manrope',sans-serif",
                   }}
-                  title="Accounting Classification Reference Number funding this CLIN"
+                  title={
+                    cl.acrn.includes(",")
+                      ? "Accounting Classification Reference Numbers funding this CLIN — the amount is the sum across all of them"
+                      : "Accounting Classification Reference Number funding this CLIN"
+                  }
                 >
-                  ACRN {cl.acrn}
+                  {cl.acrn.includes(",") ? "ACRNs" : "ACRN"} {cl.acrn}
                 </span>
               )}
             </span>

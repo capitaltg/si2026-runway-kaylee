@@ -325,6 +325,18 @@ def _clin_key(num) -> str:
     return str(num or "").strip().upper()
 
 
+def _acrn_list(value) -> List[str]:
+    """The accounting citations already on a CLIN, as a list.
+
+    One CLIN can be funded from several appropriations, so `acrn` holds a
+    comma-separated citation list rather than a single symbol (#61). Reading it back
+    through here keeps the stored form — a plain string, which every existing
+    contract, payload and view already handles — while letting the merge below be a
+    union instead of an overwrite.
+    """
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
+
+
 def _period_key(name) -> Optional[str]:
     """A period's identity for matching a mod's `period_exercised` to a period on
     the award. Award and mod name the same period in different words — 'Option
@@ -369,14 +381,15 @@ def _apply_clin_funding(existing: dict) -> int:
         c.setdefault("funded_at_award", c.get("obligated"))
 
     added: Dict[str, float] = {}
-    acrns: Dict[str, str] = {}
+    acrns: Dict[str, List[str]] = {}
     for ln in lines:
         key = _clin_key(ln.get("clin"))
         if not key or ln.get("amount") is None:
             continue
         added[key] = added.get(key, 0.0) + float(ln["amount"])
-        if ln.get("acrn"):
-            acrns[key] = ln["acrn"]
+        cited = (ln.get("acrn") or "").strip()
+        if cited and cited not in acrns.setdefault(key, []):
+            acrns[key].append(cited)
 
     touched = 0
     for c in clins:
@@ -386,10 +399,17 @@ def _apply_clin_funding(existing: dict) -> int:
         # A CLIN the award never funded starts at 0, not null: it has money on it
         # now, and null means "the documents don't say" — which is no longer true.
         c["obligated"] = round(float(c.get("funded_at_award") or 0) + added[key], 2)
-        # Keep the award's ACRN when it printed one; a later fiscal year's mod
-        # citing a different ACRN doesn't retract the original citation.
-        if not c.get("acrn") and acrns.get(key):
-            c["acrn"] = acrns[key]
+        # Every appropriation that funded this line, in the order first cited (#61).
+        # A later fiscal year's mod citing a new ACRN neither retracts the award's
+        # own citation nor replaces it: a CLIN funded from two appropriations is one
+        # CLIN with two citations, and dropping either loses the provenance of money
+        # that is already counted in `obligated` above.
+        merged = _acrn_list(c.get("acrn"))
+        for cited in acrns.get(key, []):
+            if cited not in merged:
+                merged.append(cited)
+        if merged:
+            c["acrn"] = ", ".join(merged)
         touched += 1
     return touched
 

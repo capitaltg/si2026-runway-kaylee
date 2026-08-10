@@ -36,3 +36,30 @@ test("scope notices retain both warnings when both scope fallbacks apply", () =>
     },
   ]);
 });
+
+test("scope notices warn when per-CLIN funding exists but no total scopes it (#61)", () => {
+  assert.deepEqual(
+    scopeNotices({
+      clin_scope: "period",
+      pop_scoped: true,
+      funding_total_unknown: true,
+    }),
+    [
+      {
+        key: "funding_total",
+        text: "Funded-dollar limits could not be set for this period: some CLINs state their own obligation but the documents print no contract obligated total to scope them against. Runway is reading against ceilings.",
+      },
+    ],
+  );
+});
+
+test("scope notices stay quiet when the funding total is known", () => {
+  assert.deepEqual(
+    scopeNotices({
+      clin_scope: "period",
+      pop_scoped: true,
+      funding_total_unknown: false,
+    }),
+    [],
+  );
+});

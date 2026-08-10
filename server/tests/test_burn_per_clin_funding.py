@@ -227,3 +227,56 @@ def test_one_nonlabor_clins_ratio_does_not_leak_into_the_next():
     # over the $500k of unattributed ceiling (labor + materials) → 30% on the
     # unattributed line, not the 100% the previous CLIN was funded at.
     assert _clin(p, "0003")["funded_frac"] == 0.3
+
+
+# How the funded dollars were attributed, and the one case where the attribution
+# cannot be completed at all (#61).
+
+
+def test_partial_attribution_without_a_header_total_is_reported_not_silent():
+    """Labor states its own obligation, but no document prints a contract total to
+    scope a *period* funded figure against. The engine cannot set a funding limit
+    here — the failure it must not commit is looking like a fully-funded contract,
+    which is the one thing this is not known to be."""
+    p = burn.compute(_contract(labor_obligated=240_000, obligated=None), _rows())
+    c = p["contract"]
+
+    assert c["period_funded"] is None
+    assert c["incrementally_funded"] is False
+    assert c["funding_attribution"] == "partial"
+    assert c["funding_total_unknown"] is True
+    # The real per-CLIN figure survives; only the unattributed line has no limit.
+    assert _clin(p, "0001")["funded"] == 240_000.0
+    assert _clin(p, "0002")["funded"] is None
+
+
+def test_full_attribution_reports_its_route_and_no_gap():
+    p = burn.compute(
+        _contract(labor_obligated=240_000, travel_obligated=10_000), _rows()
+    )
+
+    assert p["contract"]["funding_attribution"] == "full"
+    assert p["contract"]["funding_total_unknown"] is False
+
+
+def test_header_only_attribution_reports_its_route():
+    p = burn.compute(_contract(), _rows())
+
+    assert p["contract"]["funding_attribution"] == "none"
+    # No per-CLIN figures were dropped, so nothing is unknown — the header total
+    # is a defensible period limit on its own.
+    assert p["contract"]["funding_total_unknown"] is False
+
+
+def test_a_fully_funded_contract_is_not_an_unknown_total():
+    """`period_funded` is also None when the obligation covers the whole period
+    ceiling. That is 'no funding limit applies', not 'no funding limit is
+    knowable', and it must not raise the caveat."""
+    p = burn.compute(
+        _contract(labor_obligated=400_000, obligated=500_000),
+        _rows(),
+    )
+    c = p["contract"]
+
+    assert c["period_funded"] is None
+    assert c["funding_total_unknown"] is False
