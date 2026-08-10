@@ -9,14 +9,21 @@
 // Deliberately the same rule the server applies to the header total (`_merge_mod`):
 // a timeline that disagrees with the total printed above it is worse than either
 // number on its own.
-export function runningTotals(history = []) {
+// `ceiling` gates the stated figure: obligating past the contract ceiling is an
+// Anti-Deficiency Act problem, not a routine action, so a stated cumulative above it
+// is far likelier to be a misread digit than a real over-obligation. Seen in the
+// wild: a narrative reading "cumulative obligated $6,709,487.60" extracted as
+// $16,709,487.80 against a $14,535,792.80 ceiling. Same gate the server applies.
+export function runningTotals(history = [], ceiling = null) {
   const out = [];
   history.reduce((carried, h) => {
     const summed = carried + (h.amount || 0);
-    const total = Math.max(summed, h.cumulative_obligated || 0);
+    const stated = h.cumulative_obligated ?? null;
+    const credible = stated != null && (ceiling == null || stated <= ceiling);
+    const total = Math.max(summed, credible ? stated : 0);
     // Kept so a caller can say the document disagreed rather than quietly
     // overriding it — the same posture the ingest takes on a cost/fee mismatch.
-    out.push({ total, stated: h.cumulative_obligated ?? null, summed });
+    out.push({ total, stated, summed, disputed: stated != null && !credible });
     return total;
   }, 0);
   return out;
