@@ -3,7 +3,7 @@ import io
 import os
 import re
 from datetime import date
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -195,7 +195,7 @@ def _fiscal_year(iso_date: Optional[str]) -> Optional[str]:
     return str(d.year + 1 if d.month >= 10 else d.year)
 
 
-def _store_face_rates(contract_id: int, header: dict) -> Optional[str]:
+def _store_face_rates(contract_id: int, header: dict) -> Tuple[bool, Optional[str]]:
     """Persist the indirect rates read off the award face as this contract's rate
     set (#78 slice 3a).
 
@@ -679,14 +679,33 @@ def _funding_lines_for(mod: dict, document_text: Optional[str] = None) -> List[d
     funding unattributed, which is the honest outcome: visibly missing beats
     quietly wrong."""
     stated = mod.get("amount_obligated")
+
+    def reconciles(lines: List[dict]) -> bool:
+        if not lines:
+            return False
+        if stated is None:
+            return True
+        try:
+            return (
+                abs(sum(float(line["amount"]) for line in lines) - float(stated)) < 0.01
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+
+    # The document is authoritative whenever it yields a complete, reconciled
+    # split. This also prevents a stale model transcription from winning over the
+    # AcroForm field that actually carried Block 14.
     for text in (document_text, mod.get("description")):
         lines = _parse_funding_lines(text)
-        if not lines:
-            continue
-        if stated is None:
+        if reconciles(lines):
             return lines
-        if abs(sum(line["amount"] for line in lines) - float(stated)) < 0.01:
-            return lines
+
+    # Text-only ingests may not have a document scrape. Keep a structured model
+    # split in that case, but apply the same reconciliation gate before it can
+    # affect stored per-CLIN funding.
+    model_lines = mod.get("funding_lines") or []
+    if reconciles(model_lines):
+        return model_lines
     return []
 
 
@@ -975,9 +994,7 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         "action": mod.get("action_type") or "modification",
         "amount": mod.get("amount_obligated"),
         "cumulative_obligated": mod.get("cumulative_obligated"),
-        "funding_lines": mod.get("funding_lines")
-        or _funding_lines_for(mod, mod.get("document_text"))
-        or None,
+        "funding_lines": _funding_lines_for(mod, mod.get("document_text")) or None,
         "ceiling": mod.get("total_ceiling"),
         "ceiling_lines": _parse_ceiling_lines(mod.get("document_text"))
         or _parse_ceiling_lines(mod.get("description"))
