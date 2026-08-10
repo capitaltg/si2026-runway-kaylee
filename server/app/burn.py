@@ -198,6 +198,86 @@ def _active_period(contract: dict, rows: List[dict]) -> dict:
     return started[-1] if started else dated[0]
 
 
+def _missing_option_mods(contract: dict, rows: List[dict]) -> List[dict]:
+    """Unexercised options that nevertheless carry positive timesheet activity.
+
+    This is diagnostic only. A charge is evidence that performance is happening,
+    not authority to exercise an option or create funding. Only an ingested option
+    exercise in obligation history can suppress the signal.
+    """
+    periods = contract.get("periods") or []
+    clins = contract.get("clins") or []
+    history = contract.get("obligation_history") or []
+
+    def key(value) -> str:
+        return " ".join(str(value or "").strip().lower().split())
+
+    clin_period = {
+        key(clin.get("clin")): key(clin.get("period"))
+        for clin in clins
+        if clin.get("clin") and clin.get("period")
+    }
+
+    def has_exercise(period_name: str) -> bool:
+        wanted = key(period_name)
+        for action in history:
+            action_name = key(action.get("action") or action.get("action_type"))
+            action_period = key(
+                action.get("period") or action.get("period_exercised")
+            )
+            if action_name == "option_exercise" and action_period == wanted:
+                return True
+            if "exercise option" in action_name and wanted in action_name:
+                return True
+            if action_name == "option_exercise":
+                funded_periods = {
+                    clin_period.get(key(line.get("clin")))
+                    for line in action.get("funding_lines") or []
+                }
+                if wanted in funded_periods:
+                    return True
+        return False
+
+    positive = [row for row in rows if billable_hours(row) > 0]
+    missing = []
+    # The first scheduled period is the Base. Every later one is an option,
+    # regardless of the exact naming convention used by the award.
+    for period in periods[1:]:
+        if period.get("exercised") or has_exercise(period.get("name")):
+            continue
+        period_name = key(period.get("name"))
+        option_codes = {
+            key(clin.get("clin"))
+            for clin in clins
+            if key(clin.get("period")) == period_name and clin.get("clin")
+        }
+        start, end = _period_window(period)
+        matched_codes = set()
+        detected = False
+        for row in positive:
+            charge_code = key(row.get("charge_code"))
+            by_code = charge_code in option_codes
+            week = _d(row.get("week_ending"))
+            by_date = bool(
+                week
+                and start
+                and start <= week
+                and (end is None or week <= end)
+            )
+            if by_code or by_date:
+                detected = True
+                if by_code:
+                    matched_codes.add(str(row.get("charge_code")).strip())
+        if detected:
+            missing.append(
+                {
+                    "period": period.get("name"),
+                    "clins": sorted(matched_codes),
+                }
+            )
+    return missing
+
+
 def _period_clins(contract: dict, period: dict) -> List[dict]:
     """The CLINs belonging to one period.
 
@@ -1467,6 +1547,7 @@ def compute(
     cost falls back to the billing rate, and the payload flags that rather than
     presenting billings as cost. Nothing here branches on it to produce a status."""
     header = contract.get("contract") or {}
+    missing_option_mods = _missing_option_mods(contract, rows)
     # The *current* exercised period, not the first one — see _active_period.
     period = _active_period(contract, rows)
     clk = _clock(period, rows)
@@ -2085,6 +2166,9 @@ def compute(
                 "obligation_history" if pace_override is not None else "proxy"
             ),
             "obligation_weekly": obligation_weekly,
+            # Positive performance in an unexercised option is a missing-document
+            # signal, never permission to synthesize option funding.
+            "missing_option_mods": missing_option_mods,
             # Which cost tier this contract is operating at (#77): 1 = contract
             # documents only (billing burn, margin withheld), 2 = LCAT category
             # direct rates + indirect pools (margin, nobody named), 3 = per-person
