@@ -61,15 +61,34 @@ export function weekToDate(popStart, week) {
   return `${MONTHS[base.getUTCMonth()]} ${base.getUTCDate()}, ${base.getUTCFullYear()}`;
 }
 
-// Pick the CLIN a funding letter is about: the deep-linked one, else the first
-// funding-status line.
+// An ISO date as prose. A letter to a contracting officer should not read
+// "through 2027-01-21" next to "on or about July 24, 2026".
+export function longDate(iso) {
+  if (!iso) return null;
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
+  if (isNaN(d.getTime())) return null;
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+// Pick the CLIN a funding letter is about.
+//
+// `burn.funding` only lists lines in the amber "funding due" band. A line that
+// has already blown through its allotment drops OUT of that list and into the
+// tripwires — so the contract most in need of this letter produced one with
+// every figure blank. Fall back to the funding tripwires, then to any CLIN whose
+// spend has passed its funded slice, then to the worst labor line.
 function fundingFocus(burn, opts) {
-  const funding = burn.funding || [];
+  const candidates = [
+    ...(burn.funding || []),
+    ...(burn.tripwires || []).filter((t) => t.limited_by === "funding"),
+    ...(burn.clins || []).filter((c) => c.funds_exceeded || c.status === "over"),
+    ...(burn.clins || []).filter((c) => c.is_labor && c.incrementally_funded),
+  ];
   if (opts.focusClin) {
-    const hit = funding.find((f) => f.code === opts.focusClin);
+    const hit = candidates.find((f) => f.code === opts.focusClin);
     if (hit) return hit;
   }
-  return funding[0] || null;
+  return candidates[0] || null;
 }
 
 // ── Incremental funding — FAR 52.232-22 Limitation of Funds notification ──────
@@ -87,6 +106,7 @@ function buildFunding(burn, opts) {
   const increment =
     typeof ceiling === "number" && typeof funded === "number" ? ceiling - funded : null;
   const exhaustDate = weekToDate(c.pop_start, item.exhaust_week);
+  const popEnd = longDate(c.pop_end) || vf(c.pop_end);
   const exhaustWk = item.exhaust_week != null ? `week ${Math.round(item.exhaust_week)}` : null;
   // Prefer a real calendar date; fall back to the week number, then [verify].
   const exhaustPhrase = exhaustDate
@@ -102,7 +122,7 @@ function buildFunding(burn, opts) {
     `performance the funds allotted to this line are projected to be exhausted ` +
     `${exhaustPhrase}. To avoid a lapse in performance we respectfully request that an ` +
     `additional ${moneyV(increment)} be obligated to the contract to cover continued ` +
-    `performance through ${vf(c.pop_end)}.`;
+    `performance through ${popEnd}.`;
 
   return {
     docType: "funding",
@@ -129,7 +149,7 @@ function buildFunding(burn, opts) {
           ["Line ceiling (fully funded)", moneyV(ceiling)],
           ["Projected funds-exhaustion date", exhaustDate || exhaustWk || "[verify]"],
           ["Additional funds requested", moneyV(increment)],
-          ["Period covered", `through ${vf(c.pop_end)}`],
+          ["Period covered", `through ${popEnd}`],
         ],
       },
     ],

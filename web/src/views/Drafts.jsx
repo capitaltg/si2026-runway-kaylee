@@ -124,7 +124,16 @@ function docToHtml(doc) {
         `<div style="margin-top:40px;border-top:1px solid var(--text);width:250px;padding-top:5px;color:var(--dim);font-size:12px">` +
         `Authorized Representative · [verify]</div></div>`;
 
-  return header + `<div style="padding:24px 30px 32px">` + meta + body + signature + `</div>`;
+  const html =
+    header + `<div style="padding:24px 30px 32px">` + meta + body + signature + `</div>`;
+  // Every remaining [verify] is a figure the contract data genuinely does not
+  // carry (a voucher number, a CDRL item). Make them look like the blanks they
+  // are rather than hiding in the prose, and give them a click target — the
+  // page handler selects the whole chip so typing replaces it outright.
+  return html.replace(
+    /\[verify\]/g,
+    `<span class="verify-chip" title="Click to fill this in">[verify]</span>`
+  );
 }
 
 export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocType, onConsumedPending }) {
@@ -206,6 +215,42 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDocType, contractId]);
+
+  // Clicking a [verify] blank selects the whole chip, so the first keystroke
+  // replaces it instead of typing alongside the brackets.
+  function onPageClick(e) {
+    const chip = e.target.closest?.(".verify-chip");
+    if (!chip || !pageRef.current) return;
+    const range = document.createRange();
+    range.selectNodeContents(chip);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // Append a fresh paragraph at the end of the body and drop the cursor in it —
+  // the draft covers the standard ground, but a real memo usually needs one more
+  // sentence about this particular contract.
+  function addParagraph() {
+    const page = pageRef.current;
+    if (!page) return;
+    const body = page.lastElementChild || page;
+    const p = document.createElement("p");
+    p.setAttribute(
+      "style",
+      "font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:0 0 12px"
+    );
+    p.textContent = "";
+    body.appendChild(p);
+    p.focus?.();
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
 
   function onCopy() {
     const text = pageRef.current
@@ -297,6 +342,14 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
           >
             {status === "streaming" ? "✨ tailoring…" : status === "building" ? "Generating…" : "Generate"}
           </button>
+          <button
+            onClick={addParagraph}
+            disabled={!ready}
+            title="Add a paragraph at the end of the draft"
+            style={{ ...ghostBtn, opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "default" }}
+          >
+            + Paragraph
+          </button>
           <button onClick={onCopy} disabled={!ready} style={{ ...ghostBtn, opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "default" }}>
             Copy
           </button>
@@ -316,12 +369,25 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
           Pick a contract and document type, then Generate.
         </div>
       ) : (
-        <div
-          ref={pageRef}
-          className="draft-page"
-          style={{ ...panelStyle, minHeight: 300, padding: 0, overflow: "hidden", outline: "none" }}
-          suppressContentEditableWarning
-        />
+        <>
+          {ready && (
+            <div
+              className="no-print"
+              style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}
+            >
+              Editable — click any figure or paragraph to change it. Anything still
+              marked <span className="verify-chip">[verify]</span> is a value this
+              contract's data doesn't carry.
+            </div>
+          )}
+          <div
+            ref={pageRef}
+            className="draft-page"
+            onClick={onPageClick}
+            style={{ ...panelStyle, minHeight: 300, padding: 0, overflow: "hidden", outline: "none" }}
+            suppressContentEditableWarning
+          />
+        </>
       )}
     </div>
   );

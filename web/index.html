@@ -25,8 +25,23 @@
       @keyframes rwdash { to { stroke-dashoffset: -14; } }
       @keyframes rwping { 0% { transform: scale(.7); opacity: .7; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
       @keyframes rwblink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+      /* A figure the contract data doesn't carry. Reads as a blank to fill, and
+         clicking one selects it so typing overwrites the whole placeholder. */
+      .verify-chip {
+        background: color-mix(in srgb, var(--warn) 16%, transparent);
+        border: 1px dashed var(--warn);
+        border-radius: 5px; padding: 0 5px;
+        color: var(--warn); font-weight: 600; font-size: .92em; cursor: text;
+      }
+      /* Show the document is live: fields lift as the cursor passes over them. */
+      .draft-page[contenteditable="true"] td:hover,
+      .draft-page[contenteditable="true"] p:hover {
+        background: color-mix(in srgb, var(--accent) 7%, transparent);
+      }
       @media print {
         body * { visibility: hidden; }
+        .verify-chip { background: none; border: none; color: inherit; padding: 0; }
+        .draft-page td:hover, .draft-page p:hover { background: none !important; }
         .draft-page, .draft-page * { visibility: visible; }
         .draft-page {
           position: absolute; left: 0; top: 0; width: 100%;
