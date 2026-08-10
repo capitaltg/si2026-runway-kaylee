@@ -90,6 +90,119 @@ def test_mixed_block_normalizes_only_the_named_zeros():
     assert all(c.obligated is not None for c in e.clins)
 
 
+def _w45983_award(contract_type="Firm-Fixed-Price"):
+    return Extraction(
+        contract=ContractHeader(
+            piid="W45983-24-C-1675",
+            contract_type=contract_type,
+            total_ceiling=5_960_218.40,
+            total_obligated=0.0,
+            incrementally_funded=True,
+        ),
+        periods=[
+            Period(
+                name="Base",
+                pop_start="2024-09-24",
+                pop_end="2025-09-23",
+                exercised=True,
+                ceiling=3_037_736.80,
+            ),
+            Period(
+                name="Option 1",
+                pop_start="2025-09-24",
+                pop_end="2026-09-23",
+                # This is the bad initial-award inference being normalized.
+                exercised=True,
+                ceiling=2_922_481.60,
+            ),
+        ],
+        clins=[
+            CLIN(
+                clin="0001",
+                period="Base",
+                title="Base labor",
+                type="FFP",
+                is_labor=True,
+                ceiling=2_866_736.80,
+                obligated=None,
+            ),
+            CLIN(
+                clin="0002",
+                period="Base",
+                title="Base travel",
+                type="COST",
+                is_labor=False,
+                ceiling=171_000.00,
+                obligated=None,
+            ),
+            CLIN(
+                clin="1001",
+                period="Option 1",
+                title="Option 1 labor",
+                type="FFP",
+                is_labor=True,
+                ceiling=2_751_481.60,
+                obligated=None,
+            ),
+            CLIN(
+                clin="1002",
+                period="Option 1",
+                title="Option 1 travel",
+                type="COST",
+                is_labor=False,
+                ceiling=171_000.00,
+                obligated=None,
+            ),
+        ],
+    )
+
+
+def test_initial_ffp_award_fully_obligates_only_the_base_period():
+    e = extract.normalize_initial_award(_w45983_award())
+
+    assert [c.obligated for c in e.clins] == [
+        2_866_736.80,
+        171_000.00,
+        None,
+        None,
+    ]
+    assert [p.exercised for p in e.periods] == [True, False]
+    assert e.contract.total_obligated == 3_037_736.80
+    assert e.contract.incrementally_funded is False
+
+
+def test_initial_ffp_award_preserves_explicit_base_obligations():
+    e = _w45983_award()
+    e.clins[0].obligated = 2_000_000.0
+    e.clins[1].obligated = 0.0
+
+    normalized = extract.normalize_initial_award(e)
+
+    assert [c.obligated for c in normalized.clins[:2]] == [2_000_000.0, 0.0]
+    assert normalized.contract.total_obligated == 2_000_000.0
+    assert normalized.contract.incrementally_funded is True
+
+
+def test_initial_award_does_not_default_non_ffp_obligations():
+    e = extract.normalize_initial_award(_w45983_award("Cost Plus Fixed Fee"))
+
+    assert [c.obligated for c in e.clins] == [None, None, None, None]
+    assert e.contract.total_obligated == 0.0
+    assert [p.exercised for p in e.periods] == [True, False]
+
+
+def test_initial_ffp_award_does_not_invent_total_with_unpriced_base_clin():
+    e = _w45983_award()
+    e.clins[1].ceiling = None
+
+    normalized = extract.normalize_initial_award(e)
+
+    assert normalized.clins[0].obligated == 2_866_736.80
+    assert normalized.clins[1].obligated is None
+    assert normalized.contract.total_obligated == 0.0
+    assert normalized.contract.incrementally_funded is True
+
+
 # --- Constrained-decoding wiring ---------------------------------------------
 # Not a normalization rule, but it belongs next to one: on Bedrock a schema with
 # a nested object list never compiles, so asking for constrained decoding buys a
