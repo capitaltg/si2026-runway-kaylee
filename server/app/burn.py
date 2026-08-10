@@ -222,9 +222,7 @@ def _missing_option_mods(contract: dict, rows: List[dict]) -> List[dict]:
         wanted = key(period_name)
         for action in history:
             action_name = key(action.get("action") or action.get("action_type"))
-            action_period = key(
-                action.get("period") or action.get("period_exercised")
-            )
+            action_period = key(action.get("period") or action.get("period_exercised"))
             if action_name == "option_exercise" and action_period == wanted:
                 return True
             if "exercise option" in action_name and wanted in action_name:
@@ -259,10 +257,7 @@ def _missing_option_mods(contract: dict, rows: List[dict]) -> List[dict]:
             by_code = charge_code in option_codes
             week = _d(row.get("week_ending"))
             by_date = bool(
-                week
-                and start
-                and start <= week
-                and (end is None or week <= end)
+                week and start and start <= week and (end is None or week <= end)
             )
             if by_code or by_date:
                 detected = True

@@ -105,12 +105,16 @@ def test_activity_dated_in_option_window_flags_even_when_code_is_unmapped():
 
 
 def test_base_only_or_zero_activity_does_not_flag_an_option():
-    assert burn.compute(_contract(), [_row(code="0001", week="2025-01-10")])[
-        "contract"
-    ]["missing_option_mods"] == []
-    assert burn.compute(_contract(), [_row(hours=0)])["contract"][
-        "missing_option_mods"
-    ] == []
+    assert (
+        burn.compute(_contract(), [_row(code="0001", week="2025-01-10")])["contract"][
+            "missing_option_mods"
+        ]
+        == []
+    )
+    assert (
+        burn.compute(_contract(), [_row(hours=0)])["contract"]["missing_option_mods"]
+        == []
+    )
 
 
 def test_ingested_option_exercise_history_suppresses_the_warning():
