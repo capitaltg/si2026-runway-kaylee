@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import * as alertHelpers from "./flight-deck-alerts.js";
+import { scopeNotices } from "./scope-notice.js";
 
 const { nextAlertIndex, orderedFlightDeckAlerts } = alertHelpers;
 
@@ -176,4 +177,16 @@ test("drift ranks on the size of the gap, not its direction", () => {
     ],
   });
   assert.deepEqual(ordered.map((a) => a.item.key), ["big-under", "small"]);
+});
+
+test("missing option modifications enter the existing scope-alert group", () => {
+  const notices = scopeNotices({
+    missing_option_mods: [{ period: "Option 1", clins: ["1001"] }],
+  });
+
+  const ordered = orderedFlightDeckAlerts({ notices });
+
+  assert.equal(ordered.length, 1);
+  assert.equal(ordered[0].kind, "scope");
+  assert.equal(ordered[0].item, notices);
 });

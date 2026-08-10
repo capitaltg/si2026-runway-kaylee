@@ -23,6 +23,7 @@ from . import (
     heat,
     lcat,
     people,
+    periods as period_ids,
     rates,
     sources,
     suggest,
@@ -531,15 +532,9 @@ def contract_document(contract_id: int, document_id: int):
     )
 
 
-def _clin_key(num) -> str:
-    """A CLIN's identity for matching a mod's funding line to an award CLIN.
-
-    Case- and whitespace-insensitive, nothing more. Deliberately NOT the "slot"
-    normalisation burn.py uses for cross-period line-item identity: 0001 and 1001
-    are the same line item in different years, and a mod that funds 1001 must not
-    be allowed to land on 0001.
-    """
-    return str(num or "").strip().upper()
+# One definition of "same period" / "same CLIN", shared with burn.py — see
+# app/periods.py for why they no longer live here.
+_clin_key = period_ids.clin_key
 
 
 def _acrn_list(value) -> List[str]:
@@ -554,20 +549,7 @@ def _acrn_list(value) -> List[str]:
     return [part.strip() for part in str(value or "").split(",") if part.strip()]
 
 
-def _period_key(name) -> Optional[str]:
-    """A period's identity for matching a mod's `period_exercised` to a period on
-    the award. Award and mod name the same period in different words — 'Option
-    Year 1' vs 'Option 1' vs 'OY1' — so match on base-or-which-option, not text.
-    """
-    s = str(name or "").strip().lower()
-    if not s:
-        return None
-    if "base" in s:
-        return "base"
-    digits = re.search(r"(\d+)", s)
-    if digits and ("option" in s or s.startswith("oy")):
-        return f"option{int(digits.group(1))}"
-    return re.sub(r"[^a-z0-9]", "", s) or None
+_period_key = period_ids.key
 
 
 # "CLIN 0001 (ACRN AA) $950,000.00" — the per-CLIN split an SF-30 states in its
@@ -775,28 +757,16 @@ def _apply_option_exercises(existing: dict) -> List[str]:
     stopped being spendable. The SF-30 that exercised the option is the document
     that says otherwise; ingesting it is what corrects the period status.
 
-    Two independent reads, because either can be missing: the narrative's
-    `period_exercised`, and the periods owning the CLINs the mod actually funded
-    (money landing on 1001 is an Option Year 1 obligation whatever the prose
-    says). Never flips a period *off* — a mod can only ever add.
+    The reads that answer it live in `period_ids.exercised_keys`, because burn.py
+    has to ask the same question to warn about the option-exercise mod that was
+    never ingested, and a warning suppressed by a different rule than the one that
+    flips the flag is a warning that fires on contracts that are fine. Never flips a
+    period *off* — a mod can only ever add.
     """
     periods = existing.get("periods") or []
     if not periods:
         return []
-    clin_period = {
-        _clin_key(c.get("clin")): c.get("period")
-        for c in (existing.get("clins") or [])
-        if (c.get("period") or "").strip()
-    }
-
-    wanted = set()
-    for h in existing.get("obligation_history") or []:
-        if (h.get("action") or "") != "option_exercise":
-            continue
-        wanted.add(_period_key(h.get("period")))
-        for ln in h.get("funding_lines") or []:
-            wanted.add(_period_key(clin_period.get(_clin_key(ln.get("clin")))))
-    wanted.discard(None)
+    wanted = period_ids.exercised_keys(existing)
     if not wanted:
         return []
 

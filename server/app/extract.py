@@ -6,7 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import confidence
+from . import confidence, pricing
+from . import periods as period_ids
 from .schemas import Extraction, Modification, RateAgreement
 
 # Load the server's dotenv files before any credential lookup. Without this the
@@ -99,16 +100,12 @@ SYSTEM = (
     "keeping `loaded_rate` for a fully-burdened billing rate. A sheet printing only "
     "one rate per category is printing the loaded rate — leave `direct_rate` null "
     "rather than guessing which one it is. "
-    "A period's `exercised` flag is read from what the document marks, not from "
-    "what an award form is normally able to say. Award documents annotate the "
-    "periods NOT yet in effect — '(option not exercised)', 'unexercised', "
-    "'reserved' or similar against that period in the schedule — and print the "
-    "ones already in effect plain. So set exercised=true for the base period and "
-    "for every option period the document does not mark as un-exercised, even "
-    "when the award's own signature date predates that option: you are reading a "
-    "document that may have been reissued or conformed mid-performance, and a "
-    "period whose dates have already begun is in effect. Set exercised=false only "
-    "where the document says so. "
+    "For an initial award document (SF-26 / SF-1449), set `exercised=true` only "
+    "for the Base period and set every option period to `exercised=false`, even "
+    "when the schedule prints an option without an 'unexercised' annotation. An "
+    "option becomes exercised only through a later explicit SF-30 option-exercise "
+    "modification; the award's priced option schedule is not evidence that the "
+    "Government exercised it. "
     "Use null for any field not present in the document — never invent or "
     "estimate values. Money is in US dollars as a number (no '$' or commas). "
     "For every field, also report your extraction confidence as a 0.0-1.0 number. "
@@ -261,6 +258,70 @@ def normalize_obligations(parsed: Extraction) -> Extraction:
     return parsed
 
 
+def normalize_initial_award(parsed: Extraction) -> Extraction:
+    """Apply initial-award rules that must not depend on model inference.
+
+    An award prices all option periods but does not exercise them. The separate
+    SF-30 ingestion path is the only path that later brings an option into force.
+
+    An overall FFP award's Base price is obligated at award. Where the extraction
+    is silent for an individual Base CLIN, its firm price is therefore the best
+    deterministic obligation. Explicit figures (including zero) remain source
+    facts and are never overwritten. Option CLINs and non-FFP awards are never
+    defaulted here.
+    """
+    if not parsed.periods:
+        return parsed
+
+    # The Base by name where the schedule says so, by position only as a fallback.
+    # Getting this wrong exercises an option and closes the Base in one stroke, and
+    # nothing requires an extraction to return the schedule in order.
+    base = next(
+        (p for p in parsed.periods if period_ids.key(p.name) == "base"),
+        parsed.periods[0],
+    )
+    for period in parsed.periods:
+        period.exercised = period is base
+
+    code, _ = pricing.classify(parsed.contract.contract_type)
+    if code != "FFP":
+        return parsed
+
+    base_key = period_ids.key(base.name)
+    base_clins = [
+        clin for clin in parsed.clins if period_ids.key(clin.period) == base_key
+    ]
+    if not base_clins:
+        return parsed
+
+    for clin in base_clins:
+        if clin.obligated is None and clin.ceiling is not None:
+            clin.obligated = clin.ceiling
+
+    # On a multi-period schedule, one unlabeled CLIN might belong to Base. We may
+    # still normalize the lines positively identified as Base, but cannot claim
+    # their subtotal is the complete award obligation.
+    period_keys = {period_ids.key(period.name) for period in parsed.periods}
+    period_keys.discard(None)
+    period_labels_complete = all(
+        period_ids.key(clin.period) in period_keys for clin in parsed.clins
+    )
+    if period_labels_complete and all(
+        clin.obligated is not None for clin in base_clins
+    ):
+        total_obligated = round(sum(clin.obligated for clin in base_clins), 2)
+        parsed.contract.total_obligated = total_obligated
+        base_ceiling = base.ceiling
+        if base_ceiling is None and all(
+            clin.ceiling is not None for clin in base_clins
+        ):
+            base_ceiling = round(sum(clin.ceiling for clin in base_clins), 2)
+        if base_ceiling is not None:
+            parsed.contract.incrementally_funded = total_obligated < base_ceiling
+
+    return parsed
+
+
 def _parse(content) -> Extraction:
     # 16000, not 8000: adaptive thinking is on by default on current models and
     # max_tokens caps thinking plus response text together, so a budget sized for
@@ -271,8 +332,14 @@ def _parse(content) -> Extraction:
     # grammar-compilation timeout on every award ingest — skip straight to plain
     # JSON and save that dead wait.
     parsed = normalize_obligations(
-        _parse_schema(
-            content, SYSTEM, Extraction, 16000, constrained=(PROVIDER != "bedrock")
+        normalize_initial_award(
+            _parse_schema(
+                content,
+                SYSTEM,
+                Extraction,
+                16000,
+                constrained=(PROVIDER != "bedrock"),
+            )
         )
     )
     try:
