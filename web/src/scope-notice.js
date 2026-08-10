@@ -1,5 +1,13 @@
 export function scopeNotices(contract = {}) {
   const notices = [];
+  for (const missing of contract.missing_option_mods ?? []) {
+    const period = missing.period;
+    if (!period) continue;
+    notices.push({
+      key: `missing_option_mod:${period}`,
+      text: `${period} performance detected on timesheets, but the ${period} SF-30 funding modification has not been ingested.`,
+    });
+  }
   if (contract.clin_scope === "all") {
     notices.push({
       key: "clin_scope",

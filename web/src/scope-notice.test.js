@@ -63,3 +63,28 @@ test("scope notices stay quiet when the funding total is known", () => {
     [],
   );
 });
+
+test("scope notices name the missing SF-30 for option performance", () => {
+  assert.deepEqual(
+    scopeNotices({
+      clin_scope: "period",
+      pop_scoped: true,
+      missing_option_mods: [{ period: "Option 1", clins: ["1001"] }],
+    }),
+    [
+      {
+        key: "missing_option_mod:Option 1",
+        text: "Option 1 performance detected on timesheets, but the Option 1 SF-30 funding modification has not been ingested.",
+      },
+    ],
+  );
+});
+
+test("scope notices emit one stable warning per missing option modification", () => {
+  assert.deepEqual(
+    scopeNotices({
+      missing_option_mods: [{ period: "Option 1" }, { period: "Option 2" }],
+    }).map(({ key }) => key),
+    ["missing_option_mod:Option 1", "missing_option_mod:Option 2"],
+  );
+});
