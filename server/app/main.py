@@ -235,6 +235,12 @@ def confirm(
     records which data batch this award was generated against, so its timesheet
     syncs stay coherent (see sync_timesheets' seed precedence).
 
+    Recording it matters more than "optional" suggests, which is why the saved value
+    comes back in the response for the review screen to confirm: with no seed, a sync
+    falls back to a hash of the PIID, and that draws a different contract's award and
+    roster. Those rows are now refused at the sync rather than stored — so an award
+    ingested without its seed is one whose first sync will stop and ask for it.
+
     `document_id` is the upload ingest stashed for this extraction (#30); confirming
     is what attaches it to the contract. Optional, and a stale or already-claimed id
     is reported rather than raising — manual entry has no document at all, and a
@@ -251,6 +257,9 @@ def confirm(
         "id": cid,
         "piid": extraction.contract.piid,
         "source_document_stored": stored,
+        # Echoed so the review screen can say the batch was recorded — a silently
+        # dropped seed and no seed at all look identical until the first sync fails.
+        "sync_seed": data.get("sync_seed"),
         # Named so the UI can say the cost model was populated from the award rather
         # than leave the user wondering why the rates view is suddenly non-empty.
         "indirect_rates_stored": rates_stored,
@@ -995,12 +1004,54 @@ def remove_contract(contract_id: int):
     return {"deleted": contract_id}
 
 
+def _provenance_message(check: dict, seed: int, pinned: bool, stored: bool) -> str:
+    """What a mismatched batch has to say for itself — as a 409 detail when the sync
+    is refused, and as a `warning` when allow_mismatch waved it through.
+
+    Long, on purpose. It has to name what was pulled, say why that is fatal rather
+    than untidy, and point at the fix, because the symptom the user would otherwise
+    chase (unpriced LCATs charged to unknown CLINs) sends them to the LCAT tooling
+    instead of to the sync that caused it.
+    """
+    foreign = check["foreign"]
+    top = next(iter(foreign))
+    others = (
+        f" (and {len(foreign) - 1} other contract{'s' if len(foreign) > 2 else ''})"
+        if len(foreign) > 1
+        else ""
+    )
+    lede = "Stored a mismatched batch" if stored else "Timesheet sync refused"
+    remedy = (
+        f"This contract is pinned to seed {seed}, which no longer draws it — re-sync "
+        "with ?seed=<n> to re-pin."
+        if pinned
+        else "No Fixtura seed is recorded for this award, so the sync fell back to one "
+        f"derived from the PIID ({seed}), which draws a different contract. Enter the "
+        "batch's seed in the 'Data seed' field on the ingest review screen, or re-sync "
+        "with ?seed=<n>."
+    )
+    tail = (
+        "The burn, allocation and LCAT views are reading another contract's labor "
+        "until this is re-synced."
+        if stored
+        else "Pass ?allow_mismatch=true to store it anyway."
+    )
+    return (
+        f"{lede}: {check['foreign_rows']} of {check['total']} rows belong to "
+        f"{top}{others}, not {check['piid']}. Fixtura draws the award, its CLINs and "
+        "the roster from one seed, so this batch is a different contract's labor — "
+        "stored against this one it reads as LCATs the award never priced, charged to "
+        f"CLINs it does not contain. {remedy} {tail}"
+    )
+
+
 @app.post("/api/contracts/{contract_id}/timesheets/sync")
 def sync_timesheets(
     contract_id: int,
     rows: int = sources.SYNC_ROW_CAP,
     seed: Optional[int] = None,
     scenario: Optional[str] = None,
+    allow_mismatch: bool = False,
 ):
     """Pull a fresh timesheet batch from Fixtura and cache it against this
     contract. Delete-then-insert (via db.replace_timesheets) so a re-sync
@@ -1016,7 +1067,21 @@ def sync_timesheets(
     Seed precedence, likewise: explicit ?seed, else the seed this contract recorded
     at ingest, else the named scenario's own seed, else one derived from the PIID. So
     a contract keeps generating the *coherent* batch it was ingested against, and the
-    auto-sync (which passes nothing) reproduces it rather than drifting."""
+    auto-sync (which passes nothing) reproduces it rather than drifting.
+
+    **The batch is checked before it is stored** (`sources.provenance`). A seed the
+    contract never recorded still produces a perfectly well-formed batch — for
+    somebody else's award — and the derived fallback is a hash of the PIID, so it is
+    not even close to the right one. Six of nine contracts in the dev DB were
+    carrying another contract's labor this way, which is where the standing
+    unmatched-LCAT noise came from. Foreign rows are therefore refused (409), not
+    warned about: unlike the SF-30 PIID check next door, which tolerates a mismatch
+    because block 10A comes through OCR, `contract_no` is a generated field and a
+    disagreement there is never a misread.
+
+    `?allow_mismatch=true` stores anyway and says so in the response, for the case
+    where the mismatch is understood and the rows are wanted regardless.
+    """
     contract = db.get_contract(contract_id)
     if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
@@ -1031,7 +1096,18 @@ def sync_timesheets(
                 status_code=400,
                 detail=f"Unknown scenario '{name}'. Known scenarios: {known}.",
             )
-    opts = picked["opts"] if picked else sources.derive_scenario_opts(contract)
+    # Seed and opts are one pairing, not two settings: Fixtura draws the contract
+    # from both, so replaying a pinned seed against freshly derived opts can still
+    # land on a different award. A contract that has pinned a clean batch therefore
+    # replays the opts it was pinned with — unless the caller names a scenario or a
+    # seed, either of which is a request for a new pairing.
+    pinned_opts = contract.get("sync_opts") if seed is None else None
+    if picked:
+        opts = picked["opts"]
+    elif pinned_opts:
+        opts = pinned_opts
+    else:
+        opts = sources.derive_scenario_opts(contract)
     effective_seed = (
         seed
         if seed is not None
@@ -1049,6 +1125,22 @@ def sync_timesheets(
         ts = sources.fetch_timesheets(rows=rows, seed=effective_seed, opts=opts)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Timesheet sync failed: {e}")
+
+    check = sources.provenance(ts, contract.get("piid"))
+    if check["foreign_rows"] and not allow_mismatch:
+        # Refused before replace_timesheets, so a rejected sync leaves whatever the
+        # contract already had. Wiping good rows to store nothing would be a worse
+        # outcome than the mismatch this is guarding against.
+        raise HTTPException(
+            status_code=409,
+            detail=_provenance_message(
+                check,
+                effective_seed,
+                pinned=contract.get("sync_seed") is not None,
+                stored=False,
+            ),
+        )
+
     stored = db.replace_timesheets(contract_id, ts)
     # Remember an explicitly chosen seed or scenario so future auto-syncs — which
     # pass neither — keep reproducing this same batch instead of falling back to
@@ -1058,6 +1150,17 @@ def sync_timesheets(
         remember["sync_seed"] = seed
     if scenario is not None and contract.get("sync_scenario") != scenario:
         remember["sync_scenario"] = scenario
+    # Pin the pairing that just produced a batch belonging to this contract, so the
+    # next auto-sync reproduces it by record rather than by re-deriving and hoping.
+    # Only a verified-clean batch earns a pin: pinning a mismatch waved through with
+    # allow_mismatch would make the wrong pairing the contract's new baseline. Demo
+    # scenarios are excluded — `sync_scenario` already records those, and their opts
+    # are deliberately off-plan.
+    if picked is None and check["checked"] and not check["foreign_rows"]:
+        if contract.get("sync_seed") != effective_seed:
+            remember["sync_seed"] = effective_seed
+        if contract.get("sync_opts") != opts:
+            remember["sync_opts"] = opts
     if remember:
         blob = {
             k: v for k, v in contract.items() if k not in ("id", "piid", "created_at")
@@ -1072,6 +1175,20 @@ def sync_timesheets(
         # Which scenario the batch came from, so a caller can tell demo data from
         # data generated against the award it's attached to.
         "scenario": name or "derived",
+        "seed": effective_seed,
+        # Reported on every sync, not just a refused one: "these rows are this
+        # contract's" is the fact the burn numbers rest on, and it is cheap to say.
+        "provenance": check,
+        "warning": (
+            _provenance_message(
+                check,
+                effective_seed,
+                pinned=contract.get("sync_seed") is not None,
+                stored=True,
+            )
+            if check["foreign_rows"]
+            else None
+        ),
     }
 
 

@@ -115,7 +115,10 @@ export async function addMod(contractId, file) {
   return r.json();
 }
 
-export async function syncTimesheets(contractId, { rows, seed, scenario } = {}) {
+export async function syncTimesheets(
+  contractId,
+  { rows, seed, scenario, allowMismatch } = {}
+) {
   // Only send params the caller actually set. With none, the backend derives the
   // generation opts from the award itself and crews the roster to the FTEs its
   // labor lines were priced at; `scenario` ("red" / "amber") opts into a demo
@@ -124,12 +127,29 @@ export async function syncTimesheets(contractId, { rows, seed, scenario } = {}) 
   if (rows != null) qs.set("rows", rows);
   if (seed != null) qs.set("seed", seed);
   if (scenario != null) qs.set("scenario", scenario);
+  if (allowMismatch) qs.set("allow_mismatch", "true");
   const q = qs.toString();
   const r = await fetch(
     `${BASE}/api/contracts/${contractId}/timesheets/sync${q ? `?${q}` : ""}`,
     { method: "POST" }
   );
-  if (!r.ok) throw new Error(`Sync failed (${r.status})`);
+  if (!r.ok) {
+    // A 409 means the batch Fixtura returned belongs to a different contract, and
+    // the server's detail is the entire value of that check: it names the contract
+    // the rows came from and the seed to re-sync with. Swallowing it for a bare
+    // "Sync failed (409)" would leave the user at exactly the dead end this guard
+    // exists to remove.
+    let detail = `Sync failed (${r.status})`;
+    try {
+      const body = await r.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      // non-JSON error body; keep the status-code message
+    }
+    const err = new Error(detail);
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
 }
 
