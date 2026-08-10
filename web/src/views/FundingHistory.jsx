@@ -281,7 +281,7 @@ export default function FundingHistory({ contractId }) {
 
   const history = data?.obligation_history || [];
 
-  const cumulative = runningTotals(history);
+  const cumulative = runningTotals(history, data?.total_ceiling ?? null);
 
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px" }}>
