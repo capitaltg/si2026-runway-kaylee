@@ -240,6 +240,71 @@ def seed_for_piid(piid: str) -> int:
     return int.from_bytes(hashlib.sha256(piid.encode()).digest()[:4], "big")
 
 
+def normalize_piid(value) -> str:
+    """A PIID reduced to what two spellings of the same contract share.
+
+    Case and surrounding whitespace, and nothing else. Dashes are structural in a
+    DoD PIID — `N66048-24-C-7647` names an issuing office, a fiscal year, a type
+    and a serial — so folding them out would let two genuinely different contracts
+    compare equal, which is the exact failure this comparison exists to catch.
+    """
+    return str(value or "").strip().upper()
+
+
+def provenance(rows: list, piid: str) -> dict:
+    """Which contract a timesheet batch actually belongs to.
+
+    Fixtura draws its whole scenario from `seed + opts`: the award first, then the
+    CLINs, then a roster crewed off that award's own labor lines. So a batch pulled
+    against the wrong seed is not *noisy* — it is a different contract entirely, and
+    storing it against this one produces exactly the symptom it looks like instead:
+    LCATs the award never priced, charged to CLINs it does not contain. Every LCAT
+    resolution flag #64 raises is downstream of that.
+
+    `contract_no` is the field that says so and it costs one comparison, so the
+    check is worth making before the rows land rather than after somebody spends an
+    afternoon on the mismatch report.
+
+    Rows carrying no `contract_no` are `unattributed`, not foreign: a hand-built CSV
+    need not have the column, and refusing it would gate a real upload on a field
+    only Fixtura fills in. A contract with no PIID of its own can't be checked at
+    all (`checked: False`) — manual entry doesn't require one, and inventing a
+    verdict from a blank would refuse every sync those contracts make.
+    """
+    want = normalize_piid(piid)
+    if not want:
+        return {
+            "checked": False,
+            "piid": None,
+            "total": len(rows),
+            "matched": 0,
+            "unattributed": len(rows),
+            "foreign": {},
+            "foreign_rows": 0,
+        }
+
+    foreign, matched, unattributed = {}, 0, 0
+    for r in rows:
+        got = normalize_piid(r.get("contract_no"))
+        if not got:
+            unattributed += 1
+        elif got == want:
+            matched += 1
+        else:
+            foreign[got] = foreign.get(got, 0) + 1
+    return {
+        "checked": True,
+        "piid": want,
+        "total": len(rows),
+        "matched": matched,
+        "unattributed": unattributed,
+        # Biggest offender first: with several foreign PIIDs in one batch, the one
+        # holding most of the rows is the one worth naming in an error message.
+        "foreign": dict(sorted(foreign.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "foreign_rows": sum(foreign.values()),
+    }
+
+
 # The five commercial systems we show as placeholders. Real GovCon timesheet /
 # payroll / billing tools, matching the design's vendor set — marked "Not
 # connected" because we have no live integration with them here.

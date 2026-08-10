@@ -353,8 +353,10 @@ export default function Ingest({ onSaved }) {
   const [editing, setEditing] = useState(false);
   const [fileName, setFileName] = useState(null);
   const [error, setError] = useState(null);
-  // Optional Fixtura seed for the demo bundle this award came from, stored on the
-  // contract so its timesheet syncs stay coherent (blank = use the default).
+  // The Fixtura seed the bundle this award came from was generated with, stored on
+  // the contract so its timesheet syncs reproduce that same batch. Left blank, the
+  // sync falls back to a seed derived from the PIID, which draws a *different*
+  // contract's award and roster — rows the sync now refuses rather than stores.
   const [seed, setSeed] = useState("");
   const fileRef = useRef(null);
 
@@ -882,7 +884,7 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16 }}>
         <label
           style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)" }}
-          title="Fixtura seed this award was generated with. Stored on the contract so its timesheet syncs stay coherent. Leave blank for the default."
+          title="Fixtura seed this award was generated with. Stored on the contract so its timesheet syncs reproduce the batch it belongs to. Left blank, the sync falls back to a seed derived from the PIID — which draws a different contract's labor, and is refused rather than stored."
         >
           Data seed
           <input

@@ -284,6 +284,11 @@ export default function FlightDeck({
   const [alertIndex, setAlertIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
+  // A sync that was refused, or that stored a mismatch. Deliberately NOT `error`:
+  // that one replaces the whole deck, and a timesheet batch belonging to another
+  // contract is a fixable data problem on a contract whose award is perfectly
+  // readable — blanking its numbers to say so hides the view the message is about.
+  const [syncNote, setSyncNote] = useState(null);
   // Inline contract rename (nickname) right on the title.
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
@@ -374,11 +379,16 @@ export default function FlightDeck({
     if (!contractId) return;
     setSyncing(true);
     setError(null);
+    setSyncNote(null);
     try {
-      await syncTimesheets(contractId);
+      const r = await syncTimesheets(contractId);
+      if (r.warning) setSyncNote(r.warning);
       await load(contractId);
     } catch (e) {
-      setError(e.message);
+      // 409 = the batch belongs to another contract. The server's detail says which
+      // one and how to fix it, so it goes in the banner rather than over the deck.
+      if (e.status === 409) setSyncNote(e.message);
+      else setError(e.message);
     } finally {
       setSyncing(false);
     }
@@ -1331,6 +1341,45 @@ export default function FlightDeck({
           {syncing ? "Syncing…" : "Sync now"}
         </button>
       </div>
+
+      {/* A sync that pulled another contract's labor. Amber rather than red: the
+          contract is fine, the batch was wrong, and the message says which seed to
+          re-sync with. Dismissible, because it is advice and not a tripwire. */}
+      {syncNote && (
+        <div
+          role="status"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            margin: "0 0 14px",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid var(--warn)",
+            background: "rgba(214, 158, 46, 0.08)",
+            color: "var(--text)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <span aria-hidden="true">⚠</span>
+          <span style={{ flex: 1 }}>{syncNote}</span>
+          <button
+            onClick={() => setSyncNote(null)}
+            aria-label="Dismiss sync warning"
+            style={{
+              border: "none",
+              background: "none",
+              color: "var(--dim)",
+              cursor: "pointer",
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* stat row */}
       <div
