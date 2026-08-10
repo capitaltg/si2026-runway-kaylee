@@ -7,6 +7,7 @@ from . import absence as absence_mod
 from . import documents
 from . import lcat
 from . import people
+from . import pricing
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
 
@@ -585,6 +586,37 @@ def set_contract_absence(cid: int, holidays=None, absences=None) -> Optional[dic
             blob["absences"] = clean
         else:
             blob.pop("absences", None)
+
+    update_contract(cid, blob)
+    return get_contract(cid)
+
+
+def set_contract_fee_periods(cid: int, periods) -> Optional[dict]:
+    """Set (or clear) a contract's award-fee evaluation periods (#80).
+
+    Same storage and conventions as `set_contract_capacity` / `set_contract_absence`
+    above: on the data blob so no migration is needed, and the list is replaced
+    wholesale because the editor sends all of it — a merge would make deleting a
+    period impossible.
+
+    **Entered, not extracted.** The award prints the pool; only the government's
+    determination says what was earned of it, and that arrives quarterly in a letter
+    rather than in the award document. So this is the one fee input a user types, and
+    `pricing.normalize_fee_periods` is what keeps a half-filled row from reaching the
+    engine as revenue.
+    """
+    existing = get_contract(cid)
+    if existing is None:
+        return None
+    blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}
+
+    clean = [dict(p) for p in pricing.normalize_fee_periods(periods)]
+    if clean:
+        blob["fee_periods"] = clean
+    else:
+        # Clearing has to stay reachable: an award-fee plan can be re-cut, and the
+        # last period has to be deletable or the list is a one-way door.
+        blob.pop("fee_periods", None)
 
     update_contract(cid, blob)
     return get_contract(cid)

@@ -708,6 +708,62 @@ def _absence_projection(
     }
 
 
+def _fee_payload(position, projected, in_revenue: bool, cost_known: bool):
+    """The fee position as the payload carries it (#80), or None where the type has no
+    fee mechanic.
+
+    `known` is deliberately the *conjunction* of two different facts — the award printed
+    the fee figures, and cost is a real buildup rather than a billing stand-in — because
+    a reader asking "can I trust this fee number?" needs one answer, and both halves have
+    to be true for the answer to be yes. `terms_known` and `cost_known` are carried
+    beside it so the UI can say which half is missing, which is the same split
+    `margin_position.known` makes for the identical reason.
+    """
+    if position is None:
+        return None
+    out = position.payload()
+    out["known"] = bool(position.known and cost_known)
+    out["terms_known"] = position.known
+    out["cost_known"] = cost_known
+    # Whether `revenue` on this CLIN includes the earned fee. False on a fixed-price
+    # line (its revenue is the price) and at Level 1 (the billing rate already
+    # contains the fee), so nobody can double-count by adding it themselves.
+    out["in_revenue"] = in_revenue
+    out["projected"] = projected.payload() if projected is not None else None
+    return out
+
+
+def _fee_periods_by_clin(contract: dict, clins: List[dict]) -> dict:
+    """Award-fee evaluation periods (#80) routed to the CLIN whose pool they draw on.
+
+    The determinations are the government's and are entered rather than extracted, so
+    they live on the contract blob — the same storage holidays and absences use, for the
+    same reason: no migration, and they splat out of `get_contract`.
+
+    A period may name its CLIN. Most don't, because most CPAF awards carry one pool on
+    one CLIN — so an unassigned period is routed there. When *several* CLINs carry a
+    pool, an unassigned period is dropped rather than applied to each: counting one
+    determination against two pools would report fee that was never awarded, and the
+    fix (name the CLIN) belongs to whoever entered it.
+    """
+    periods = pricing.normalize_fee_periods(contract.get("fee_periods"))
+    if not periods:
+        return {}
+    bearers = [
+        str(c.get("clin"))
+        for c in clins
+        if pricing.fee_terms(c).award_fee_pool is not None
+    ]
+    fallback = bearers[0] if len(bearers) == 1 else None
+    routed: dict = {}
+    for record in periods:
+        target = record["clin"] or fallback
+        if target is None:
+            continue
+        routed.setdefault(str(target), []).append(record)
+    return routed
+
+
 def _compute_clin(
     clin: dict,
     rows: List[dict],
@@ -725,6 +781,7 @@ def _compute_clin(
     cost_model: Optional[rates.CostModel] = None,
     pop_start: Optional[date] = None,
     absence: Optional[dict] = None,
+    fee_periods: Optional[List[dict]] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -950,14 +1007,39 @@ def _compute_clin(
     #
     # `cost_known` is the #77 flag, hoisted here because the fee read depends on it.
     cost_known = bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours
+
+    # The fee position (#80): what this CLIN's fee terms have earned at the cost it has
+    # actually incurred, under its own type's rule. Pure arithmetic in `pricing`, called
+    # again below on projected cost for the forecast.
+    fee_terms = pricing.fee_terms(clin)
+    fee_position = pricing.earned_fee(
+        policy, fee_terms, cost, periods=tuple(fee_periods or ())
+    )
+    # Folded into revenue only where cost is a real buildup. At Level 1 there are no
+    # direct rates, so `cost` *is* the loaded billing rate and already contains the fee
+    # (#77) — adding an earned fee on top would count the same dollars twice and report
+    # a margin off two copies of them. The terms are still reported; only the fold is
+    # withheld, which is the same layered-privacy contract `margin_pct` keeps.
+    # Cost-reimbursement only: FPI carries a fee position too, but a fixed-price line's
+    # revenue is its price and never cost-plus-fee, so its projected profit is reported
+    # beside the margin position rather than folded into revenue.
+    fee_in_revenue = bool(
+        policy.is_cost_reimbursement
+        and fee_position
+        and fee_position.known
+        and cost_known
+    )
     if policy.is_cost_reimbursement:
-        # Cost incurred plus the fee earned on it. The fee *rate* lands in #80; until
-        # then there is no honest number to put here, so the fee is zero and says so
-        # via `fee_known: false` rather than being estimated off the billing spread.
-        # That keeps revenue == cost on a CPFF card, which is the correct partial
-        # answer: what we may invoice today, before fee.
-        revenue = cost
-        fee_known = False
+        # Cost incurred plus the fee earned on it (FAR 16.306 et seq). Where the award
+        # printed no fee figures, or cost is a billing stand-in, the fee is zero and
+        # says so via `fee_known: false` rather than being estimated off the spread —
+        # revenue == cost is then the correct partial answer: what we may invoice
+        # today, before fee.
+        # Quantised to cents *before* it lands in revenue, so `cost + fee == revenue`
+        # holds exactly on the payload instead of to within a rounding cent — #79's
+        # reconciliation promise has to survive the fee becoming a real number.
+        revenue = cost + (round(fee_position.earned, 2) if fee_in_revenue else 0.0)
+        fee_known = fee_in_revenue
     elif policy.is_fixed_price:
         # The price is owed on delivery, not on hours (FAR 16.202) — so revenue is the
         # firm price and the fee is whatever the price did not have to spend. This is
@@ -1073,6 +1155,18 @@ def _compute_clin(
     # consulted for the status only on margin-managed ones.
     weeks_to_go = max(0, total_weeks - current_week)
     projected_cost = spent if past_pop else spent + weekly * weeks_to_go
+
+    # The same fee rule, evaluated at the cost this CLIN is heading for (#80). Projected
+    # fee at completion is the figure worth alarming on — "projected fee $312K against a
+    # $400K target, the overrun has cost $88K of fee" — and it rides the identical
+    # forward pace as the runway forecast, so the two can never disagree about the burn.
+    fee_projected = (
+        pricing.earned_fee(
+            policy, fee_terms, projected_cost, periods=tuple(fee_periods or ())
+        )
+        if fee_position is not None
+        else None
+    )
 
     if weekly <= 0:
         status = "unpriced" if unpriced else "paused"
@@ -1299,9 +1393,10 @@ def _compute_clin(
         "billings": round(billings, 2),
         "revenue": round(revenue, 2),
         "fee_earned": round(fee, 2),
-        # False on cost-reimbursement until the fee engine (#80) supplies a fee rate,
-        # and false anywhere cost is a billing-rate stand-in. When false, `fee_earned`
-        # is a structural number that still reconciles but says nothing about profit.
+        # False on a cost-type CLIN whose award printed no fee figures for #80's engine
+        # to earn against, and false anywhere cost is a billing-rate stand-in. When
+        # false, `fee_earned` is a structural number that still reconciles but says
+        # nothing about profit — read `fee_position` for which half is missing.
         "fee_known": fee_known,
         # None rather than 0.0 when the fee isn't known: a withheld margin is the
         # layered-privacy contract, and a fabricated 0% is the failure it prevents.
@@ -1330,6 +1425,12 @@ def _compute_clin(
             if margin_managed
             else None
         ),
+        # The earned-fee position (#80), on the types that have one — CPFF, CPAF, CPIF
+        # and FPI. None on FFP (profit is price - cost, reported as `margin_position`),
+        # on T&M (the fee is inside the billing rate) and on an unlabelled award.
+        "fee_position": _fee_payload(
+            fee_position, fee_projected, fee_in_revenue, cost_known
+        ),
         # Which tier priced the most hours on this CLIN: `employee_direct` (L3),
         # `lcat_direct` (L2), `negotiated_fallback` (L1) or `none`.
         "cost_rate_source": (
@@ -1348,9 +1449,12 @@ def _compute_clin(
         # discount to win), and picking one silently is how this loses an
         # accountant's trust. Empty until direct rates exist to derive from.
         #
-        # Fee is not yet subtracted: #76 carries no fee *rate* (that's #80), so the
-        # gap on a fee-bearing type still includes the fee. `fee_rate: 0` on each row
-        # says so rather than letting the delta read as pure variance.
+        # Fee is still not subtracted, and #80 does not change that: the earned-fee
+        # engine prices fee at the CLIN, off the award's fee figures, which is a
+        # different quantity from the fee margin baked into one LCAT's negotiated
+        # billing rate. So the gap on a fee-bearing type still includes that fee, and
+        # `fee_rate: 0` on each row says so rather than letting the delta read as pure
+        # variance.
         "rate_variance": rate_variance,
         # Cause A as a CLIN-level fact (#64): this line item has no usable rate
         # table, so *every* LCAT charged to it prices at the blended rate. One
@@ -1681,6 +1785,9 @@ def compute(
     # user at a CLIN with no money on it.
     rate_index = lcat_match.build_index(clins)
     aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
+    # Award-fee determinations, per CLIN (#80). Resolved once here rather than per CLIN
+    # because routing an unassigned period needs to see every CLIN on the award.
+    fee_periods = _fee_periods_by_clin(contract, clins)
 
     # First pass with the proxy, just to total the forward burn rate. If SF-30
     # mods have been ingested, re-derive funding pace from that real obligation
@@ -1703,6 +1810,7 @@ def compute(
             cost_model=cost_model,
             pop_start=pop_start,
             absence=absence_settings,
+            fee_periods=fee_periods.get(str(c.get("clin"))),
         )
         for c in labor
     ]
@@ -1731,6 +1839,7 @@ def compute(
                 cost_model=cost_model,
                 pop_start=pop_start,
                 absence=absence_settings,
+                fee_periods=fee_periods.get(str(c.get("clin"))),
             )
             for c in labor
         ]
@@ -1948,6 +2057,38 @@ def compute(
         }
         for c in computed
         if c["margin_managed"] and c["status"] in ("over", "watch")
+    ]
+
+    # Fee erosion on cost-reimbursement work (#80) — the cost-type counterpart to
+    # `margin_alerts`. Driven off `absorbed` on the *projected* position, never off
+    # `target_delta`: on CPAF an undetermined award pool makes at-completion fee sit
+    # below target from day one, and that is the normal state of a CPAF contract, not an
+    # alert. `absorbed` is only ever fee that *cost* has taken — the overrun eating a
+    # fixed fee (52.216-8's `contractor_fee_first`) or the share ratio walking an
+    # incentive fee down — which is the thing worth waking someone for.
+    fee_alerts = [
+        {
+            "code": c["code"],
+            "name": c["name"],
+            "policy": c["pricing_policy"]["code"],
+            "basis": c["fee_position"]["basis"],
+            # "over" = the fee is gone; "watch" = the projection is eating it.
+            "status": (
+                "over" if c["fee_position"]["projected"]["exhausted"] else "watch"
+            ),
+            "target": c["fee_position"]["target"],
+            "earned": c["fee_position"]["earned"],
+            "projected": c["fee_position"]["projected"]["at_completion"],
+            # The headline: "projected fee $312K against a $400K target — the overrun
+            # has cost $88K of fee."
+            "fee_lost": c["fee_position"]["projected"]["absorbed"],
+            "overrun": c["fee_position"]["projected"]["overrun"],
+        }
+        for c in computed
+        if c["fee_position"]
+        and c["fee_position"]["known"]
+        and c["fee_position"]["projected"]
+        and c["fee_position"]["projected"]["absorbed"] > 0
     ]
 
     # Under-burn: too slow to land the budget by PoP end. Projected end-of-PoP
@@ -2185,7 +2326,7 @@ def compute(
             # `revenue - cost` here exactly as it is per CLIN, so the three
             # reconcile at both levels. `fee_known` false means the fee is a
             # structural figure — either cost is a billing stand-in, or a
-            # cost-type CLIN is still waiting on the fee engine (#80).
+            # cost-type CLIN's award printed no fee figures for #80 to earn against.
             "revenue": round(total_revenue, 2),
             "fee": round(total_fee, 2),
             "fee_known": all(c["fee_known"] for c in computed) if computed else False,
@@ -2214,6 +2355,10 @@ def compute(
         # every CLIN whose projected cost is at or past its price. Empty on contracts
         # with no fixed-price lines, which is most of them today.
         "margin_alerts": margin_alerts,
+        # Cost-type fee erosion (#80). Same shape of story as `margin_alerts` — money
+        # the company is losing rather than money running out — kept separate because
+        # these rows carry a fee position and those carry a margin position.
+        "fee_alerts": fee_alerts,
         "data_quality": data_quality,
         # Rate-line coverage (#64), split by what fixes it: `rate_gaps` needs a
         # document (import the rate schedule), `lcat_gaps` needs a decision (map
@@ -2224,13 +2369,16 @@ def compute(
         # unpriced CLIN gates it just like a tripwire (#40).
         # A fixed-price CLIN eating its fee gates `all_clear` too (#79): it is not a
         # funding problem, but it is money the company is losing, and it is exactly the
-        # thing this contract type is at risk of.
+        # thing this contract type is at risk of. A cost-type CLIN projected to lose fee
+        # to its own overrun gates it for the same reason (#80) — that is the loss a PM
+        # otherwise does not see until year end.
         "all_clear": (
             len(tripwires) == 0
             and len(underburn) == 0
             and len(funding) == 0
             and len(data_quality) == 0
             and len(margin_alerts) == 0
+            and len(fee_alerts) == 0
         ),
         "sync": {
             "rows": len(rows),
