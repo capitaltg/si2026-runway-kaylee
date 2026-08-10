@@ -8,6 +8,12 @@ const ALERT_GROUPS = [
       isRealizedTripwire(item) ? tripwireOverage(item) : -(item.runway_days ?? Infinity),
   },
   { source: "funding", kind: "funding", risk: (item) => -(item.runway_days ?? Infinity) },
+  // Baseline drift (#67) — under the money-runs-out alerts, over underburn. A
+  // staffing gap is often what *causes* the tripwires above it, so it reads early;
+  // it still has no date attached, so it does not outrank one. Ranked on the
+  // absolute weekly effect: running 20% under the staffing you committed to is as
+  // much a departure from the plan as running 20% over it.
+  { source: "baselineDrift", kind: "drift", risk: (item) => Math.abs(item.deltaCost ?? 0) },
   { source: "underburn", kind: "underburn", risk: (item) => item.projected_unspent ?? 0 },
   { source: "marginAlerts", kind: "margin", risk: (item) => -(item.projected_margin ?? Infinity) },
   { source: "notices", kind: "scope", grouped: true, risk: () => 0 },

@@ -6,6 +6,8 @@ import {
   savePlan,
   updatePlan,
   deletePlan,
+  setBaselinePlan,
+  clearBaselinePlan,
   getLcatRates,
   getPeople,
   getPeopleUtilization,
@@ -29,6 +31,13 @@ import {
   scoringSnapshot,
   snapshotChanges,
 } from "../plans.js";
+import {
+  planDrift,
+  driftSummary,
+  driftSentence,
+  rateResolver,
+  actualsDraft as buildDraft,
+} from "../drift.js";
 import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
@@ -575,19 +584,9 @@ export default function AllocationMatrix({
 
   // Rate resolver for a given set of planned adds: LCAT-resolved $/hr per person
   // per CLIN, blended-rate fallback. Pure so it can score any plan, not just live.
-  const makeRate = (addedX) => {
-    const m = {};
-    for (const c of clins) m[c.id] = { _blended: c.blended_rate || 0 };
-    for (const e of employees)
-      for (const [cid, cell] of Object.entries(e.cells || {}))
-        (m[cid] ||= {})[e.id] = cell.rate ?? null;
-    for (const a of addedX || [])
-      for (const [cid, rt] of Object.entries(a.rates || {})) (m[cid] ||= {})[a.id] = rt;
-    return (empId, clinId) => {
-      const c = m[clinId] || {};
-      return c[empId] ?? c._blended ?? 0;
-    };
-  };
+  // Shared with the Flight Deck's drift card (#67), so the two surfaces cannot put
+  // different dollar figures on the same staffing gap.
+  const makeRate = (addedX) => rateResolver({ clins, employees, added: addedX });
 
   // Score a plan state ({draft, added, removed, absences}) into per-CLIN runway +
   // totals — the whole point of the view, and reused to compare saved plans.
@@ -709,6 +708,81 @@ export default function AllocationMatrix({
     return m;
   }, [plans, liveSnapshot]);
   const loadedStale = (loadedPlan && staleReasons[loadedPlan]) || [];
+
+  // The active baseline (#67 item 1) — the one saved plan this contract is being run
+  // against, as opposed to the ten what-ifs sitting beside it. Read off the list
+  // rather than held in its own state: the server owns which plan it is (one per
+  // contract, enforced by a unique index), and a second copy here would be the thing
+  // that goes stale after somebody designates a different one.
+  const baseline = plans.find((p) => p.is_baseline) || null;
+  // Is the grid showing reality rather than a what-if? Not simply "no plan loaded":
+  // an unnamed what-if typed straight onto the actuals has no plan id either, and
+  // ticking that as "what's running now" would be the same lie #62 fixed.
+  const onActuals = !loadedPlan && !dirty;
+
+  // #67 item 2 — drift. Once a baseline exists the question stops being "what if"
+  // and becomes "are we running what we committed to", which is one comparison:
+  // the baseline's hours against the synced actuals, priced with the same resolver
+  // the matrix scores plans with so drift dollars and plan dollars agree.
+  //
+  // Deliberately compared against the *actuals*, not against whatever is on screen.
+  // Drift is a fact about reality; scoring it against a half-typed what-if would
+  // make it move while you edit and mean nothing by the time you stopped.
+  const actualsState = useMemo(
+    () => ({ draft: data ? buildDraft(data) : {} }),
+    [data]
+  );
+  const drift = useMemo(() => {
+    if (!baseline) return null;
+    const names = new Map(employees.map((e) => [String(e.id), e.name]));
+    const rate = makeRate(baseline.data?.added || []);
+    return planDrift({
+      baseline: baseline.data || {},
+      actuals: actualsState,
+      rate,
+      nameOf: (id) => names.get(String(id)),
+    });
+  }, [baseline, actualsState, employees, clins]);
+  const driftLine = useMemo(() => driftSummary(drift), [drift]);
+
+  // What the gap has cost in runway, per CLIN — the number that turns "18% above
+  // baseline" into something with a deadline attached. Scored through evalPlan, so
+  // it carries the same absence and funding arithmetic as every other runway figure
+  // on the page rather than a second, simpler model of the same thing.
+  const driftRunway = useMemo(() => {
+    if (!baseline) return {};
+    const b = evalPlan(baseline.data || {});
+    const a = evalPlan(actualsState);
+    const out = {};
+    for (const c of clins) {
+      const bd = b.clin[c.id]?.runwayDays;
+      const ad = a.clin[c.id]?.runwayDays;
+      if (bd != null && ad != null) out[c.id] = ad - bd;
+    }
+    return out;
+  }, [baseline, actualsState, clins, employees, contractAbsence, cw, tw]);
+  const [showDrift, setShowDrift] = useState(false);
+  const [baselineBusy, setBaselineBusy] = useState(false);
+  const [baselineErr, setBaselineErr] = useState(null);
+
+  // Designate or stand down, from the plans menu. Refetches rather than patching the
+  // list locally, because designating is a swap — the plan that lost the baseline is
+  // also changing, and guessing which one that was is how the menu ends up showing
+  // two baselines.
+  async function toggleBaseline(plan) {
+    if (baselineBusy) return;
+    setBaselineBusy(true);
+    setBaselineErr(null);
+    try {
+      if (plan.is_baseline) await clearBaselinePlan(contractId, plan.id);
+      else await setBaselinePlan(contractId, plan.id);
+      refreshPlans();
+    } catch (e) {
+      setBaselineErr(e.message || "Could not change the baseline.");
+    } finally {
+      setBaselineBusy(false);
+    }
+  }
 
   // Per-person avatar hue keyed to roster order, so a person keeps their color
   // regardless of filtering/sorting.
@@ -876,6 +950,23 @@ export default function AllocationMatrix({
         ? `Discard unsaved changes to “${loadedPlanName}”? The saved plan itself is kept.`
         : "Discard this what-if and go back to the synced actuals?";
     if (!window.confirm(warning)) return;
+    reset();
+  }
+
+  // Back out of a plan to what is actually running. The same `reset()` Discard uses,
+  // reached from the plans menu and framed as a destination rather than as a loss:
+  // "Discard changes" is the right name for throwing away an edit and the wrong one
+  // for "show me the synced actuals again", which is a place you go, not damage you
+  // do. It confirms only when there is genuinely something unsaved to lose —
+  // switching back from a cleanly-saved plan costs nothing and shouldn't ask.
+  function showActuals() {
+    if (!loadedPlan && !dirty) return;
+    if (unsaved) {
+      const warning = loadedPlanName
+        ? `Go back to the synced actuals? Unsaved changes to “${loadedPlanName}” are lost — the saved plan itself is kept.`
+        : "Go back to the synced actuals? This unsaved what-if is lost.";
+      if (!window.confirm(warning)) return;
+    }
     reset();
   }
 
@@ -1271,6 +1362,45 @@ export default function AllocationMatrix({
               plan, under the same name, now says something it didn't say when it was
               written. Saying which terms moved is what makes the numbers on screen
               readable; saving over it re-baselines the snapshot. */}
+          {/* #67 — what this contract is actually being run against, stated where the
+              matrix says what it is modelling. Without it a saved plan is one of a
+              list; with it, one of them is the commitment and the rest are what-ifs.
+              Absent entirely when nothing is designated: an empty "Baseline: —" would
+              read as a broken field rather than as a decision nobody has made. */}
+          {baseline && (
+            <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>
+              <span style={baselineChip}>BASELINE</span>{" "}
+              <b style={{ color: "var(--text)" }}>“{baseline.name}”</b> — the staffing
+              this contract is committed to
+              {loadedPlan === baseline.id ? " · open now" : ""}
+              {" · "}
+              {/* The summary is the link. With nothing adrift it still opens — "we are
+                  running the plan" is an answer worth being able to check, and a
+                  control that appears only when there is bad news teaches people that
+                  its absence means nobody looked. */}
+              <button
+                onClick={() => setShowDrift((v) => !v)}
+                title="Show how the actuals differ from the committed staffing"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  font: "inherit",
+                  fontWeight: driftLine ? 700 : 500,
+                  color: driftLine?.delta > 0 ? "var(--warn)" : "var(--dim)",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                {driftLine ? driftLine.text : "On the baseline staffing"}
+              </button>
+            </div>
+          )}
+          {baselineErr && (
+            <div style={{ fontSize: 12, color: "var(--bad)", marginTop: 6 }}>
+              {baselineErr}
+            </div>
+          )}
           {loadedStale.length > 0 && (
             <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 6, display: "flex", gap: 6 }}>
               <span aria-hidden="true">⚠</span>
@@ -1753,10 +1883,34 @@ export default function AllocationMatrix({
                           </button>
                         </div>
                       )}
-                      {plans.length > 0 && (
+                      {(plans.length > 0 || dirty || loadedPlan) && (
                         <>
                           <div style={menuDivider} />
-                          <div style={menuLabel}>Saved plans</div>
+                          {/* One group, read as a radio list: the actuals and the saved
+                              plans are alternative things the grid can be showing, and
+                              the menu was previously only able to express half of that
+                              — you could move between plans but never back out of one.
+                              Hence "Modelling from" rather than "Saved plans". */}
+                          <div style={menuLabel}>Modelling from</div>
+                          <button
+                            onClick={() => {
+                              showActuals();
+                              setPlansMenuOpen(false);
+                            }}
+                            title="Show the synced actuals — who is charging, at the hours they are actually charging"
+                            style={{
+                              ...menuItem,
+                              color: onActuals ? "var(--accent)" : "var(--text)",
+                            }}
+                          >
+                            <div>
+                              {onActuals ? "✓ " : ""}
+                              What's running now
+                            </div>
+                            <div style={{ fontSize: 10.5, color: "var(--faint)", fontWeight: 400 }}>
+                              The synced actuals, no what-if
+                            </div>
+                          </button>
                           {plans.map((p) => (
                             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <button
@@ -1769,6 +1923,7 @@ export default function AllocationMatrix({
                                     {loadedPlan === p.id ? "✓ " : ""}
                                     {p.name}
                                   </span>
+                                  {p.is_baseline && <span style={baselineChip}>BASELINE</span>}
                                   {staleReasons[p.id]?.length > 0 && (
                                     <span style={staleChip}>STALE</span>
                                   )}
@@ -1783,6 +1938,28 @@ export default function AllocationMatrix({
                                     ? `Updated ${shortDate(p.updated_at)}`
                                     : `Saved ${shortDate(p.created_at)}`}
                                 </div>
+                              </button>
+                              {/* Designate / stand down, on the row rather than behind a
+                                  submenu: which plan is the baseline is a property of
+                                  the plan, and the only place all the plans are listed
+                                  is here. Deliberately reversible and unconfirmed —
+                                  unlike delete, nothing is lost by getting it wrong. */}
+                              <button
+                                onClick={() => toggleBaseline(p)}
+                                disabled={baselineBusy}
+                                aria-pressed={Boolean(p.is_baseline)}
+                                title={
+                                  p.is_baseline
+                                    ? `“${p.name}” is the active baseline — click to stand it down`
+                                    : `Make “${p.name}” the active baseline — the staffing this contract is committed to`
+                                }
+                                style={{
+                                  ...baselineToggle,
+                                  color: p.is_baseline ? "var(--accent)" : "var(--faint)",
+                                  cursor: baselineBusy ? "default" : "pointer",
+                                }}
+                              >
+                                {p.is_baseline ? "★" : "☆"}
                               </button>
                               {/* The same quiet trash the contract delete uses (#29),
                                   rather than a × that could be a close button. It
@@ -1825,6 +2002,17 @@ export default function AllocationMatrix({
               </button>
             </div>
           </div>
+
+          {/* drift vs the active baseline (on demand) */}
+          {showDrift && baseline && (
+            <DriftPanel
+              drift={drift}
+              baselineName={baseline.name}
+              clins={clins}
+              runwayDelta={driftRunway}
+              onClose={() => setShowDrift(false)}
+            />
+          )}
 
           {/* compare panel (on demand) */}
           {comparing && (
@@ -3092,15 +3280,125 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
   );
 }
 
-// Snapshot the synced actuals into an editable {emp: {clin: hrs}} grid.
-function buildDraft(d) {
-  const draft = {};
-  for (const e of d.employees || []) {
-    draft[e.id] = {};
-    for (const c of d.clins || []) draft[e.id][c.id] = e.cells?.[c.id]?.hours || 0;
-  }
-  return draft;
+// Drift vs the active baseline (#67 item 2) — the plan we committed to against the
+// hours people are actually charging. Presentation only: the arithmetic and the
+// wording both live in drift.js, so the Flight Deck card can say the same thing.
+function DriftPanel({ drift, baselineName, clins, runwayDelta, onClose }) {
+  const clinName = (id) => clins.find((c) => String(c.id) === String(id))?.code || `CLIN ${id}`;
+  const cell = { padding: "9px 14px", fontFamily: mono, fontSize: 13, textAlign: "right" };
+  // Over plan is the expensive direction, so it is the one that gets a warning
+  // color. Under plan is not automatically good news — it can mean the work isn't
+  // getting done — so it stays neutral rather than green.
+  const deltaColor = (d) => (d > 0 ? "var(--warn)" : d < 0 ? "var(--dim)" : "var(--faint)");
+  const signed = (d, fmt) => (d === 0 ? "—" : `${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}`);
+
+  return (
+    <div style={{ ...panelStyle, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "12px 14px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+          Drift vs “{baselineName}”
+        </span>
+        <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
+          The committed staffing against what people are actually charging — not
+          against the what-if on screen.
+        </span>
+        <button onClick={onClose} title="Close" style={{ marginLeft: "auto", width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--dim)", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>
+          ×
+        </button>
+      </div>
+
+      {drift.people.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "var(--panel2)", color: "var(--faint)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              <th style={{ textAlign: "left", padding: "10px 14px", fontWeight: 700 }}>Person</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Baseline</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Actual</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Δ hrs/wk</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Δ $/wk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {drift.people.map((p) => (
+              <tr key={p.id} style={{ borderTop: "1px solid var(--border)" }} title={driftSentence(p)}>
+                <td style={{ padding: "9px 14px", color: "var(--text)", fontWeight: 500 }}>
+                  {p.name}
+                  {/* Roster drift — somebody who isn't in the plan at all, or who the
+                      plan rolled off. An hours delta alone can't say which. */}
+                  {(p.kind === "unplanned" || p.kind === "rolled_off_charging" || p.kind === "not_charging") && (
+                    <span style={{ display: "block", fontSize: 10.5, color: "var(--faint)", fontWeight: 400 }}>
+                      {p.kind === "unplanned"
+                        ? "not on the baseline"
+                        : p.kind === "rolled_off_charging"
+                          ? "rolled off in the baseline, still charging"
+                          : "on the baseline, charging nothing"}
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...cell, color: "var(--dim)" }}>{p.baselineHrs ? p.baselineHrs.toFixed(1) : "—"}</td>
+                <td style={{ ...cell, color: "var(--text)", fontWeight: 600 }}>{p.actualHrs ? p.actualHrs.toFixed(1) : "—"}</td>
+                <td style={{ ...cell, color: deltaColor(p.deltaHrs), fontWeight: 600 }}>
+                  {signed(Math.round(p.deltaHrs * 10) / 10, (v) => v.toFixed(1))}
+                </td>
+                <td style={{ ...cell, color: deltaColor(p.deltaCost), fontWeight: 600 }}>
+                  {signed(Math.round(p.deltaCost), money)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Per CLIN, with what the gap has cost in runway — the number that gives the
+          percentage a deadline. Only CLINs that actually moved. */}
+      {drift.clins.some((c) => Math.abs(c.delta) >= 1) && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: 14 }}>
+          {drift.clins
+            .filter((c) => Math.abs(c.delta) >= 1)
+            .map((c) => (
+              <div key={c.id} style={{ fontSize: 12, color: "var(--dim)" }}>
+                <b style={{ color: "var(--text)" }}>{clinName(c.id)}</b>{" "}
+                <span style={{ fontFamily: mono }}>
+                  {money(c.baseline)} → {money(c.actual)}/wk
+                </span>{" "}
+                <span style={{ color: deltaColor(c.delta), fontWeight: 600 }}>
+                  {signed(Math.round(c.delta), money)}
+                </span>
+                {runwayDelta?.[c.id] != null && runwayDelta[c.id] !== 0 && (
+                  <span style={{ color: runwayDelta[c.id] < 0 ? "var(--warn)" : "var(--dim)" }}>
+                    {" · "}
+                    {runwayDelta[c.id] < 0
+                      ? `${Math.abs(runwayDelta[c.id])} days of runway lost since the plan was set`
+                      : `${runwayDelta[c.id]} days gained`}
+                  </span>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* Planned but not charging. Kept out of the drift numbers on purpose: a hire
+          who hasn't started is a plan not yet executed, not a staffing breach. */}
+      {drift.planned.length > 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", fontSize: 12, color: "var(--dim)" }}>
+          <b style={{ color: "var(--text)" }}>Planned, not charging yet:</b>{" "}
+          {drift.planned.map((p) => `${p.name} (${p.baselineHrs.toFixed(0)} hrs/wk)`).join(", ")}
+          <span style={{ color: "var(--faint)" }}>
+            {" "}
+            — not counted as drift until they appear on a timesheet.
+          </span>
+        </div>
+      )}
+
+      {drift.people.length === 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px", fontSize: 12.5, color: "var(--good)" }}>
+          Everyone is charging the baseline hours, within half an hour a week.
+        </div>
+      )}
+    </div>
+  );
 }
+
 
 const th = {
   textAlign: "left",
@@ -3236,6 +3534,27 @@ const staleChip = {
   border: "1px solid var(--warn)",
   borderRadius: 5,
   padding: "0 4px",
+  flexShrink: 0,
+};
+// The active baseline (#67). Accent rather than warn: a baseline is a decision that
+// has been made, not a problem — the chip has to read differently from STALE sitting
+// next to it on the same row.
+const baselineChip = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: ".05em",
+  color: "var(--accent)",
+  border: "1px solid var(--accent)",
+  borderRadius: 5,
+  padding: "0 4px",
+  flexShrink: 0,
+};
+const baselineToggle = {
+  border: "none",
+  background: "transparent",
+  padding: "0 2px",
+  fontSize: 14,
+  lineHeight: 1,
   flexShrink: 0,
 };
 const staleTitle = (reasons) =>

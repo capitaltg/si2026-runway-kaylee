@@ -1151,6 +1151,36 @@ def remove_plan(contract_id: int, plan_id: int):
     return {"deleted": plan_id}
 
 
+@app.put("/api/contracts/{contract_id}/plans/{plan_id}/baseline")
+def designate_baseline(contract_id: int, plan_id: int):
+    """Make this plan the contract's active baseline — the staffing we committed to.
+
+    Idempotent, and a swap rather than a set: designating a second plan stands the
+    first one down. A contract has one baseline or none, because drift gets measured
+    against it and two answers to "what did we commit to?" is worse than none (#67).
+    """
+    if db.get_contract(contract_id) is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    try:
+        return db.set_baseline_plan(contract_id, plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.delete("/api/contracts/{contract_id}/plans/{plan_id}/baseline")
+def clear_baseline(contract_id: int, plan_id: int):
+    """Stand the active baseline down, keeping the plan itself.
+
+    Scoped to the plan the caller believes is the baseline, so a menu left open
+    since before someone else re-designated can't clear the wrong one.
+    """
+    current = db.get_baseline_plan(contract_id)
+    if current is None or current["id"] != plan_id:
+        raise HTTPException(status_code=404, detail="That plan is not the baseline.")
+    db.set_baseline_plan(contract_id, None)
+    return {"baseline": None}
+
+
 def _all_allocations() -> list:
     """One allocation payload per contract. The expensive sweep — a burn pass each —
     behind both portfolio utilisation and conflicts."""

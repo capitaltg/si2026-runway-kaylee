@@ -117,6 +117,16 @@ def init_db():
     # draws: "Saved 12 Jun" vs "Updated 3 Aug". A default of `created_at` would
     # claim every plan had been edited.
     _add_missing_columns(conn, "plans", {"updated_at": "TEXT"})
+    # The active baseline — "this is the staffing we said we'd run" (#67 item 1). At
+    # most one per contract, enforced in SQL rather than by the caller: two baselines
+    # would make drift-vs-baseline ambiguous, and that ambiguity would surface as a
+    # wrong number on the Flight Deck rather than as an error anyone could see. The
+    # index is partial so the many non-baseline plans don't collide with each other.
+    _add_missing_columns(conn, "plans", {"is_baseline": "INTEGER DEFAULT 0"})
+    conn.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS ux_plans_one_baseline
+           ON plans (contract_id) WHERE is_baseline = 1"""
+    )
     # Indirect rate pools — fringe / overhead / G&A (#77). `contract_id IS NULL` is
     # a company-wide default; a row with a contract_id overrides it for that award.
     # Fiscal-year-keyed from day one (see rates.RateSet) and status-tagged, because
@@ -742,6 +752,19 @@ def list_expenses(contract_id: int, clin: Optional[str] = None) -> list:
     return [dict(r) for r in rows]
 
 
+# One shape for a plan row wherever it leaves this module, so the menu, the save
+# response and the baseline call can't disagree about whether a plan is the baseline.
+_PLAN_ROW_SQL = (
+    "SELECT id, name, created_at, updated_at, is_baseline FROM plans WHERE id = ?"
+)
+
+
+def _plan_row(row) -> dict:
+    d = dict(row)
+    d["is_baseline"] = bool(d.get("is_baseline"))
+    return d
+
+
 def save_plan(contract_id: int, name: str, data: dict) -> dict:
     """Persist one named allocation what-if plan for a contract. Returns the row."""
     conn = get_conn()
@@ -751,11 +774,9 @@ def save_plan(contract_id: int, name: str, data: dict) -> dict:
     )
     conn.commit()
     pid = cur.lastrowid
-    row = conn.execute(
-        "SELECT id, name, created_at, updated_at FROM plans WHERE id = ?", (pid,)
-    ).fetchone()
+    row = conn.execute(_PLAN_ROW_SQL, (pid,)).fetchone()
     conn.close()
-    return dict(row)
+    return _plan_row(row)
 
 
 def update_plan(contract_id: int, plan_id: int, name: str, data: dict):
@@ -775,19 +796,21 @@ def update_plan(contract_id: int, plan_id: int, name: str, data: dict):
     if cur.rowcount == 0:
         conn.close()
         return None
-    row = conn.execute(
-        "SELECT id, name, created_at, updated_at FROM plans WHERE id = ?", (plan_id,)
-    ).fetchone()
+    row = conn.execute(_PLAN_ROW_SQL, (plan_id,)).fetchone()
     conn.close()
-    return dict(row)
+    return _plan_row(row)
 
 
 def list_plans(contract_id: int) -> list:
-    """A contract's saved plans, newest first, with their full sim state."""
+    """A contract's saved plans, newest first, with their full sim state.
+
+    The baseline sorts first: it is the one plan the contract is actually being run
+    against, so it should not be one of eleven rows in save order.
+    """
     conn = get_conn()
     rows = conn.execute(
-        """SELECT id, name, data, created_at, updated_at FROM plans
-           WHERE contract_id = ? ORDER BY id DESC""",
+        """SELECT id, name, data, created_at, updated_at, is_baseline FROM plans
+           WHERE contract_id = ? ORDER BY is_baseline DESC, id DESC""",
         (contract_id,),
     ).fetchall()
     conn.close()
@@ -797,10 +820,66 @@ def list_plans(contract_id: int) -> list:
             "name": r["name"],
             "created_at": r["created_at"],
             "updated_at": r["updated_at"],
+            "is_baseline": bool(r["is_baseline"]),
             "data": json.loads(r["data"]),
         }
         for r in rows
     ]
+
+
+def set_baseline_plan(contract_id: int, plan_id: Optional[int]):
+    """Designate one saved plan as the contract's active baseline, or clear it.
+
+    Designating is a swap, not a set: the old baseline is stood down in the same
+    transaction, because the partial unique index means a second baseline is a
+    write error rather than a silent second answer to "what did we commit to?".
+
+    Returns the new baseline row, None when cleared, and raises LookupError if the
+    plan isn't this contract's — a baseline pointing at another award's staffing
+    would produce drift numbers that look real.
+    """
+    conn = get_conn()
+    try:
+        if plan_id is not None:
+            owned = conn.execute(
+                "SELECT 1 FROM plans WHERE id = ? AND contract_id = ?",
+                (plan_id, contract_id),
+            ).fetchone()
+            if owned is None:
+                raise LookupError("Plan not found on this contract.")
+        conn.execute(
+            "UPDATE plans SET is_baseline = 0 WHERE contract_id = ? AND is_baseline = 1",
+            (contract_id,),
+        )
+        if plan_id is None:
+            conn.commit()
+            return None
+        conn.execute("UPDATE plans SET is_baseline = 1 WHERE id = ?", (plan_id,))
+        conn.commit()
+        return _plan_row(conn.execute(_PLAN_ROW_SQL, (plan_id,)).fetchone())
+    finally:
+        conn.close()
+
+
+def get_baseline_plan(contract_id: int):
+    """The contract's active baseline with its full sim state, or None."""
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT id, name, data, created_at, updated_at FROM plans
+           WHERE contract_id = ? AND is_baseline = 1""",
+        (contract_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "is_baseline": True,
+        "data": json.loads(row["data"]),
+    }
 
 
 def delete_plan(contract_id: int, plan_id: int) -> bool:

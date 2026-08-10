@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway } from "../api.js";
+import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway, listPlans, getAllocation } from "../api.js";
 import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
 import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase, asOfLabel } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
@@ -10,6 +10,7 @@ import { TrashButton, DeleteConfirm } from "../components/DeleteContract.jsx";
 import { suggestFor } from "../suggest.js";
 import { scopeNotices } from "../scope-notice.js";
 import { clampAlertIndex, nextAlertIndex, orderedFlightDeckAlerts } from "../flight-deck-alerts.js";
+import { planDrift, driftAlert, driftSentence, actualsDraft, rateResolver } from "../drift.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -275,6 +276,9 @@ export default function FlightDeck({
   // Person-level heat (#83). Its own fetch: the Flight Deck renders without it, so a
   // failure here must never blank the dashboard.
   const [heat, setHeat] = useState(null);
+  // The active baseline and how far the actuals have drifted from it (#67), or null
+  // on a contract with no baseline designated — which is the normal state.
+  const [drift, setDrift] = useState(null);
   const [sources, setSources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [alertIndex, setAlertIndex] = useState(0);
@@ -310,6 +314,7 @@ export default function FlightDeck({
       getHeat(id)
         .then(setHeat)
         .catch(() => setHeat(null));
+      loadDrift(id);
       setAlertIndex(0);
       const labor = b.clins.filter((c) => c.is_labor);
       setSelected((s) => (labor.some((c) => c.id === s) ? s : labor[0]?.id ?? null));
@@ -321,6 +326,37 @@ export default function FlightDeck({
       }
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  // Drift vs the active baseline (#67 item 3). Two requests, and only when there is
+  // something to compare against: the plans list is cheap, and the allocation sweep
+  // — which is not — is skipped entirely on a contract nobody has committed a
+  // staffing plan for, which is most of them. A failure here clears the card rather
+  // than surfacing an error: drift is context on a page whose subject is burn.
+  async function loadDrift(id) {
+    try {
+      const plans = await listPlans(id);
+      const baseline = plans.find((p) => p.is_baseline);
+      if (!baseline) return setDrift(null);
+      const alloc = await getAllocation(id);
+      const names = new Map((alloc.employees || []).map((e) => [String(e.id), e.name]));
+      setDrift({
+        baseline,
+        alloc,
+        drift: planDrift({
+          baseline: baseline.data || {},
+          actuals: { draft: actualsDraft(alloc) },
+          rate: rateResolver({
+            clins: alloc.clins,
+            employees: alloc.employees,
+            added: baseline.data?.added || [],
+          }),
+          nameOf: (pid) => names.get(String(pid)),
+        }),
+      });
+    } catch {
+      setDrift(null);
     }
   }
 
@@ -417,7 +453,13 @@ export default function FlightDeck({
   // it so an as-of reading can't be mistaken for a live countdown.
   const asOf = asOfLabel(sync);
   const notices = scopeNotices(contract);
+  // The runway a drifting CLIN has lost is not recomputed here — the allocation
+  // payload's own per-CLIN runway is what the matrix shows, and a second projection
+  // that disagreed with it by a day would be read as a bug in one of them. The card
+  // states the money, and sends you to the matrix for the rest.
+  const driftCard = drift ? driftAlert(drift.drift) : null;
   const alerts = orderedFlightDeckAlerts({
+    baselineDrift: driftCard ? [driftCard] : [],
     dataQuality: data_quality,
     tripwires,
     funding,
@@ -1025,6 +1067,67 @@ export default function FlightDeck({
             </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Baseline drift (#67 item 3) — the staffing we committed to against what
+          people are charging. Amber, not red: this is a departure from a plan, not a
+          breach of a contract limit, and the two must not look alike on the same
+          page. The card names people and moves; the matrix panel holds every row. */}
+      {activeAlert.kind === "drift" && (() => {
+        const d = activeAlert.item;
+        return (
+          <div
+            style={{
+              border: "1px solid var(--warn)",
+              background: "var(--warnBg)",
+              borderRadius: 16,
+              padding: "14px 18px",
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 14.5, color: "var(--warn)" }}>
+                {d.headline}
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--dim)" }}>
+                vs “{drift.baseline.name}”
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text)", marginTop: 6, lineHeight: 1.55 }}>
+              {/* Named people, because "18% above baseline" is not something anybody
+                  can act on and "Wei Chen is at 38 hrs against a planned 24" is. */}
+              {d.movers.map((p) => driftSentence(p)).join(" · ")}
+              {d.people > d.movers.length ? ` · +${d.people - d.movers.length} more` : ""}.
+              {d.roster.length > 0 && (
+                <>
+                  {" "}
+                  <b>
+                    {d.roster.length} roster change{d.roster.length === 1 ? "" : "s"}
+                  </b>{" "}
+                  the baseline doesn't account for.
+                </>
+              )}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={() => onOpenAllocation?.()}
+                style={{
+                  height: 32,
+                  padding: "0 13px",
+                  borderRadius: 9,
+                  border: "1px solid var(--warn)",
+                  background: "transparent",
+                  color: "var(--warn)",
+                  fontWeight: 600,
+                  fontSize: 12.5,
+                  cursor: "pointer",
+                }}
+              >
+                Open the drift detail
+              </button>
+            </div>
+          </div>
         );
       })()}
 

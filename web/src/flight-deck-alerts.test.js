@@ -154,3 +154,26 @@ test("clamps the selected alert when the list shrinks or clears", () => {
   assert.equal(alertHelpers.clampAlertIndex(3, 2), 1);
   assert.equal(alertHelpers.clampAlertIndex(2, 0), 0);
 });
+
+test("baseline drift reads under the money-runs-out alerts and over underburn", () => {
+  // A staffing gap often causes the tripwire above it, but it is the tripwire that
+  // carries the date — so drift must not be able to push one down the carousel.
+  const ordered = orderedFlightDeckAlerts({
+    underburn: [{ code: "0002", projected_unspent: 90000 }],
+    baselineDrift: [{ key: "baseline-drift", deltaCost: 5200 }],
+    funding: [{ code: "0001", runway_days: 20 }],
+  });
+  assert.deepEqual(ordered.map((a) => a.kind), ["funding", "drift", "underburn"]);
+});
+
+test("drift ranks on the size of the gap, not its direction", () => {
+  // Running well under the staffing you committed to is as much a departure as
+  // running over it, and can be the more serious one — the work isn't happening.
+  const ordered = orderedFlightDeckAlerts({
+    baselineDrift: [
+      { key: "small", deltaCost: 900 },
+      { key: "big-under", deltaCost: -8000 },
+    ],
+  });
+  assert.deepEqual(ordered.map((a) => a.item.key), ["big-under", "small"]);
+});
