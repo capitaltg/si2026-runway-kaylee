@@ -1551,8 +1551,19 @@ def compute(
         real_funded = sum(float(c["obligated"]) for c in attributed)
         period_funded = real_funded if real_funded < active_ceiling else None
         funded_frac = None  # every CLIN has an exact figure; nothing to pro-rate
+        funding_attribution = "full"
+        funding_total_unknown = False
     else:
         period_funded = None
+        funding_attribution = "partial" if attributed else "none"
+        # The gap #61 named: some CLINs carry an obligation of their own, but the
+        # header prints no contract total, so there is no document-backed way to
+        # scope a *period* funded figure. `funded_for` still honours the real
+        # per-CLIN figures it has, but `period_funded` stays None, which reads
+        # downstream as "not incrementally funded" — indistinguishable from a
+        # fully-funded contract, which is the one thing this is not known to be.
+        # Reported so the caveat can be shown rather than inferred from silence.
+        funding_total_unknown = bool(attributed) and obligated is None
         if obligated is not None and active_ceiling:
             available = max(0.0, float(obligated) - prior_consumed)
             if available < active_ceiling:
@@ -2046,6 +2057,14 @@ def compute(
                 round(period_funded, 2) if period_funded is not None else None
             ),
             "incrementally_funded": period_funded is not None,
+            # How the funded dollars above were attributed: "full" (every active
+            # CLIN carried its own obligation), "partial" (some did, the rest took
+            # a pro-rata slice of the netted remainder) or "none" (header total
+            # only). `funding_total_unknown` is the honest-failure case within
+            # "partial": per-CLIN figures exist but no header total scopes them, so
+            # no funding limit could be set for the period at all (#61).
+            "funding_attribution": funding_attribution,
+            "funding_total_unknown": funding_total_unknown,
             # True when no CLIN carried a period label, so the CLIN set could not
             # be scoped and every period's ceiling is in these totals.
             "clin_scope": clin_scope,

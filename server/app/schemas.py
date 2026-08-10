@@ -44,11 +44,14 @@ class CLIN(BaseModel):
     obligated: Optional[float] = Field(
         default=None,
         description="Dollars obligated/funded to this CLIN per the Accounting and "
-        "Appropriation Data (ACRN) block. Null if the award prints no per-CLIN funding.",
+        "Appropriation Data (ACRN) block, summed across every ACRN row citing this "
+        "CLIN. Null if the award prints no per-CLIN funding.",
     )
     acrn: Optional[str] = Field(
         default=None,
-        description="Accounting Classification Reference Number funding this CLIN, e.g. 'AA'.",
+        description="Accounting Classification Reference Number funding this CLIN, "
+        "e.g. 'AA'. A CLIN funded from more than one appropriation carries every "
+        "citation, comma-separated ('AA, AB') — one CLIN, never repeated per ACRN.",
     )
     est_hours: Optional[int] = Field(
         default=None, description="Estimated labor hours, if a labor CLIN"
@@ -145,7 +148,11 @@ class FundingLine(BaseModel):
     the only document-backed route to current per-CLIN funding.
     """
 
-    clin: str = Field(description="CLIN the dollars are obligated to, e.g. '1001'")
+    clin: str = Field(
+        description="CLIN the dollars are obligated to, e.g. '1001'. Unlike the CLIN "
+        "schedule, the same CLIN may appear on several lines here — one per ACRN "
+        "citing it — and each line states only its own increment."
+    )
     acrn: Optional[str] = Field(
         default=None,
         description="Accounting Classification Reference Number cited for this "

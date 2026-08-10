@@ -241,3 +241,73 @@ def test_fully_funded_award_needs_no_mod_read():
     for clin in c["clins"]:
         assert clin["obligated"] == clin["ceiling"]
     assert c["contract"]["total_obligated"] == c["contract"]["total_ceiling"]
+
+
+# A CLIN funded from two appropriations at once (#61). Real awards do this
+# routinely when one line item spans two colours of money, and the mod's breakout
+# then carries two rows for the same CLIN.
+
+
+def test_two_acrns_on_one_clin_sum_and_keep_both_citations():
+    c = _contract()
+    _merge_mod(
+        c,
+        {
+            "mod_number": "P00003",
+            "effective_date": "2026-02-20",
+            "action_type": "option_exercise",
+            "amount_obligated": 1_800_000.0,
+            "cumulative_obligated": 3_350_000.0,
+            "period_exercised": "Option Year 1",
+            "funding_lines": [
+                {"clin": "1001", "acrn": "AB", "amount": 1_000_000.0},
+                {"clin": "1001", "acrn": "AC", "amount": 600_000.0},
+                {"clin": "1002", "acrn": "AC", "amount": 200_000.0},
+            ],
+        },
+    )
+    line = _by_clin(c)["1001"]
+    # One CLIN, not two, and its funding is the sum of both rows — reporting only
+    # one row's dollars would understate the line's real limit.
+    assert line["obligated"] == 1_600_000.0
+    assert line["acrn"] == "AB, AC"
+
+
+def test_a_new_acrn_joins_the_awards_citation_rather_than_replacing_it():
+    """The award funded 0001 under AA; a later mod adds AD money to the same line.
+    Both appropriations are now behind that CLIN's `obligated`, so both are named."""
+    c = _contract()
+    _merge_mod(
+        c,
+        {
+            "mod_number": "P00001",
+            "effective_date": "2025-09-01",
+            "action_type": "incremental_funding",
+            "amount_obligated": 500_000.0,
+            "cumulative_obligated": 2_050_000.0,
+            "funding_lines": [{"clin": "0001", "acrn": "AD", "amount": 500_000.0}],
+        },
+    )
+    line = _by_clin(c)["0001"]
+    assert line["obligated"] == 1_900_000.0
+    assert line["acrn"] == "AA, AD"
+
+
+def test_citations_are_not_duplicated_on_reingest():
+    c = _contract()
+    mod = {
+        "mod_number": "P00004",
+        "effective_date": "2026-02-20",
+        "action_type": "option_exercise",
+        "amount_obligated": 400_000.0,
+        "cumulative_obligated": 1_950_000.0,
+        "period_exercised": "Option Year 1",
+        "funding_lines": [
+            {"clin": "1001", "acrn": "AB", "amount": 200_000.0},
+            {"clin": "1001", "acrn": "AC", "amount": 200_000.0},
+        ],
+    }
+    _merge_mod(c, mod)
+    _merge_mod(c, mod)
+    assert _by_clin(c)["1001"]["acrn"] == "AB, AC"
+    assert _by_clin(c)["1001"]["obligated"] == 400_000.0

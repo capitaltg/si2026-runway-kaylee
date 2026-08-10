@@ -6,6 +6,12 @@ export function scopeNotices(contract = {}) {
       text: "CLIN totals include all contract periods because the award did not label the active period.",
     });
   }
+  if (contract.funding_total_unknown) {
+    notices.push({
+      key: "funding_total",
+      text: "Funded-dollar limits could not be set for this period: some CLINs state their own obligation but the documents print no contract obligated total to scope them against. Runway is reading against ceilings.",
+    });
+  }
   if (contract.pop_scoped === false) {
     notices.push({
       key: "pop_scope",
