@@ -617,10 +617,17 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
     ["Contract type", "contract_type"],
     ["Total ceiling", "total_ceiling"],
     ["Obligated to date", "total_obligated"],
+    // Cost-type awards only, and hidden rather than shown empty: a fixed-price
+    // award has no estimated cost, so an always-present blank row would read as a
+    // figure the extraction missed (#78).
+    ...(c.total_estimated_cost != null || editing ? [["Total estimated cost", "total_estimated_cost"]] : []),
+    ...(c.total_fee != null || editing ? [["Total fee", "total_fee"]] : []),
     ["Effective date", "effective_date"],
     ["Contracting Officer", "contracting_officer"],
   ];
-  const moneyKeys = new Set(["total_ceiling", "total_obligated"]);
+  const moneyKeys = new Set([
+    "total_ceiling", "total_obligated", "total_estimated_cost", "total_fee",
+  ]);
   const lowCl = clins
     .filter((cl) => cl.confidence != null && cl.confidence < 0.88)
     .sort((a, b) => a.confidence - b.confidence)[0];
@@ -674,6 +681,45 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
           ))}
         </div>
       </div>
+
+      {/* The negotiated indirect rates off the award face (#78). Shown only when the
+          award printed them — most awards don't — and stated as what they will become:
+          confirming writes them as this contract's provisional rate set, which is what
+          turns on the cost side of the engine (#77) without anyone typing a percentage.
+          Application base and provisional/final status are not on the face; the FPRA
+          upload is what states those. */}
+      {(c.indirect_fringe != null || c.indirect_overhead != null || c.indirect_gna != null) && (
+        <div style={{ ...panelStyle, marginBottom: 14 }}>
+          <div style={label}>Negotiated indirect rates</div>
+          <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-end" }}>
+            {[
+              ["Fringe", "indirect_fringe"],
+              ["Overhead", "indirect_overhead"],
+              ["G&A", "indirect_gna"],
+            ].map(([lbl, key]) => (
+              <div key={key}>
+                <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: editing ? 4 : 0 }}>{lbl}</div>
+                {editing ? (
+                  <NumberField
+                    value={c[key] == null ? null : Math.round(c[key] * 1000) / 10}
+                    onChange={(v) => setC(key, v == null ? null : v / 100)}
+                    placeholder="%"
+                  />
+                ) : (
+                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13.5 }}>
+                    {c[key] == null ? "—" : `${(c[key] * 100).toFixed(1)}%`}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div style={{ fontSize: 11.5, color: "var(--dim)", flex: 1, minWidth: 220 }}>
+              Saved as this contract&apos;s provisional rates for the award&apos;s fiscal year.
+              Upload the rate agreement later to record each pool&apos;s application base and a
+              final determination.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CLIN schedule, grouped by period */}
       <div style={{ ...label, display: "flex", alignItems: "center" }}>
@@ -914,6 +960,81 @@ function ClinHeader({ editing }) {
   );
 }
 
+// The cost-and-fee fields a cost-type CLIN prices with (#78), in the order a
+// Section B exhibit prints them: cost first, then the fee elements, then the
+// brackets the fee moves between.
+const COST_FEE_FIELDS = [
+  ["estimated_cost", "Estimated cost", "money"],
+  ["fixed_fee", "Fixed fee", "money"],
+  ["base_fee", "Base fee", "money"],
+  ["award_fee_pool", "Award fee pool", "money"],
+  ["target_fee", "Target fee", "money"],
+  ["target_profit", "Target profit", "money"],
+  ["min_fee", "Minimum fee", "money"],
+  ["max_fee", "Maximum fee", "money"],
+  ["ceiling_price", "Price ceiling", "money"],
+  ["share_ratio", "Share ratio", "text"],
+];
+
+// Whether to offer the cost/fee fields on a CLIN that has none filled in yet.
+// A firm-fixed-price line has one price and no fee, so ten empty money inputs on
+// it would be noise on the common case; a line whose type says cost-plus or
+// incentive is one where the user has a real reason to type them.
+const COST_TYPE_RE = /^(cp|cr|cost|fpi)/i;
+
+// Cost, fee, and whether they foot to the ceiling. Hidden entirely on a CLIN with
+// nothing to say — an FFP line is not missing these, it does not have them.
+function CostFeeBlock({ cl, idx, editing, setClin }) {
+  const filled = COST_FEE_FIELDS.filter(([k]) => cl[k] != null && cl[k] !== "");
+  const show = editing && (filled.length > 0 || COST_TYPE_RE.test(cl.type || ""))
+    ? COST_FEE_FIELDS
+    : filled;
+  if (show.length === 0 && !cl.confidence_note) return null;
+  return (
+    <div style={{ padding: "0 16px 10px" }}>
+      {show.length > 0 && (
+        <div
+          style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+            gap: "8px 18px", padding: "10px 12px", borderRadius: 10,
+            border: "1px solid var(--border)", background: "var(--panel2)",
+          }}
+        >
+          {show.map(([k, lbl, kind]) => (
+            <div key={k}>
+              <div style={{ fontSize: 10.5, color: "var(--faint)", marginBottom: editing ? 3 : 0 }}>{lbl}</div>
+              {editing ? (
+                kind === "money" ? (
+                  <NumberField value={cl[k]} onChange={(v) => setClin(idx, k, v)} placeholder="none" />
+                ) : (
+                  <TextField value={cl[k]} onChange={(v) => setClin(idx, k, v || null)} placeholder="50/50" />
+                )
+              ) : (
+                <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12.5 }}>
+                  {kind === "money" ? money(cl[k]) : cl[k]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* The ceiling == cost + fee check, surfaced and never reconciled (#78). The
+          server writes the sentence; this only refuses to hide it. */}
+      {cl.confidence_note && (
+        <div
+          style={{
+            marginTop: 8, padding: "8px 12px", borderRadius: 9, fontSize: 11.5,
+            border: "1px solid var(--warn)", color: "var(--warn)",
+            background: "var(--panel2)",
+          }}
+        >
+          ⚠ {cl.confidence_note}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // One CLIN line, with an expandable fully-burdened labor-rate table (the rates
 // the burn engine will price hours against). Read-only or editable.
 function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate, addRate, removeRate }) {
@@ -1028,6 +1149,8 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
           </button>
         )}
       </div>
+
+      <CostFeeBlock cl={cl} idx={idx} editing={editing} setClin={setClin} />
 
       {/* labor toggle + rate expander */}
       <div style={{ padding: "0 16px 8px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>

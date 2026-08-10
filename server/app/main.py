@@ -1,6 +1,8 @@
 import asyncio
+import io
 import os
 import re
+from datetime import date
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -177,6 +179,51 @@ def _seed_award_obligation(data: dict) -> None:
     ]
 
 
+def _fiscal_year(iso_date: Optional[str]) -> Optional[str]:
+    """The federal fiscal year an ISO date falls in — FY runs Oct 1 to Sep 30, so
+    October onward belongs to the next calendar year's FY. None when the date is
+    absent or unparseable: a rate set with no year is still storable (fiscal_year is
+    nullable) and is better than one filed under a guessed year, which #87 would
+    later true up against the wrong incurred-cost submission."""
+    try:
+        d = date.fromisoformat((iso_date or "")[:10])
+    except ValueError:
+        return None
+    return str(d.year + 1 if d.month >= 10 else d.year)
+
+
+def _store_face_rates(contract_id: int, header: dict) -> Optional[str]:
+    """Persist the indirect rates read off the award face as this contract's rate
+    set (#78 slice 3a).
+
+    The award states the rates but not their application base or status, so the
+    conventional bases (`rates.DEFAULT_BASES`) and `provisional` fill in — a rate
+    the government agreed to bill at is provisional until an incurred-cost
+    submission settles it, and calling it final here would let #87 skip a true-up
+    that is genuinely owed. An FPRA upload overwrites both, being the document that
+    actually states them.
+
+    Returns (stored?, fiscal year). The two are separate answers, not one: an award
+    can print its rates and still leave the fiscal year unknown (an unparseable
+    effective date), and reporting that as "nothing stored" would hide a rate set
+    the app is now pricing with.
+    """
+    pools = [
+        {"pool": pool, "rate": header.get(key), "base": rates.DEFAULT_BASES[pool]}
+        for pool, key in (
+            (rates.FRINGE, "indirect_fringe"),
+            (rates.OVERHEAD, "indirect_overhead"),
+            (rates.GNA, "indirect_gna"),
+        )
+        if header.get(key) is not None
+    ]
+    if not pools:
+        return False, None
+    fy = _fiscal_year(header.get("effective_date"))
+    db.save_rate_pools(contract_id, fy, pools, rates.PROVISIONAL)
+    return True, fy
+
+
 @app.post("/api/contracts/confirm")
 def confirm(
     extraction: Extraction,
@@ -198,11 +245,60 @@ def confirm(
         data["sync_seed"] = seed
     cid = db.save_contract(extraction.contract.piid, data)
     stored = db.claim_document(document_id, cid) if document_id is not None else False
+    rates_stored, rate_fy = _store_face_rates(cid, data.get("contract") or {})
     return {
         "id": cid,
         "piid": extraction.contract.piid,
         "source_document_stored": stored,
+        # Named so the UI can say the cost model was populated from the award rather
+        # than leave the user wondering why the rates view is suddenly non-empty.
+        "indirect_rates_stored": rates_stored,
+        "indirect_rates_fiscal_year": rate_fy,
     }
+
+
+def _store_schedule_direct_rates(contract_id: int, header: dict, clins: list) -> int:
+    """Persist any unburdened direct rates a cost-buildup exhibit printed (#78).
+
+    This is what actually moves a contract off Level 1: `rates.CostModel` has read
+    `direct_rates` since #77, but nothing ever wrote to that table except a human
+    typing into the rates view. A cost-type exhibit prints the direct rate per labor
+    category, so ingesting one should be enough to make margin real.
+
+    Merged, not replaced. `save_direct_rates` is a delete-then-insert over the whole
+    (scope, fiscal year), so writing only what this sheet carried would silently drop
+    the per-person rates behind Level 3 — a schedule upload must never cost someone
+    their payroll-grade cost model. Rows for an LCAT this sheet *does* price are
+    overwritten, which is the one thing the document is more authoritative about.
+
+    Returns how many LCAT direct rates the sheet supplied.
+    """
+    incoming = {}
+    for cl in clins or []:
+        for r in cl.get("labor_rates") or []:
+            name, rate = (r.get("lcat") or "").strip(), r.get("direct_rate")
+            if name and rate is not None:
+                incoming[name] = float(rate)
+    if not incoming:
+        return 0
+
+    fy = _fiscal_year(header.get("effective_date"))
+    # Compared on the normalised key so a sheet naming a category "Sr. Software
+    # Engineer" replaces the "Senior Software Engineer" row it means, instead of
+    # sitting beside it as a second answer for the same category (#64).
+    replaced = {lcat.normalize(k) for k in incoming}
+    keep = [
+        r
+        for r in db.get_scoped_direct_rates(contract_id)
+        if r.get("employee_id") or lcat.normalize(r.get("lcat")) not in replaced
+    ]
+    db.save_direct_rates(
+        contract_id,
+        fy,
+        keep + [{"lcat": k, "rate": v} for k, v in incoming.items()],
+        rates.PROVISIONAL,
+    )
+    return len(incoming)
 
 
 @app.post("/api/contracts/{contract_id}/rates")
@@ -267,10 +363,18 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
         data,
         file.content_type,
     )
+    # A loaded-rate-only sheet writes nothing here and prices exactly as it did
+    # before: no direct rate means no cost of our own to compare the price against,
+    # which is Level 1 and the normal case, not a degraded one.
+    direct_stored = _store_schedule_direct_rates(
+        contract_id, existing.get("contract") or {}, existing.get("clins") or []
+    )
+
     return {
         "id": contract_id,
         "clins_updated": merged,
         "rate_tables_found": len(incoming),
+        "direct_rates_stored": direct_stored,
         "piid_mismatch": piid_mismatch,
         "source_document_id": document_id,
         "source_document_note": note,
@@ -351,6 +455,138 @@ def _period_key(name) -> Optional[str]:
     if digits and ("option" in s or s.startswith("oy")):
         return f"option{int(digits.group(1))}"
     return re.sub(r"[^a-z0-9]", "", s) or None
+
+
+# "CLIN 0001 (ACRN AA) $950,000.00" — the per-CLIN split an SF-30 states in its
+# Block 14 narrative. The ACRN is optional; agencies word the surrounding
+# sentence differently, but the CLIN-then-dollars pairing is near-universal.
+_FUNDING_LINE_RE = re.compile(
+    r"CLIN\s+([0-9A-Z]{4})\s*(?:\(\s*ACRN\s+([0-9A-Z]{2})\s*\))?\s*"
+    r"[:\-]?\s*\$\s*([\d,]+(?:\.\d{2})?)",
+    re.IGNORECASE,
+)
+
+
+# Block 14 numbers its clauses "(a) … (b) …". Anchor on the clause that
+# introduces a per-CLIN list and read to the next clause marker, so a mod that
+# states BOTH its funding split and revised ceilings doesn't blend the two lists.
+_FUNDING_CLAUSE_RE = re.compile(r"obligated\s+by\s+CLIN[^:]*:", re.IGNORECASE)
+_CEILING_CLAUSE_RE = re.compile(
+    r"ceilings?\s+(?:are\s+)?(?:revised|increased|established)\s+by\s+CLIN[^:]*:",
+    re.IGNORECASE,
+)
+_CLAUSE_END_RE = re.compile(r"\([a-z]\)")
+
+
+def _clause_after(text: Optional[str], marker: re.Pattern) -> Optional[str]:
+    """The text a numbered Block 14 clause introduces, up to the next clause."""
+    if not text:
+        return None
+    hit = marker.search(text)
+    if not hit:
+        return None
+    rest = text[hit.end() :]
+    end = _CLAUSE_END_RE.search(rest)
+    return rest[: end.start()] if end else rest
+
+
+def _parse_funding_lines(text: Optional[str]) -> List[dict]:
+    """Recover a mod's per-CLIN funding split from its narrative text.
+
+    The extractor is asked for `funding_lines` directly and usually supplies
+    them, so this is a fallback rather than the primary read — but it is the one
+    that keeps a mod's dollars from landing nowhere when the model returns null,
+    which it does often enough to matter (that field is the schema's only nested
+    object list, and constrained decoding is least reliable exactly there).
+
+    Anchored on the funding clause when the narrative numbers its clauses; when
+    it doesn't, the whole text is scanned and the caller's reconciliation check
+    has to vouch for the result."""
+    text = _clause_after(text, _FUNDING_CLAUSE_RE) or text
+    if not text:
+        return []
+    lines = []
+    for clin, acrn, amount in _FUNDING_LINE_RE.findall(text):
+        entry = {"clin": clin, "amount": float(amount.replace(",", ""))}
+        if acrn:
+            entry["acrn"] = acrn.upper()
+        lines.append(entry)
+    return lines
+
+
+def _parse_ceiling_lines(text: Optional[str]) -> List[dict]:
+    """Per-CLIN not-to-exceed ceilings a mod restates.
+
+    Only ever read from an explicit ceilings clause: unlike funding, a ceiling is
+    a restatement rather than an increment, so mistaking one for the other would
+    either erase a line's ceiling or inflate it."""
+    clause = _clause_after(text, _CEILING_CLAUSE_RE)
+    return [
+        {"clin": clin, "ceiling": float(amount.replace(",", ""))}
+        for clin, _acrn, amount in _FUNDING_LINE_RE.findall(clause or "")
+    ]
+
+
+def _funding_lines_for(mod: dict, document_text: Optional[str] = None) -> List[dict]:
+    """The per-CLIN split for one mod when the extractor didn't supply one.
+
+    The document's own text is read before the model's `description`. That order
+    is not cosmetic: on one SF-30 the model transcribed a $5.6M revised ceiling
+    as $5.8M, and nothing downstream could have caught it. What the PDF says is a
+    fact; what the model says it says is a reading.
+
+    A parsed split is only trusted when its lines add up to the dollars the mod
+    says it obligated. A document repeats CLIN figures — accounting block,
+    schedule, narrative — and a scrape that swept up two mentions of the same
+    line would silently double that CLIN's funding. Failing the check leaves the
+    funding unattributed, which is the honest outcome: visibly missing beats
+    quietly wrong."""
+    stated = mod.get("amount_obligated")
+    for text in (document_text, mod.get("description")):
+        lines = _parse_funding_lines(text)
+        if not lines:
+            continue
+        if stated is None:
+            return lines
+        if abs(sum(line["amount"] for line in lines) - float(stated)) < 0.01:
+            return lines
+    return []
+
+
+def _apply_ceiling_lines(existing: dict) -> List[str]:
+    """Adopt the newest ceiling each CLIN has been restated at. Returns the CLINs
+    whose ceiling moved.
+
+    A mod that raises the not-to-exceed value changes what the burn engine is
+    measuring against — ignore it and a contract stays red against a ceiling its
+    contracting officer already lifted. Latest statement wins (ceilings are
+    restated, not accumulated), and a mod that says nothing changes nothing."""
+    latest: Dict[str, float] = {}
+    for h in existing.get("obligation_history") or []:
+        for line in h.get("ceiling_lines") or []:
+            key = _clin_key(line.get("clin"))
+            if key and line.get("ceiling") is not None:
+                latest[key] = float(line["ceiling"])
+    if not latest:
+        return []
+
+    revised = []
+    for clin in existing.get("clins") or []:
+        key = _clin_key(clin.get("clin"))
+        if key in latest and clin.get("ceiling") != latest[key]:
+            clin["ceiling"] = latest[key]
+            revised.append(clin.get("clin"))
+    # A period carries its own ceiling; keep the one holding this CLIN in step so
+    # the period bar and the CLIN row can't disagree.
+    for period in existing.get("periods") or []:
+        members = [
+            c
+            for c in existing.get("clins") or []
+            if (c.get("period") or "") == (period.get("name") or "")
+        ]
+        if members and all(c.get("ceiling") is not None for c in members):
+            period["ceiling"] = round(sum(float(c["ceiling"]) for c in members), 2)
+    return revised
 
 
 def _apply_clin_funding(existing: dict) -> int:
@@ -460,6 +696,30 @@ def _apply_option_exercises(existing: dict) -> List[str]:
     return flipped
 
 
+def _mod_document_text(pdf_bytes: bytes) -> str:
+    """Every scrap of text in an SF-30, including its filled form fields.
+
+    Block 14's narrative lives in an AcroForm field, which page text extraction
+    misses entirely — and the model's `description` is not a reliable carrier
+    either: it echoed the CLIN sentence on one run of a PDF and returned null on
+    the next, which quietly moved $950,000 off a CLIN between two ingests of the
+    same document. Reading the document ourselves makes the funding split
+    deterministic instead of a coin flip. Best-effort: an unreadable PDF leaves
+    the extractor's own answer as the only read, which is where we started."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        parts = [page.extract_text() or "" for page in reader.pages]
+        for value in (reader.get_fields() or {}).values():
+            raw = value.get("/V")
+            if raw:
+                parts.append(str(raw))
+        return "\n".join(parts)
+    except Exception:
+        return ""
+
+
 def _merge_mod(existing: dict, mod: dict) -> dict:
     """Fold one extracted SF-30 action into a contract's stored obligation
     history, refresh total_obligated, and re-derive the two things only the mod
@@ -477,7 +737,13 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         "action": mod.get("action_type") or "modification",
         "amount": mod.get("amount_obligated"),
         "cumulative_obligated": mod.get("cumulative_obligated"),
-        "funding_lines": mod.get("funding_lines") or None,
+        "funding_lines": mod.get("funding_lines")
+        or _funding_lines_for(mod, mod.get("document_text"))
+        or None,
+        "ceiling": mod.get("total_ceiling"),
+        "ceiling_lines": _parse_ceiling_lines(mod.get("document_text"))
+        or _parse_ceiling_lines(mod.get("description"))
+        or None,
         "period": mod.get("period_exercised"),
         "description": mod.get("description"),
     }
@@ -490,6 +756,19 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
     existing["obligation_history"] = merged
 
     header = existing.setdefault("contract", {})
+    # A ceiling-raising mod restates the contract total. Only ever upward, and
+    # only from a mod that actually printed a per-CLIN ceiling clause: a mod that
+    # merely quotes a stale total for cross-check must not shrink the contract.
+    stated = [
+        float(h["ceiling"])
+        for h in merged
+        if h.get("ceiling") is not None and h.get("ceiling_lines")
+    ]
+    if stated and (
+        header.get("total_ceiling") is None
+        or max(stated) > float(header["total_ceiling"])
+    ):
+        header["total_ceiling"] = max(stated)
     cums = [
         float(h["cumulative_obligated"])
         for h in merged
@@ -507,6 +786,7 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         )
     # Order matters: the exercise read consults the CLIN->period labels, and the
     # funding recompute must see the full merged history, so both run last.
+    ceilings_revised = _apply_ceiling_lines(existing)
     clins_funded = _apply_clin_funding(existing)
     periods_exercised = _apply_option_exercises(existing)
     return {
@@ -516,6 +796,7 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         "total_obligated": header.get("total_obligated"),
         "clins_funded": clins_funded,
         "periods_exercised": periods_exercised,
+        "ceilings_revised": ceilings_revised,
     }
 
 
@@ -543,6 +824,14 @@ async def add_modification(contract_id: int, file: UploadFile = File(...)):
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
     parsed = mod.model_dump()
+    # Keep the document's own words alongside the extraction, so the per-CLIN
+    # funding split and any revised ceilings can be read from the PDF rather than
+    # from the model's retelling of it (see _merge_mod).
+    parsed["document_text"] = (
+        _mod_document_text(data)
+        if (file.filename or "").lower().endswith(".pdf")
+        else data.decode("utf-8", "ignore")
+    )
     # A mod restates the contract number (block 10A); flag (don't block) a
     # mismatch, since OCR/extraction of that block can be imperfect.
     doc_piid = (parsed.get("piid") or "").strip()
