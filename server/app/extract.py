@@ -291,11 +291,23 @@ def normalize_initial_award(parsed: Extraction) -> Extraction:
         if clin.obligated is None and clin.ceiling is not None:
             clin.obligated = clin.ceiling
 
-    if all(clin.obligated is not None for clin in base_clins):
+    # On a multi-period schedule, one unlabeled CLIN might belong to Base. We may
+    # still normalize the lines positively identified as Base, but cannot claim
+    # their subtotal is the complete award obligation.
+    period_labels_complete = all(
+        (clin.period or "").strip() for clin in parsed.clins
+    )
+    if period_labels_complete and all(
+        clin.obligated is not None for clin in base_clins
+    ):
         total_obligated = round(sum(clin.obligated for clin in base_clins), 2)
         parsed.contract.total_obligated = total_obligated
-        if all(clin.ceiling is not None for clin in base_clins):
+        base_ceiling = parsed.periods[0].ceiling
+        if base_ceiling is None and all(
+            clin.ceiling is not None for clin in base_clins
+        ):
             base_ceiling = round(sum(clin.ceiling for clin in base_clins), 2)
+        if base_ceiling is not None:
             parsed.contract.incrementally_funded = total_obligated < base_ceiling
 
     return parsed

@@ -203,6 +203,27 @@ def test_initial_ffp_award_does_not_invent_total_with_unpriced_base_clin():
     assert normalized.contract.incrementally_funded is True
 
 
+def test_initial_ffp_award_does_not_recompute_from_partial_period_labels():
+    e = _w45983_award()
+    e.clins[1].period = None
+
+    normalized = extract.normalize_initial_award(e)
+
+    assert normalized.clins[0].obligated == 2_866_736.80
+    assert normalized.clins[1].obligated is None
+    assert normalized.contract.total_obligated == 0.0
+    assert normalized.contract.incrementally_funded is True
+
+
+def test_ffp_null_with_acrn_is_missing_not_an_explicit_zero_in_full_pipeline():
+    e = _w45983_award()
+    e.clins[0].acrn = "AA"
+
+    normalized = extract.normalize_obligations(extract.normalize_initial_award(e))
+
+    assert normalized.clins[0].obligated == 2_866_736.80
+
+
 # --- Constrained-decoding wiring ---------------------------------------------
 # Not a normalization rule, but it belongs next to one: on Bedrock a schema with
 # a nested object list never compiles, so asking for constrained decoding buys a
