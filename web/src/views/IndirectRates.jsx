@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getRateModel, saveRateModel, getLcatRates, listContracts } from "../api.js";
+import {
+  getRateModel,
+  saveRateModel,
+  getLcatRates,
+  listContracts,
+  importRateAgreement,
+} from "../api.js";
 import { money, panelStyle } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 
@@ -48,6 +54,7 @@ export default function IndirectRates({ contractId, setActiveId }) {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   // Editable draft. Percentages are held as whole numbers because that is how an
   // accountant says them ("32", not "0.32"); converted on save.
@@ -97,6 +104,32 @@ export default function IndirectRates({ contractId, setActiveId }) {
   // indirect pool are not a margin tier, because the result can't differ
   // meaningfully from a discounted billing rate.
   const level = !anyPool ? 1 : anyDirect ? 2 : 1;
+
+  // Import the letter rather than typing what it says. Reloads instead of merging
+  // into local state on purpose: the server decides which set is in force (a letter
+  // carrying a final determination supersedes the provisional rates it was billed
+  // at), and a client that guessed would show one thing while pricing another.
+  async function onImportAgreement(file, input) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const res = await importRateAgreement(contractId, file);
+      load();
+      const fyText = res.fiscal_year ? `FY${res.fiscal_year}` : "no fiscal year stated";
+      setSaved(
+        `Read ${res.pools_stored} ${res.status} pool${res.pools_stored === 1 ? "" : "s"} · ${fyText}` +
+          (res.final_determination_found ? " · final determination applied" : "") +
+          (res.piid_mismatch ? " · ⚠ letter names a different contract" : "")
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+      // Let the same file be re-picked after a failure.
+      if (input) input.value = "";
+    }
+  }
 
   async function onSave() {
     setSaving(true);
@@ -221,6 +254,26 @@ export default function IndirectRates({ contractId, setActiveId }) {
       <div style={{ ...panelStyle, padding: 18, marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
           <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 15 }}>Indirect pools</span>
+          {/* Upload the document instead of typing the rates (#78). Sits on this panel
+              because it answers this panel's question, and because the letter is the
+              only thing that states each pool's application base — the award face
+              prints three percentages and no bases at all. */}
+          <label
+            style={{
+              marginLeft: "auto", fontSize: 12, fontWeight: 600, cursor: uploading ? "wait" : "pointer",
+              color: "var(--accent)", opacity: uploading ? 0.6 : 1,
+            }}
+            title="Read the pools, their bases and the fiscal year from a rate agreement PDF"
+          >
+            {uploading ? "reading…" : "⇪ import rate agreement"}
+            <input
+              type="file"
+              accept=".pdf,.txt"
+              disabled={uploading}
+              style={{ display: "none" }}
+              onChange={(e) => onImportAgreement(e.target.files?.[0], e.target)}
+            />
+          </label>
           {stored.scope === "company" && stored.pools?.length > 0 && (
             <span style={{ fontSize: 11.5, color: "var(--dim)" }}>
               inherited from your company rates — editing here overrides them for this contract
