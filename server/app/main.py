@@ -812,6 +812,112 @@ def _mod_document_text(pdf_bytes: bytes) -> str:
         return ""
 
 
+# A cent, as a float-comparison slop. Money arrives as parsed decimals in floats,
+# so exact equality on a running sum is not safe to rely on.
+_CENT = 0.005
+
+# An SF-30 designator carries a series letter and a sequence number: P00003 is the
+# third procurement mod, A00001 the first administrative one. The two series number
+# independently, so a hole in one says nothing about the other.
+_MOD_SEQ_RE = re.compile(r"^\s*([A-Za-z]*)0*(\d+)\s*$")
+
+
+def _mod_seq(num) -> Optional[tuple]:
+    """``P00003`` -> ``("P", 3)``. None for anything unnumbered — the seeded ``Award``
+    entry, or a designator we cannot read, neither of which can carry a predecessor."""
+    m = _MOD_SEQ_RE.match(str(num or ""))
+    return (m.group(1).upper(), int(m.group(2))) if m else None
+
+
+def _missing_predecessor(held: dict, num) -> bool:
+    """Is an action that would come *before* this mod absent from the trail?
+
+    The only honest evidence that the dollars we hold undercount the contract. A hole
+    at P00002 means P00003's running total legitimately exceeds the sum of what we
+    have; a contiguous run leaves an excess with nothing to explain it. Checked within
+    the mod's own series, and only below its own number — a later gap cannot account
+    for money already counted by an earlier document."""
+    seq = _mod_seq(num)
+    if seq is None:
+        return False
+    series, n = seq
+    return any(i not in held.get(series, ()) for i in range(1, n))
+
+
+def _reconcile_obligated(merged: list, ceiling) -> tuple:
+    """Rebuild the obligated total from a mod trail, and report the stated figures
+    that could not be reconciled with it.
+
+    Two reads answer "how much is obligated": the sum of every action we hold, and
+    what a mod states as the running total at its own point in the trail. The sum is
+    the reliable one — it is arithmetic over figures the extraction is most explicit
+    about, and `merged` is keyed by mod number so a re-ingest cannot double-count it.
+
+    A stated cumulative is worth consulting for exactly one thing: a mod missing from
+    the trail, where the sum undercounts and the running total on a document we DO
+    hold is the only thing that says so. But "states more than we can account for" is
+    also the signature of a misread digit, and the two are numerically identical. So a
+    stated figure overrides the arithmetic only where both independent checks can be
+    made and both pass:
+
+    - a **missing predecessor** in its own mod series, which is what an unexplained
+      excess needs in order to be explicable at all; and
+    - the **contract ceiling**, which it must stay inside. Obligating past the ceiling
+      is an Anti-Deficiency Act problem rather than a routine funding action, so a
+      figure above it is far likelier to be a bad character than a real
+      over-obligation. Where no ceiling is known that check cannot be made, and an
+      override we cannot validate is not one worth taking.
+
+    The read that motivated all of this: a narrative stating "cumulative obligated
+    $6,709,487.60" came back as $16,709,487.80, then $5,709,487.80, then
+    $1,873,252.80 — three live attempts at one figure, three different wrong answers.
+    The total is right because the arithmetic is trusted, not because that field was
+    read correctly.
+
+    Discarded, not silenced. Anything rejected comes back for `cumulative_ignored`,
+    because a figure that would not reconcile is the sort of thing that should send
+    somebody to the PDF. Returns ``(total, disputed)``; total is None when the trail
+    carries no money at all, leaving the caller's existing figure alone.
+
+    Walks the trail in order and *absorbs* an accepted override rather than taking a
+    max over the whole history, so later actions land on top of it: a mod missing
+    before P00002 raises the total from that point, and P00003's own dollars are still
+    added afterwards. `runningTotals` in `web/src/funding-total.js` walks it the same
+    way, which is what keeps the timeline column and this total from disagreeing."""
+    held: dict = {}
+    for h in merged:
+        seq = _mod_seq(h.get("mod"))
+        if seq:
+            held.setdefault(seq[0], set()).add(seq[1])
+
+    running, carries_money, disputed = 0.0, False, []
+    for h in merged:
+        if h.get("amount") is not None:
+            running += float(h["amount"])
+            carries_money = True
+        if h.get("cumulative_obligated") is None:
+            continue
+        stated = float(h["cumulative_obligated"])
+        # At or below the running sum through this mod there is nothing to adjudicate:
+        # the arithmetic already carries the figure. This is also the ordinary shape of
+        # the bug where a mod files its own increment as the cumulative — the sum
+        # simply outvotes it, and it is not "ignored".
+        if stated <= round(running, 2) + _CENT:
+            continue
+        if (
+            ceiling is not None
+            and stated <= float(ceiling) + _CENT
+            and _missing_predecessor(held, h.get("mod"))
+        ):
+            running = stated
+            carries_money = True
+        else:
+            disputed.append(stated)
+
+    total = round(running, 2) if carries_money else None
+    return total, sorted(set(disputed))
+
+
 def _merge_mod(existing: dict, mod: dict) -> dict:
     """Fold one extracted SF-30 action into a contract's stored obligation
     history, refresh total_obligated, and re-derive the two things only the mod
@@ -819,9 +925,16 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
     (no I/O) so it's unit-testable.
 
     Idempotent by mod number: re-ingesting the same SF-30 replaces its entry
-    rather than double-counting the dollars. total_obligated tracks the highest
-    cumulative figure the mods state (funding is monotonic), falling back to the
-    sum of per-action amounts when a doc omitted its running cumulative."""
+    rather than double-counting the dollars. total_obligated is arithmetic over the
+    actions the trail holds, displaced by a stated running total only on evidence of
+    a mod missing from it — see `_reconcile_obligated`."""
+    # The award's own obligation has to be *in* the trail before the trail can be
+    # summed. A contract onboarded mid-performance carries that money in the header
+    # with an empty history, and starting the arithmetic at the first mod then drops
+    # the entire base period. Idempotent, and a no-op once a history exists — the
+    # confirm path already seeds this at ingest, so it fires only for the contracts
+    # that predate it.
+    _seed_award_obligation(existing)
     history = existing.get("obligation_history") or []
     entry = {
         "mod": mod.get("mod_number"),
@@ -861,44 +974,13 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         or max(stated) > float(header["total_ceiling"])
     ):
         header["total_ceiling"] = max(stated)
-    cums = [
-        float(h["cumulative_obligated"])
-        for h in merged
-        if h.get("cumulative_obligated") is not None
-    ]
-    amts = [float(h["amount"]) for h in merged if h.get("amount") is not None]
-    # Two lower bounds on the same figure, and the answer is the larger of them.
-    #
-    # A stated running total is the only evidence of a mod missing from the trail —
-    # the sum of the actions we hold undercounts, and the cumulative on the mod we DO
-    # have is what says so. The sum is the only defence against the opposite failure:
-    # an SF-30 whose accounting block prints just "Obligated this action $X" and no
-    # running total invites the extraction to file that increment as the cumulative,
-    # and preferring the largest stated cumulative then keeps the award's own bigger
-    # figure and discards the mod's money in silence. That is the worst shape a bug
-    # can take here — the contract reads exactly as it did before the mod was
-    # ingested, so nothing about it looks wrong.
-    #
-    # Summing is safe against a re-ingest because `merged` is keyed by mod number: a
-    # mod ingested twice is one action. It would overcount a mod whose `amount` was
-    # itself misread as a cumulative restatement, which is why `amount_obligated` is
-    # the field the prompt is most explicit about.
-    # And a stated total only beats the arithmetic while it stays inside the
-    # ceiling. Obligating past the ceiling is an Anti-Deficiency Act problem rather
-    # than a routine funding action, so a cumulative above it is far likelier to be a
-    # misread digit than a real over-obligation — and trusting it lets one bad
-    # character overwrite a figure every other number on the document agrees with.
-    # The read that motivated this: a narrative saying "cumulative obligated
-    # $6,709,487.60" came back as $16,709,487.80, against a $14,535,792.80 ceiling.
-    #
-    # Discarded, not silenced — `cumulative_ignored` reports it, because a figure we
-    # could not reconcile is the sort of thing that should send somebody to the PDF.
+    # The obligated total is arithmetic over the actions we hold, and a stated running
+    # total displaces it only on evidence of a mod missing from the trail. See
+    # `_reconcile_obligated` for why that is the rule and what it rejects.
     ceiling = header.get("total_ceiling")
-    credible = [c for c in cums if ceiling is None or c <= float(ceiling)]
-    disputed = sorted(set(cums) - set(credible))
-    bounds = credible + ([round(sum(amts), 2)] if amts else [])
-    if bounds:
-        header["total_obligated"] = max(bounds)
+    total, disputed = _reconcile_obligated(merged, ceiling)
+    if total is not None:
+        header["total_obligated"] = total
     if header.get("total_obligated") is not None and ceiling:
         header["incrementally_funded"] = float(header["total_obligated"]) < float(
             ceiling

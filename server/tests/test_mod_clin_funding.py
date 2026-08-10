@@ -234,7 +234,11 @@ def test_reingesting_the_same_mod_does_not_double_fund():
     summary = _merge_mod(c, _exercise_mod())
 
     assert summary["replaced"] is True
-    assert summary["history_len"] == 1
+    # Two entries, not one: the award's own obligation is materialised as the trail's
+    # first row so the dollars can be summed. What must not double is the *mod* —
+    # replace-by-number means P00001 appears once however often it is uploaded.
+    assert summary["history_len"] == 2
+    assert [h["mod"] for h in c["obligation_history"]].count("P00002") == 1
     assert _by_clin(c)["1001"]["obligated"] == first
 
 
