@@ -101,6 +101,17 @@ def test_a_provisional_letter_stores_a_fiscal_year_keyed_set(
     assert got["gna"] == (0.137, rates.BASE_TOTAL_COST_INPUT, rates.PROVISIONAL)
 
 
+def test_a_final_only_letter_stores_an_actual_set(client, contract, monkeypatch):
+    """A final determination may be the only rate set printed in the letter."""
+    _stub(monkeypatch, status="final", pools=PROVISIONAL_SET, final_pools=None)
+    body = _upload(client, contract).json()
+    assert body["status"] == rates.ACTUAL
+    assert body["final_determination_found"] is True
+
+    model = client.get(f"/api/contracts/{contract}/rate-model").json()
+    assert all(p["status"] == rates.ACTUAL for p in model["pools"])
+
+
 def test_the_letter_supersedes_the_award_face_read(client, contract, monkeypatch):
     """The face states rates but not their base or status. This document states all
     three, so it wins on its own subject rather than sitting beside the face read."""

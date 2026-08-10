@@ -445,8 +445,12 @@ async def add_rate_agreement(contract_id: int, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
-    provisional = _agreement_pools(parsed.pools)
+    parsed_status = (parsed.status or "").strip().lower()
+    single_final = parsed_status in {"final", "actual"} and not parsed.final_pools
+    provisional = [] if single_final else _agreement_pools(parsed.pools)
     final = _agreement_pools(parsed.final_pools)
+    if single_final:
+        final = _agreement_pools(parsed.pools)
     if not provisional and not final:
         raise HTTPException(
             status_code=422,
@@ -480,7 +484,7 @@ async def add_rate_agreement(contract_id: int, file: UploadFile = File(...)):
         "pools_stored": len(stored),
         # Said out loud: the upload carried a provisional set too, and this response
         # is the only place that fact survives until #87 can store both.
-        "final_determination_found": bool(final),
+        "final_determination_found": status == rates.ACTUAL,
         "provisional_pools_found": len(provisional),
         "cognisant_agency": parsed.cognisant_agency,
         "determination_date": parsed.determination_date,
