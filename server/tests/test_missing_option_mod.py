@@ -141,3 +141,42 @@ def test_legacy_human_readable_option_history_also_suppresses_the_warning():
     ]
 
     assert burn.compute(contract, [_row()])["contract"]["missing_option_mods"] == []
+
+
+def test_the_award_and_the_mod_may_name_the_same_option_differently():
+    """The award schedule says 'Option Year 1'; the SF-30 narrative says 'Option 1'.
+    They are one period — `periods.key` is what reconciles them, and the mod path has
+    always used it. A warning that matched on raw text instead would fire on a
+    contract whose option mod is sitting right there in the history."""
+    contract = deepcopy(_contract())
+    contract["periods"][1]["name"] = "Option Year 1"
+    contract["obligation_history"] = [
+        {"mod": "P00001", "action": "option_exercise", "period": "Option 1"}
+    ]
+
+    assert burn.compute(contract, [_row()])["contract"]["missing_option_mods"] == []
+
+
+def test_an_option_exercise_the_model_worded_loosely_still_suppresses():
+    """`action_type` is a free-text field the prompt only *asks* to be one of three
+    values. 'Option Exercise' is the same action as 'option_exercise', and reading it
+    as anything else leaves the period un-exercised everywhere it matters."""
+    contract = deepcopy(_contract())
+    contract["obligation_history"] = [
+        {"mod": "P00001", "action": "Option Exercise", "period": "Option 1"}
+    ]
+
+    assert burn.compute(contract, [_row()])["contract"]["missing_option_mods"] == []
+
+
+def test_an_unrelated_funding_action_does_not_suppress_the_warning():
+    """Incremental funding on the base is not an option exercise."""
+    contract = deepcopy(_contract())
+    contract["obligation_history"] = [
+        {"mod": "P00001", "action": "incremental_funding", "amount": 500_000.0}
+    ]
+
+    assert [
+        m["period"]
+        for m in burn.compute(contract, [_row()])["contract"]["missing_option_mods"]
+    ] == ["Option 1"]

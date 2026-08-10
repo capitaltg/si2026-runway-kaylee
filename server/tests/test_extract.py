@@ -216,8 +216,9 @@ def test_initial_ffp_award_does_not_recompute_from_partial_period_labels():
 
 
 def test_initial_ffp_award_does_not_recompute_from_unresolved_period_label():
+    """A label naming no period on the schedule is unresolved, not Base."""
     e = _w45983_award()
-    e.clins[1].period = "Base Year"
+    e.clins[1].period = "Surge"
 
     normalized = extract.normalize_initial_award(e)
 
@@ -275,3 +276,17 @@ def test_the_anthropic_path_still_enforces_its_schema(monkeypatch):
     monkeypatch.setattr(extract, "PROVIDER", "anthropic")
     assert _call(extract.extract_mod_from_text, monkeypatch) is True
     assert _call(extract.extract_from_text, monkeypatch) is True
+
+
+def test_a_base_clin_spelled_differently_still_resolves_to_the_base_period():
+    """'Base Year' on the CLIN table and 'Base' in the schedule are one period. The
+    mod path has always matched them; leaving a priced Base line unobligated because
+    two columns of the same award worded it differently would be a reading error, not
+    caution."""
+    e = _w45983_award()
+    e.clins[1].period = "Base Year"
+
+    normalized = extract.normalize_initial_award(e)
+
+    assert normalized.clins[1].obligated == normalized.clins[1].ceiling
+    assert normalized.contract.total_obligated == 3_037_736.80

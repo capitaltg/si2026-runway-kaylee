@@ -25,6 +25,7 @@ from typing import List, Optional
 
 from . import absence as absence_mod
 from . import lcat as lcat_match
+from . import periods as period_ids
 from . import pricing, rates
 
 # Status thresholds, ported verbatim from the design's computeClinFor.
@@ -205,56 +206,42 @@ def _missing_option_mods(contract: dict, rows: List[dict]) -> List[dict]:
     not authority to exercise an option or create funding. Only an ingested option
     exercise in obligation history can suppress the signal.
     """
-    periods = contract.get("periods") or []
+    schedule = contract.get("periods") or []
     clins = contract.get("clins") or []
-    history = contract.get("obligation_history") or []
+    # The same read the mod path flips `exercised` from, so an ingested exercise
+    # suppresses this warning by the rule that set the flag rather than a second,
+    # looser one. It matters when the flag is stale — re-ingesting the award rebuilds
+    # the periods with every option un-exercised, and the history is then the only
+    # surviving evidence that one is in force.
+    exercised = period_ids.exercised_keys(contract)
 
-    def key(value) -> str:
-        return " ".join(str(value or "").strip().lower().split())
-
-    clin_period = {
-        key(clin.get("clin")): key(clin.get("period"))
-        for clin in clins
-        if clin.get("clin") and clin.get("period")
-    }
-
-    def has_exercise(period_name: str) -> bool:
-        wanted = key(period_name)
-        for action in history:
-            action_name = key(action.get("action") or action.get("action_type"))
-            action_period = key(action.get("period") or action.get("period_exercised"))
-            if action_name == "option_exercise" and action_period == wanted:
-                return True
-            if "exercise option" in action_name and wanted in action_name:
-                return True
-            if action_name == "option_exercise":
-                funded_periods = {
-                    clin_period.get(key(line.get("clin")))
-                    for line in action.get("funding_lines") or []
-                }
-                if wanted in funded_periods:
-                    return True
-        return False
+    # The Base by name, not by position: an extraction is not required to return the
+    # schedule in order, and mistaking an option for the Base would suppress the
+    # warning on the one period it exists for. Position is the fallback only when no
+    # period names itself the base.
+    named_base = any(period_ids.key(p.get("name")) == "base" for p in schedule)
+    options = (
+        [p for p in schedule if period_ids.key(p.get("name")) != "base"]
+        if named_base
+        else schedule[1:]
+    )
 
     positive = [row for row in rows if billable_hours(row) > 0]
     missing = []
-    # The first scheduled period is the Base. Every later one is an option,
-    # regardless of the exact naming convention used by the award.
-    for period in periods[1:]:
-        if period.get("exercised") or has_exercise(period.get("name")):
+    for period in options:
+        period_name = period_ids.key(period.get("name"))
+        if period.get("exercised") or period_name in exercised:
             continue
-        period_name = key(period.get("name"))
         option_codes = {
-            key(clin.get("clin"))
+            period_ids.clin_key(clin.get("clin"))
             for clin in clins
-            if key(clin.get("period")) == period_name and clin.get("clin")
+            if period_ids.key(clin.get("period")) == period_name and clin.get("clin")
         }
         start, end = _period_window(period)
         matched_codes = set()
         detected = False
         for row in positive:
-            charge_code = key(row.get("charge_code"))
-            by_code = charge_code in option_codes
+            by_code = period_ids.clin_key(row.get("charge_code")) in option_codes
             week = _d(row.get("week_ending"))
             by_date = bool(
                 week and start and start <= week and (end is None or week <= end)

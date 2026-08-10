@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from . import confidence, pricing
+from . import periods as period_ids
 from .schemas import Extraction, Modification
 
 # Load the server's dotenv files before any credential lookup. Without this the
@@ -269,20 +270,26 @@ def normalize_initial_award(parsed: Extraction) -> Extraction:
     facts and are never overwritten. Option CLINs and non-FFP awards are never
     defaulted here.
     """
-    if parsed.periods:
-        parsed.periods[0].exercised = True
-        for period in parsed.periods[1:]:
-            period.exercised = False
-
-    code, _ = pricing.classify(parsed.contract.contract_type)
-    if code != "FFP" or not parsed.periods:
+    if not parsed.periods:
         return parsed
 
-    base_name = parsed.periods[0].name.strip().lower()
+    # The Base by name where the schedule says so, by position only as a fallback.
+    # Getting this wrong exercises an option and closes the Base in one stroke, and
+    # nothing requires an extraction to return the schedule in order.
+    base = next(
+        (p for p in parsed.periods if period_ids.key(p.name) == "base"),
+        parsed.periods[0],
+    )
+    for period in parsed.periods:
+        period.exercised = period is base
+
+    code, _ = pricing.classify(parsed.contract.contract_type)
+    if code != "FFP":
+        return parsed
+
+    base_key = period_ids.key(base.name)
     base_clins = [
-        clin
-        for clin in parsed.clins
-        if (clin.period or "").strip().lower() == base_name
+        clin for clin in parsed.clins if period_ids.key(clin.period) == base_key
     ]
     if not base_clins:
         return parsed
@@ -294,16 +301,17 @@ def normalize_initial_award(parsed: Extraction) -> Extraction:
     # On a multi-period schedule, one unlabeled CLIN might belong to Base. We may
     # still normalize the lines positively identified as Base, but cannot claim
     # their subtotal is the complete award obligation.
-    period_names = {period.name.strip().lower() for period in parsed.periods}
+    period_keys = {period_ids.key(period.name) for period in parsed.periods}
+    period_keys.discard(None)
     period_labels_complete = all(
-        (clin.period or "").strip().lower() in period_names for clin in parsed.clins
+        period_ids.key(clin.period) in period_keys for clin in parsed.clins
     )
     if period_labels_complete and all(
         clin.obligated is not None for clin in base_clins
     ):
         total_obligated = round(sum(clin.obligated for clin in base_clins), 2)
         parsed.contract.total_obligated = total_obligated
-        base_ceiling = parsed.periods[0].ceiling
+        base_ceiling = base.ceiling
         if base_ceiling is None and all(
             clin.ceiling is not None for clin in base_clins
         ):
