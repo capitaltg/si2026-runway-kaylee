@@ -31,6 +31,7 @@ import {
   scoringSnapshot,
   snapshotChanges,
 } from "../plans.js";
+import { planDrift, driftSummary, driftSentence } from "../drift.js";
 import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
@@ -722,6 +723,49 @@ export default function AllocationMatrix({
   // an unnamed what-if typed straight onto the actuals has no plan id either, and
   // ticking that as "what's running now" would be the same lie #62 fixed.
   const onActuals = !loadedPlan && !dirty;
+
+  // #67 item 2 — drift. Once a baseline exists the question stops being "what if"
+  // and becomes "are we running what we committed to", which is one comparison:
+  // the baseline's hours against the synced actuals, priced with the same resolver
+  // the matrix scores plans with so drift dollars and plan dollars agree.
+  //
+  // Deliberately compared against the *actuals*, not against whatever is on screen.
+  // Drift is a fact about reality; scoring it against a half-typed what-if would
+  // make it move while you edit and mean nothing by the time you stopped.
+  const actualsState = useMemo(
+    () => ({ draft: data ? buildDraft(data) : {} }),
+    [data]
+  );
+  const drift = useMemo(() => {
+    if (!baseline) return null;
+    const names = new Map(employees.map((e) => [String(e.id), e.name]));
+    const rate = makeRate(baseline.data?.added || []);
+    return planDrift({
+      baseline: baseline.data || {},
+      actuals: actualsState,
+      rate,
+      nameOf: (id) => names.get(String(id)),
+    });
+  }, [baseline, actualsState, employees, clins]);
+  const driftLine = useMemo(() => driftSummary(drift), [drift]);
+
+  // What the gap has cost in runway, per CLIN — the number that turns "18% above
+  // baseline" into something with a deadline attached. Scored through evalPlan, so
+  // it carries the same absence and funding arithmetic as every other runway figure
+  // on the page rather than a second, simpler model of the same thing.
+  const driftRunway = useMemo(() => {
+    if (!baseline) return {};
+    const b = evalPlan(baseline.data || {});
+    const a = evalPlan(actualsState);
+    const out = {};
+    for (const c of clins) {
+      const bd = b.clin[c.id]?.runwayDays;
+      const ad = a.clin[c.id]?.runwayDays;
+      if (bd != null && ad != null) out[c.id] = ad - bd;
+    }
+    return out;
+  }, [baseline, actualsState, clins, employees, contractAbsence, cw, tw]);
+  const [showDrift, setShowDrift] = useState(false);
   const [baselineBusy, setBaselineBusy] = useState(false);
   const [baselineErr, setBaselineErr] = useState(null);
 
@@ -1333,6 +1377,27 @@ export default function AllocationMatrix({
               <b style={{ color: "var(--text)" }}>“{baseline.name}”</b> — the staffing
               this contract is committed to
               {loadedPlan === baseline.id ? " · open now" : ""}
+              {" · "}
+              {/* The summary is the link. With nothing adrift it still opens — "we are
+                  running the plan" is an answer worth being able to check, and a
+                  control that appears only when there is bad news teaches people that
+                  its absence means nobody looked. */}
+              <button
+                onClick={() => setShowDrift((v) => !v)}
+                title="Show how the actuals differ from the committed staffing"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  font: "inherit",
+                  fontWeight: driftLine ? 700 : 500,
+                  color: driftLine?.delta > 0 ? "var(--warn)" : "var(--dim)",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                {driftLine ? driftLine.text : "On the baseline staffing"}
+              </button>
             </div>
           )}
           {baselineErr && (
@@ -1941,6 +2006,17 @@ export default function AllocationMatrix({
               </button>
             </div>
           </div>
+
+          {/* drift vs the active baseline (on demand) */}
+          {showDrift && baseline && (
+            <DriftPanel
+              drift={drift}
+              baselineName={baseline.name}
+              clins={clins}
+              runwayDelta={driftRunway}
+              onClose={() => setShowDrift(false)}
+            />
+          )}
 
           {/* compare panel (on demand) */}
           {comparing && (
@@ -3204,6 +3280,125 @@ function ComparePanel({ a, b, setA, setB, plans, clins, tw, cmpLabel, evalPlan, 
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Drift vs the active baseline (#67 item 2) — the plan we committed to against the
+// hours people are actually charging. Presentation only: the arithmetic and the
+// wording both live in drift.js, so the Flight Deck card can say the same thing.
+function DriftPanel({ drift, baselineName, clins, runwayDelta, onClose }) {
+  const clinName = (id) => clins.find((c) => String(c.id) === String(id))?.code || `CLIN ${id}`;
+  const cell = { padding: "9px 14px", fontFamily: mono, fontSize: 13, textAlign: "right" };
+  // Over plan is the expensive direction, so it is the one that gets a warning
+  // color. Under plan is not automatically good news — it can mean the work isn't
+  // getting done — so it stays neutral rather than green.
+  const deltaColor = (d) => (d > 0 ? "var(--warn)" : d < 0 ? "var(--dim)" : "var(--faint)");
+  const signed = (d, fmt) => (d === 0 ? "—" : `${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}`);
+
+  return (
+    <div style={{ ...panelStyle, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "12px 14px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+          Drift vs “{baselineName}”
+        </span>
+        <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
+          The committed staffing against what people are actually charging — not
+          against the what-if on screen.
+        </span>
+        <button onClick={onClose} title="Close" style={{ marginLeft: "auto", width: 28, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel2)", color: "var(--dim)", cursor: "pointer", fontSize: 15, lineHeight: 1 }}>
+          ×
+        </button>
+      </div>
+
+      {drift.people.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "var(--panel2)", color: "var(--faint)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              <th style={{ textAlign: "left", padding: "10px 14px", fontWeight: 700 }}>Person</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Baseline</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Actual</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Δ hrs/wk</th>
+              <th style={{ textAlign: "right", padding: "10px 14px", fontWeight: 700 }}>Δ $/wk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {drift.people.map((p) => (
+              <tr key={p.id} style={{ borderTop: "1px solid var(--border)" }} title={driftSentence(p)}>
+                <td style={{ padding: "9px 14px", color: "var(--text)", fontWeight: 500 }}>
+                  {p.name}
+                  {/* Roster drift — somebody who isn't in the plan at all, or who the
+                      plan rolled off. An hours delta alone can't say which. */}
+                  {(p.kind === "unplanned" || p.kind === "rolled_off_charging" || p.kind === "not_charging") && (
+                    <span style={{ display: "block", fontSize: 10.5, color: "var(--faint)", fontWeight: 400 }}>
+                      {p.kind === "unplanned"
+                        ? "not on the baseline"
+                        : p.kind === "rolled_off_charging"
+                          ? "rolled off in the baseline, still charging"
+                          : "on the baseline, charging nothing"}
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...cell, color: "var(--dim)" }}>{p.baselineHrs ? p.baselineHrs.toFixed(1) : "—"}</td>
+                <td style={{ ...cell, color: "var(--text)", fontWeight: 600 }}>{p.actualHrs ? p.actualHrs.toFixed(1) : "—"}</td>
+                <td style={{ ...cell, color: deltaColor(p.deltaHrs), fontWeight: 600 }}>
+                  {signed(Math.round(p.deltaHrs * 10) / 10, (v) => v.toFixed(1))}
+                </td>
+                <td style={{ ...cell, color: deltaColor(p.deltaCost), fontWeight: 600 }}>
+                  {signed(Math.round(p.deltaCost), money)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Per CLIN, with what the gap has cost in runway — the number that gives the
+          percentage a deadline. Only CLINs that actually moved. */}
+      {drift.clins.some((c) => Math.abs(c.delta) >= 1) && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: 14 }}>
+          {drift.clins
+            .filter((c) => Math.abs(c.delta) >= 1)
+            .map((c) => (
+              <div key={c.id} style={{ fontSize: 12, color: "var(--dim)" }}>
+                <b style={{ color: "var(--text)" }}>{clinName(c.id)}</b>{" "}
+                <span style={{ fontFamily: mono }}>
+                  {money(c.baseline)} → {money(c.actual)}/wk
+                </span>{" "}
+                <span style={{ color: deltaColor(c.delta), fontWeight: 600 }}>
+                  {signed(Math.round(c.delta), money)}
+                </span>
+                {runwayDelta?.[c.id] != null && runwayDelta[c.id] !== 0 && (
+                  <span style={{ color: runwayDelta[c.id] < 0 ? "var(--warn)" : "var(--dim)" }}>
+                    {" · "}
+                    {runwayDelta[c.id] < 0
+                      ? `${Math.abs(runwayDelta[c.id])} days of runway lost since the plan was set`
+                      : `${runwayDelta[c.id]} days gained`}
+                  </span>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* Planned but not charging. Kept out of the drift numbers on purpose: a hire
+          who hasn't started is a plan not yet executed, not a staffing breach. */}
+      {drift.planned.length > 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", fontSize: 12, color: "var(--dim)" }}>
+          <b style={{ color: "var(--text)" }}>Planned, not charging yet:</b>{" "}
+          {drift.planned.map((p) => `${p.name} (${p.baselineHrs.toFixed(0)} hrs/wk)`).join(", ")}
+          <span style={{ color: "var(--faint)" }}>
+            {" "}
+            — not counted as drift until they appear on a timesheet.
+          </span>
+        </div>
+      )}
+
+      {drift.people.length === 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px", fontSize: 12.5, color: "var(--good)" }}>
+          Everyone is charging the baseline hours, within half an hour a week.
+        </div>
+      )}
     </div>
   );
 }
