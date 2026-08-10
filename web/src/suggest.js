@@ -80,6 +80,11 @@ export function moveSentence(group) {
   // Free to compute and worth saying: clearing these hours off the line also closes
   // an unmatched-LCAT flag. This is the design's "also clears the LCAT flag".
   if (group.clears_lcat_flag) text += " — also clears the LCAT flag";
+  // #66, the same pattern for the more serious of the two: the move takes somebody off
+  // a category they don't meet the minimums for. Said after the dollars because the
+  // solver is closing a funding gap and this is a side effect, not the reason — but
+  // said, because it is the side effect somebody would want to know about.
+  if (group.clears_compliance_flag) text += " — also clears a quals finding";
   return text;
 }
 

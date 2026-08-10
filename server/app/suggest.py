@@ -157,6 +157,7 @@ def _group_moves(moves: List[dict]) -> List[dict]:
                 "weekly_dollars": 0.0,
                 "dollars_unknown": False,
                 "clears_lcat_flag": False,
+                "clears_compliance_flag": False,
                 "floor": m.get("floor"),
             }
             index[key] = g
@@ -169,6 +170,11 @@ def _group_moves(moves: List[dict]) -> List[dict]:
         else:
             g["weekly_dollars"] += _f(m.get("weekly_dollars"))
         g["clears_lcat_flag"] = g["clears_lcat_flag"] or bool(m.get("clears_lcat_flag"))
+        # Any-of, like the LCAT flag: a grouped bullet naming three people clears a
+        # finding if it clears one, and the panel lists who by name anyway.
+        g["clears_compliance_flag"] = g["clears_compliance_flag"] or bool(
+            m.get("clears_compliance_flag")
+        )
     for g in groups:
         g["hours_moved"] = round(g["hours_moved"], 1)
         g["weekly_dollars"] = round(g["weekly_dollars"], 2)
@@ -205,6 +211,18 @@ def _candidate(kind, row, cell, cid, to_hours, *, floor=None, to_clin=None):
         # rate line. Clearing them off the CLIN closes a compliance flag as a side
         # effect, which is free to compute and is why it breaks ties.
         "clears_lcat_flag": bool(cell.get("unmatched")),
+        # #66's version of the same idea: taking an under-qualified person off a line
+        # closes a quals finding as well as dollars, and the copy should say so.
+        #
+        # Only when the move actually reduces their hours here. Adding hours to somebody
+        # who does not meet the category's floor makes the exposure bigger, and a move
+        # that advertised itself as clearing a flag while doing that would be worse than
+        # one that said nothing.
+        "clears_compliance_flag": bool(
+            to_hours < from_hours
+            and (cell.get("compliance") or {}).get("status")
+            in ("under_qualified", "clearance_gap")
+        ),
         "floor": floor,
         "expected_hours_per_week": round(
             _f((row.get("expected") or {}).get("hours")), 1
@@ -227,8 +245,8 @@ def _file_move(m: Optional[dict], bucket: List[dict], unpriced: dict) -> bool:
 
 
 def _order(candidates: List[dict]) -> List[dict]:
-    """Rank by hours moved, then by whether the move also clears an LCAT flag, then
-    by name for determinism.
+    """Rank by hours moved, then by whether the move also clears an LCAT flag, then a
+    quals finding (#66), then by name for determinism.
 
     Note what is *not* in this key: the rate, and the dollars derived from it. That is
     the whole point — see the module docstring. `name` last means the same contract
@@ -239,6 +257,11 @@ def _order(candidates: List[dict]) -> List[dict]:
         key=lambda m: (
             -m["hours_moved"],
             not m["clears_lcat_flag"],
+            # A quals finding is the more serious of the two side effects, but it stays a
+            # tie-break rather than a ranking term: the solver's job is closing a dollar
+            # gap, and letting compliance reorder the moves would quietly turn it into a
+            # compliance tool that also does money.
+            not m.get("clears_compliance_flag"),
             m["person"] or "",
         ),
     )

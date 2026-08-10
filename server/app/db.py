@@ -6,6 +6,7 @@ from typing import Optional
 from . import absence as absence_mod
 from . import documents
 from . import lcat
+from . import people
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
 
@@ -544,6 +545,38 @@ def expected_hours_by_person() -> dict:
     ).fetchall()
     conn.close()
     return {r["employee_id"]: r["value"] for r in rows}
+
+
+def quals_by_person() -> dict:
+    """Every stored credential, as `{employee_id: {field: {value, source_note}}}` (#66).
+
+    The compliance check's half of `expected_hours_by_person`, and passed in for the
+    same reason. Only the three comparable fields (`people.QUAL_FIELDS`) are selected:
+    expected hours share this table and are a week, not a credential, and a field of
+    study has no rank to compare, so neither belongs in a dict called `quals`.
+
+    The source note comes along because the panel that shows a failing check has to
+    show *why we believe the number* — "3 yrs · per resume, 2026-03" is a different
+    conversation from a bare 3, and it is the first thing anyone disputes.
+    """
+    fields = tuple(people.QUAL_FIELDS)
+    conn = get_conn()
+    rows = conn.execute(
+        f"""SELECT employee_id, field, value, source_note, authored_by, authored_at
+            FROM person_attrs
+            WHERE field IN ({','.join('?' * len(fields))})""",
+        fields,
+    ).fetchall()
+    conn.close()
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["employee_id"], {})[r["field"]] = {
+            "value": r["value"],
+            "source_note": r["source_note"],
+            "authored_by": r["authored_by"],
+            "authored_at": r["authored_at"],
+        }
+    return out
 
 
 def set_lcat_alias(

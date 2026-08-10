@@ -227,6 +227,49 @@ def similarity(a: Optional[str], b: Optional[str]) -> float:
 
 
 @dataclass(frozen=True)
+class Floors:
+    """The qualification minimums an award prints beside a rate line (#66).
+
+    Rides on the resolved line rather than being looked up by LCAT name later, which
+    matters most in the case the name lookup gets wrong: when a user-confirmed alias
+    prices `Cyber Analyst III` off the `Senior Cyber SME` line, the floors that apply
+    are the ones on the line that sets the rate, not the ones next to the string the
+    timesheet happened to use.
+
+    Every field is optional because every field is optional in the document. A missing
+    floor is "the award asks nothing here", which `compliance.py` treats as nothing to
+    check — never as a bar of zero that everyone clears.
+    """
+
+    min_education: Optional[str] = None
+    min_experience_yrs: Optional[int] = None
+    clearance: Optional[str] = None
+
+    @property
+    def any_printed(self) -> bool:
+        return any(
+            v is not None
+            for v in (self.min_education, self.min_experience_yrs, self.clearance)
+        )
+
+    @classmethod
+    def from_rate_line(cls, lr: Optional[dict]) -> "Floors":
+        lr = lr or {}
+        return cls(
+            min_education=(lr.get("min_education") or None),
+            min_experience_yrs=lr.get("min_experience_yrs"),
+            clearance=(lr.get("clearance") or None),
+        )
+
+    def payload(self) -> dict:
+        return {
+            "min_education": self.min_education,
+            "min_experience_yrs": self.min_experience_yrs,
+            "clearance": self.clearance,
+        }
+
+
+@dataclass(frozen=True)
 class RateLine:
     """One priced labor line: which CLIN prices it, the LCAT as the award spells
     it, and the loaded $/hr. `key` is its normalised comparison form."""
@@ -235,9 +278,19 @@ class RateLine:
     lcat: str
     rate: float
     key: str
+    # The award's qualification minimums for this category (#66). Defaults to an
+    # empty `Floors` so every existing construction site stays valid and an award
+    # that prints no minimums is indistinguishable from one nobody extracted — both
+    # are "no floor", which is the honest reading of either.
+    floors: "Floors" = Floors()
 
     def payload(self) -> dict:
-        return {"clin": self.clin, "lcat": self.lcat, "rate": round(self.rate, 2)}
+        return {
+            "clin": self.clin,
+            "lcat": self.lcat,
+            "rate": round(self.rate, 2),
+            "floors": self.floors.payload(),
+        }
 
 
 @dataclass(frozen=True)
@@ -288,7 +341,13 @@ def build_index(clins: List[dict]) -> Dict[str, List[RateLine]]:
             if not key:
                 continue
             index.setdefault(key, []).append(
-                RateLine(clin=num, lcat=name, rate=float(rate), key=key)
+                RateLine(
+                    clin=num,
+                    lcat=name,
+                    rate=float(rate),
+                    key=key,
+                    floors=Floors.from_rate_line(lr),
+                )
             )
     return index
 
@@ -394,6 +453,9 @@ def resolver(
     num = str(clin.get("clin") or "").strip()
 
     by_exact: Dict[str, float] = {}
+    # The floors beside each printed line, keyed the same way the rate is, so the
+    # exact-match path below can carry them without re-reading the table (#66).
+    floors_by_exact: Dict[str, Floors] = {}
     own_lines: Dict[str, List[RateLine]] = {}
     for lr in table:
         name = (lr.get("lcat") or "").strip()
@@ -401,10 +463,17 @@ def resolver(
         if not name or not rate:
             continue
         by_exact[name.lower()] = float(rate)
+        floors_by_exact[name.lower()] = Floors.from_rate_line(lr)
         key = normalize(name)
         if key:
             own_lines.setdefault(key, []).append(
-                RateLine(clin=num, lcat=name, rate=float(rate), key=key)
+                RateLine(
+                    clin=num,
+                    lcat=name,
+                    rate=float(rate),
+                    key=key,
+                    floors=Floors.from_rate_line(lr),
+                )
             )
 
     ceiling = clin.get("ceiling") or 0
@@ -429,7 +498,13 @@ def resolver(
                 rate=hit,
                 matched=True,
                 via=VIA_EXACT,
-                line=RateLine(clin=num, lcat=raw, rate=hit, key=key),
+                line=RateLine(
+                    clin=num,
+                    lcat=raw,
+                    rate=hit,
+                    key=key,
+                    floors=floors_by_exact.get(raw.lower(), Floors()),
+                ),
             )
 
         # 2. normalised, on this CLIN only. Distinct rates behind one key is the
