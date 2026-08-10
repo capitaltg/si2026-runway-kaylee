@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planDrift, driftSummary, driftSentence, hasDrift } from "./drift.js";
+import {
+  planDrift,
+  driftSummary,
+  driftSentence,
+  hasDrift,
+  driftAlert,
+  actualsDraft,
+  rateResolver,
+} from "./drift.js";
 
 // $100/hr flat unless a test says otherwise, so hours and dollars stay legible.
 const rate = () => 100;
@@ -172,4 +180,86 @@ test("no baseline at all is empty, not an error", () => {
   assert.equal(d.people.length, 1);
   assert.equal(d.people[0].kind, "unplanned");
   assert.equal(planDrift().people.length, 0);
+});
+
+// --- reading an allocation payload ------------------------------------------
+
+const PAYLOAD = {
+  clins: [
+    { id: "0001", blended_rate: 120 },
+    { id: "0002", blended_rate: 90 },
+  ],
+  employees: [
+    { id: 7, name: "Wei Chen", cells: { "0001": { hours: 24, rate: 210 } } },
+    { id: 8, name: "Priya Raman", cells: { "0001": { hours: 12 }, "0002": { hours: 8, rate: 95 } } },
+  ],
+};
+
+test("the actuals grid covers every CLIN, charged or not", () => {
+  assert.deepEqual(actualsDraft(PAYLOAD), {
+    7: { "0001": 24, "0002": 0 },
+    8: { "0001": 12, "0002": 8 },
+  });
+  assert.deepEqual(actualsDraft(), {});
+});
+
+test("a person with no resolved rate falls back to the CLIN's blended rate", () => {
+  // #64: an unpriced LCAT has to cost something, or drift would report a staffing
+  // change as free.
+  const r = rateResolver(PAYLOAD);
+  assert.equal(r(7, "0001"), 210);
+  assert.equal(r(8, "0001"), 120, "no rate on the cell — blended");
+  assert.equal(r(8, "0002"), 95);
+  assert.equal(r(999, "0002"), 90, "somebody new — blended");
+  assert.equal(r(7, "9999"), 0, "no such CLIN");
+});
+
+test("a plan's planned hires price at the rates the plan gave them", () => {
+  const r = rateResolver({ ...PAYLOAD, added: [{ id: "added-abc", rates: { "0001": 175 } }] });
+  assert.equal(r("added-abc", "0001"), 175);
+  assert.equal(r("added-abc", "0002"), 90, "no rate for that CLIN — blended");
+});
+
+// --- the Flight Deck card ---------------------------------------------------
+
+test("small dollar drift does not earn a Flight Deck card", () => {
+  // 2 hrs on a 100-hr baseline is 2% — real, in the panel, and not worth
+  // interrupting somebody who is reading a tripwire.
+  const d = drift({ draft: { 7: { "0001": 100 } } }, { draft: { 7: { "0001": 102 } } });
+  assert.equal(d.people.length, 1, "still drift");
+  assert.equal(driftAlert(d), null, "just not card-worthy");
+});
+
+test("a material dollar gap earns a card", () => {
+  const d = drift({ draft: { 7: { "0001": 20 } } }, { draft: { 7: { "0001": 30 } } });
+  const a = driftAlert(d, { runwayLost: 28, clinCode: "0001" });
+  assert.equal(a.share, 0.5);
+  assert.equal(a.runwayLost, 28);
+  assert.match(a.headline, /Running above the baseline by \$1\.0K\/wk/);
+  assert.equal(a.movers.length, 1);
+});
+
+test("anybody charging who is not on the baseline earns a card at any size", () => {
+  // The dollars are not what makes this worth knowing.
+  const d = drift({ draft: { 7: { "0001": 100 } } }, { draft: { 7: { "0001": 100 }, 9: { "0001": 1 } } });
+  const a = driftAlert(d);
+  assert.ok(a, "roster break is its own trigger");
+  assert.deepEqual(a.roster.map((p) => p.kind), ["unplanned"]);
+});
+
+test("a card names at most three movers", () => {
+  const many = { draft: {} };
+  const base = { draft: {} };
+  for (const id of [7, 8, 9, 10, 11]) {
+    base.draft[id] = { "0001": 20 };
+    many.draft[id] = { "0001": 40 };
+  }
+  const a = driftAlert(drift(base, many));
+  assert.equal(a.movers.length, 3);
+  assert.equal(a.people, 5, "but it still says how many there are");
+});
+
+test("no drift is no card", () => {
+  assert.equal(driftAlert(drift({ draft: { 7: { "0001": 20 } } }, { draft: { 7: { "0001": 20 } } })), null);
+  assert.equal(driftAlert(null), null);
 });

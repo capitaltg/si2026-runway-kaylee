@@ -31,7 +31,13 @@ import {
   scoringSnapshot,
   snapshotChanges,
 } from "../plans.js";
-import { planDrift, driftSummary, driftSentence } from "../drift.js";
+import {
+  planDrift,
+  driftSummary,
+  driftSentence,
+  rateResolver,
+  actualsDraft as buildDraft,
+} from "../drift.js";
 import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
@@ -578,19 +584,9 @@ export default function AllocationMatrix({
 
   // Rate resolver for a given set of planned adds: LCAT-resolved $/hr per person
   // per CLIN, blended-rate fallback. Pure so it can score any plan, not just live.
-  const makeRate = (addedX) => {
-    const m = {};
-    for (const c of clins) m[c.id] = { _blended: c.blended_rate || 0 };
-    for (const e of employees)
-      for (const [cid, cell] of Object.entries(e.cells || {}))
-        (m[cid] ||= {})[e.id] = cell.rate ?? null;
-    for (const a of addedX || [])
-      for (const [cid, rt] of Object.entries(a.rates || {})) (m[cid] ||= {})[a.id] = rt;
-    return (empId, clinId) => {
-      const c = m[clinId] || {};
-      return c[empId] ?? c._blended ?? 0;
-    };
-  };
+  // Shared with the Flight Deck's drift card (#67), so the two surfaces cannot put
+  // different dollar figures on the same staffing gap.
+  const makeRate = (addedX) => rateResolver({ clins, employees, added: addedX });
 
   // Score a plan state ({draft, added, removed, absences}) into per-CLIN runway +
   // totals — the whole point of the view, and reused to compare saved plans.
@@ -3403,15 +3399,6 @@ function DriftPanel({ drift, baselineName, clins, runwayDelta, onClose }) {
   );
 }
 
-// Snapshot the synced actuals into an editable {emp: {clin: hrs}} grid.
-function buildDraft(d) {
-  const draft = {};
-  for (const e of d.employees || []) {
-    draft[e.id] = {};
-    for (const c of d.clins || []) draft[e.id][c.id] = e.cells?.[c.id]?.hours || 0;
-  }
-  return draft;
-}
 
 const th = {
   textAlign: "left",

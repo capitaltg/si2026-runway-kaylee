@@ -26,6 +26,44 @@ const HRS_EPSILON = 0.5;
 
 const sum = (obj) => Object.values(obj || {}).reduce((s, n) => s + (Number(n) || 0), 0);
 
+// --- Reading an allocation payload -------------------------------------------
+//
+// Both of these were private to the matrix until the Flight Deck needed to state the
+// same drift in a card. Two copies of "what does this person cost on this CLIN"
+// would eventually disagree, and the version people would trust is whichever one
+// they happened to be looking at.
+
+/** The synced actuals as an editable {emp: {clin: hrs}} grid. */
+export function actualsDraft(d) {
+  const draft = {};
+  for (const e of d?.employees || []) {
+    draft[e.id] = {};
+    for (const c of d?.clins || []) draft[e.id][c.id] = e.cells?.[c.id]?.hours || 0;
+  }
+  return draft;
+}
+
+/**
+ * $/hr for (person, CLIN): their resolved rate, else the CLIN's blended fallback.
+ *
+ * `added` are a plan's planned hires, who are in no employee list and carry their own
+ * rates. The blended fallback is what keeps an unpriced LCAT (#64) costing something
+ * rather than silently costing nothing.
+ */
+export function rateResolver({ clins = [], employees = [], added = [] } = {}) {
+  const m = {};
+  for (const c of clins) m[c.id] = { _blended: c.blended_rate || 0 };
+  for (const e of employees)
+    for (const [cid, cell] of Object.entries(e.cells || {}))
+      (m[cid] ||= {})[e.id] = cell.rate ?? null;
+  for (const a of added || [])
+    for (const [cid, rt] of Object.entries(a.rates || {})) (m[cid] ||= {})[a.id] = rt;
+  return (empId, clinId) => {
+    const c = m[clinId] || {};
+    return c[empId] ?? c._blended ?? 0;
+  };
+}
+
 /** Per-CLIN hours for one person in one grid, zeros dropped. */
 function rowFor(draft, empId) {
   const out = {};
@@ -178,6 +216,49 @@ export function driftSummary(drift) {
     direction: dir,
     people: drift.people.length,
     text: `Running ${dir} the baseline by ${money(Math.abs(d))}/wk${share}`,
+  };
+}
+
+// --- The Flight Deck card (#67 item 3) ---------------------------------------
+//
+// Drift belongs next to the burn tripwires, but not all of it: the matrix panel is
+// somewhere you go to read every row, and the Flight Deck is somewhere you get
+// interrupted. A card for a 3% overage would train people to page past the card that
+// says a CLIN is about to overrun.
+
+// A tenth of the committed staffing cost. Below that, weekly-average noise and
+// ordinary week-to-week variation are indistinguishable from a decision.
+const MATERIAL_SHARE = 0.1;
+
+/**
+ * The Flight Deck's version of drift, or null if this doesn't deserve a card.
+ *
+ * Two ways in, deliberately: a material dollar gap, or *any* roster break. Someone
+ * charging a contract they were never planned onto is worth interrupting for at any
+ * size — it is a different kind of problem from working more hours than planned, and
+ * the dollars are not what makes it worth knowing.
+ */
+export function driftAlert(drift, { runwayLost = null, clinCode = null } = {}) {
+  if (!drift || !drift.people.length) return null;
+  const roster = drift.people.filter(
+    (p) => p.kind === "unplanned" || p.kind === "rolled_off_charging" || p.kind === "not_charging",
+  );
+  const share = drift.baselineCost ? Math.abs(drift.deltaCost) / drift.baselineCost : 0;
+  if (share < MATERIAL_SHARE && !roster.length) return null;
+
+  const summary = driftSummary(drift);
+  return {
+    key: "baseline-drift",
+    deltaCost: drift.deltaCost,
+    share,
+    // Highest-dollar movers first, already sorted by planDrift. Three is what fits
+    // in a card before it stops being a headline.
+    movers: drift.people.slice(0, 3),
+    roster,
+    people: drift.people.length,
+    runwayLost,
+    clinCode,
+    headline: summary.text,
   };
 }
 
