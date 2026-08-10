@@ -858,10 +858,25 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         if h.get("cumulative_obligated") is not None
     ]
     amts = [float(h["amount"]) for h in merged if h.get("amount") is not None]
-    if cums:
-        header["total_obligated"] = max(cums)
-    elif amts:
-        header["total_obligated"] = round(sum(amts), 2)
+    # Two lower bounds on the same figure, and the answer is the larger of them.
+    #
+    # A stated running total is the only evidence of a mod missing from the trail —
+    # the sum of the actions we hold undercounts, and the cumulative on the mod we DO
+    # have is what says so. The sum is the only defence against the opposite failure:
+    # an SF-30 whose accounting block prints just "Obligated this action $X" and no
+    # running total invites the extraction to file that increment as the cumulative,
+    # and preferring the largest stated cumulative then keeps the award's own bigger
+    # figure and discards the mod's money in silence. That is the worst shape a bug
+    # can take here — the contract reads exactly as it did before the mod was
+    # ingested, so nothing about it looks wrong.
+    #
+    # Summing is safe against a re-ingest because `merged` is keyed by mod number: a
+    # mod ingested twice is one action. It would overcount a mod whose `amount` was
+    # itself misread as a cumulative restatement, which is why `amount_obligated` is
+    # the field the prompt is most explicit about.
+    bounds = list(cums) + ([round(sum(amts), 2)] if amts else [])
+    if bounds:
+        header["total_obligated"] = max(bounds)
     ceiling = header.get("total_ceiling")
     if header.get("total_obligated") is not None and ceiling:
         header["incrementally_funded"] = float(header["total_obligated"]) < float(
