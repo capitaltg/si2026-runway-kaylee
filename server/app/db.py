@@ -231,7 +231,7 @@ def init_db():
         """CREATE TABLE IF NOT EXISTS contract_documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             contract_id INTEGER,
-            kind TEXT CHECK (kind IN ('award','rate_schedule')),
+            kind TEXT,
             filename TEXT,
             content_type TEXT,
             size_bytes INTEGER,
@@ -240,6 +240,43 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )"""
     )
+    # The `kind` column shipped with an inline CHECK listing the two kinds that
+    # existed then, and SQLite cannot alter a CHECK constraint — so #78's rate
+    # agreement was rejected by every database created before it, with
+    # `CREATE TABLE IF NOT EXISTS` silently declining to fix it. Rebuilt once, here,
+    # and the allowed set now lives in `documents.KINDS` where the other document
+    # rules already are: a constraint that has to be migrated to add a document kind
+    # is a constraint in the wrong layer.
+    if (
+        "CHECK (kind IN"
+        in (
+            conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='contract_documents'"
+            ).fetchone()
+            or {"sql": ""}
+        )["sql"]
+    ):
+        conn.executescript(
+            """
+            ALTER TABLE contract_documents RENAME TO contract_documents_old;
+            CREATE TABLE contract_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contract_id INTEGER,
+                kind TEXT,
+                filename TEXT,
+                content_type TEXT,
+                size_bytes INTEGER,
+                sha256 TEXT,
+                blob BLOB,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO contract_documents
+                SELECT id, contract_id, kind, filename, content_type, size_bytes,
+                       sha256, blob, created_at
+                FROM contract_documents_old;
+            DROP TABLE contract_documents_old;
+            """
+        )
     conn.execute(
         """CREATE INDEX IF NOT EXISTS idx_contract_documents_contract
            ON contract_documents (contract_id)"""
@@ -1205,6 +1242,13 @@ def save_document(
     nobody yet and folding two users' identical uploads together would hand one of
     them the other's row to claim.
     """
+    # The kind check the dropped CHECK constraint used to make, now in one place and
+    # against `documents.KINDS` — so adding a document kind is one edit rather than a
+    # schema migration, and a typo'd kind is still refused rather than stored as a
+    # document nothing will ever look for.
+    if kind not in documents.KINDS:
+        raise ValueError(f"Unknown document kind {kind!r}")
+
     conn = get_conn()
     sha = documents.digest(blob)
     if contract_id is not None:

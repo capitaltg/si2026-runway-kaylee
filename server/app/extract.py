@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from . import confidence, pricing
 from . import periods as period_ids
-from .schemas import Extraction, Modification
+from .schemas import Extraction, Modification, RateAgreement
 
 # Load the server's dotenv files before any credential lookup. Without this the
 # app only saw credentials that happened to be exported in the shell that
@@ -403,5 +403,78 @@ def extract_mod_from_pdf(pdf_bytes: bytes) -> Modification:
                 },
             },
             {"type": "text", "text": INSTRUCTION_MOD},
+        ]
+    )
+
+
+# Indirect rate agreement (#78 slice 3b). The document that states what a burden
+# percentage actually is: an FPRA (FAR 15.407-3), a provisional billing rate letter
+# (FAR 42.704), or a final determination (FAR 42.705). Unlike the award face — which
+# prints the three percentages and nothing else — this one carries each pool's
+# application base and whether the rates are provisional or settled, which is why it
+# exists as a separate upload at all.
+SYSTEM_RATE_AGREEMENT = (
+    "You are a rate-agreement ingestion assistant for a GovCon financial tracking "
+    "tool. You are given ONE indirect rate agreement: a Forward Pricing Rate "
+    "Agreement (FAR 15.407-3), a provisional billing rate letter (FAR 42.704), or a "
+    "final rate determination (FAR 42.705). Extract the indirect cost pools it "
+    "states, exactly as written. "
+    "Each pool has three parts and all three matter: which pool it is (fringe, "
+    "overhead or G&A), its rate, and the base the rate applies to. Normalise the pool "
+    "to exactly 'fringe', 'overhead' or 'gna', and the base to exactly "
+    "'direct_labor', 'labor_plus_fringe' or 'total_cost_input'. A rate is a DECIMAL "
+    "FRACTION: 32.5% is 0.325, never 32.5. "
+    "A letter often states TWO sets of rates for the same fiscal year — the "
+    "provisional rates billed during the year and the final rates determined "
+    "afterwards. When it does, put the provisional set in `pools` with "
+    "status='provisional' and the determined set in `final_pools`. When it states "
+    "only one set, put it in `pools`, set `status` to whichever it is, and leave "
+    "`final_pools` null. Do not copy one set into both. "
+    "If the letter prints a variance or change column between the two sets, ignore "
+    "it — it is derived from the two rates, and reading it as a rate would record a "
+    "delta as though it were a burden. "
+    "Use null for anything the document does not state — never invent or estimate a "
+    "rate, a base or a fiscal year."
+)
+
+INSTRUCTION_RATE_AGREEMENT = (
+    "Extract the indirect cost pools from this rate agreement: the fiscal year, "
+    "whether the rates are provisional or final, the cognisant agency, and each "
+    "pool's rate and application base."
+)
+
+
+def _parse_rate_agreement(content) -> RateAgreement:
+    # Unconstrained on Bedrock for the reason in _parse_schema: `pools` is a nested
+    # object list, so the grammar never compiles and the attempt is a dead timeout
+    # paid before every upload.
+    return _parse_schema(
+        content,
+        SYSTEM_RATE_AGREEMENT,
+        RateAgreement,
+        8000,
+        constrained=(PROVIDER != "bedrock"),
+    )
+
+
+def extract_rate_agreement_from_text(text: str) -> RateAgreement:
+    return _parse_rate_agreement(
+        f"{INSTRUCTION_RATE_AGREEMENT}\n\n<document>\n{text}\n</document>"
+    )
+
+
+def extract_rate_agreement_from_pdf(pdf_bytes: bytes) -> RateAgreement:
+    b64 = base64.standard_b64encode(pdf_bytes).decode()
+    return _parse_rate_agreement(
+        [
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b64,
+                },
+            },
+            {"type": "text", "text": INSTRUCTION_RATE_AGREEMENT},
         ]
     )

@@ -365,3 +365,83 @@ class ExpenseIn(BaseModel):
         description="Travel / ODC / Materials / Subcontractor / Other",
     )
     amount: float = Field(description="Amount in US dollars")
+
+
+class IndirectPool(BaseModel):
+    """One indirect cost pool as a rate agreement states it.
+
+    The base is carried per pool because it matters as much as the rate does and is
+    the part a summary drops: 45% of labor-plus-fringe and 45% of direct labor are
+    different numbers on the same contract.
+    """
+
+    pool: str = Field(
+        description="Which pool this row is, normalised to one of exactly: 'fringe', "
+        "'overhead', 'gna'. A letter may print it as 'Fringe Benefits', 'Overhead' or "
+        "'G&A' / 'General and Administrative' — map it to one of those three keys."
+    )
+    rate: float = Field(
+        description="The negotiated rate as a DECIMAL FRACTION: 0.325 for 32.5%, "
+        "never 32.5."
+    )
+    base: Optional[str] = Field(
+        default=None,
+        description="The application base this rate applies to, normalised to one of "
+        "exactly: 'direct_labor' ('Direct Labor'), 'labor_plus_fringe' ('Direct Labor "
+        "+ Fringe'), 'total_cost_input' ('Total Cost Input' / 'TCI'). Null when the "
+        "letter states no base for this pool.",
+    )
+
+
+class RateAgreement(BaseModel):
+    """One indirect rate agreement: a Forward Pricing Rate Agreement (FAR 15.407-3)
+    or a provisional billing rate letter (FAR 42.704), and the final determination
+    (FAR 42.705) where one has been made.
+
+    A letter routinely states two sets for the same fiscal year — the provisional
+    rates that were billed and the final rates the incurred-cost submission settled
+    to — so both are extracted. The difference between them is a real receivable or
+    payable, which is what #87 trues up.
+    """
+
+    contractor: Optional[str] = Field(
+        default=None, description="Contractor / awardee name the letter is addressed to"
+    )
+    piid: Optional[str] = Field(
+        default=None,
+        description="The contract number the letter names as applicable, if any. A "
+        "company-wide rate letter names none — leave it null rather than guessing.",
+    )
+    fiscal_year: Optional[str] = Field(
+        default=None,
+        description="The government fiscal year these rates are in force for, as a "
+        "four-digit year string, e.g. '2026' for 'FY2026'",
+    )
+    status: Optional[str] = Field(
+        default=None,
+        description="Whether `pools` are 'provisional' (billing rates, FAR 42.704) or "
+        "'final' (determined after the incurred-cost proposal, FAR 42.705)",
+    )
+    far_authority: Optional[str] = Field(
+        default=None,
+        description="The FAR citation the letter states, e.g. 'FAR 42.704'",
+    )
+    cognisant_agency: Optional[str] = Field(
+        default=None,
+        description="The cognisant agency that determined the rates, e.g. 'DCMA'",
+    )
+    determination_date: Optional[str] = Field(
+        default=None,
+        description="Date the rates were determined, ISO 8601. Null for a provisional "
+        "letter, which has no determination.",
+    )
+    pools: List[IndirectPool] = Field(
+        description="Every indirect pool the letter states for the fiscal year, at the "
+        "status named in `status`."
+    )
+    final_pools: Optional[List[IndirectPool]] = Field(
+        default=None,
+        description="The FINAL determined pools for the same fiscal year, when the "
+        "letter prints a second table for them alongside the provisional set. Null "
+        "when the letter states only one set of rates.",
+    )

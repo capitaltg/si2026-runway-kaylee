@@ -382,6 +382,119 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     }
 
 
+def _agreement_pools(pools) -> list:
+    """The storable rows from an extracted rate agreement, dropping anything that
+    isn't one of the three pools we can apply.
+
+    Tolerant on the base and strict on the pool: an unrecognised base falls back to
+    that pool's conventional one (`rates.burden` does the same, so a typo cannot
+    silently delete a pool from the cost), but a row naming a pool we have no
+    arithmetic for is skipped rather than guessed at — a fourth pool applied to the
+    wrong base is worse than a fourth pool we admit we did not read.
+    """
+    out = []
+    for p in pools or []:
+        name = (p.pool or "").strip().lower()
+        if name not in rates.POOLS or p.rate is None:
+            continue
+        base = (p.base or "").strip()
+        out.append(
+            {
+                "pool": name,
+                "rate": float(p.rate),
+                "base": (
+                    base
+                    if base in rates.DEFAULT_BASES.values()
+                    else rates.DEFAULT_BASES[name]
+                ),
+            }
+        )
+    return out
+
+
+@app.post("/api/contracts/{contract_id}/rate-agreement")
+async def add_rate_agreement(contract_id: int, file: UploadFile = File(...)):
+    """Supplemental import: attach an indirect rate agreement to a contract (#78).
+
+    The award face states the three percentages; this document states what they
+    *are* — each pool's application base, the fiscal year, and whether the rates are
+    provisional billing rates (FAR 42.704) or a final determination (FAR 42.705). So
+    it overwrites what the face read, being the authority on its own subject.
+
+    One documented limitation: `rate_sets` keys on (scope, fiscal year) with status as
+    a column, so it cannot hold a provisional AND a final set for the same year at
+    once. When a letter prints both, the FINAL set is stored — it is what the year
+    settled to, and pricing against a superseded provisional rate would be wrong on
+    purpose — and the response reports that a determination was found. Keeping both
+    sets is #87's job, which is the ticket that trues one up against the other and
+    needs the schema change anyway.
+    """
+    existing = db.get_contract(contract_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+
+    try:
+        data = await file.read()
+        if (file.filename or "").lower().endswith(".pdf"):
+            parsed = await asyncio.to_thread(
+                extract.extract_rate_agreement_from_pdf, data
+            )
+        else:
+            parsed = await asyncio.to_thread(
+                extract.extract_rate_agreement_from_text, data.decode("utf-8", "ignore")
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
+
+    parsed_status = (parsed.status or "").strip().lower()
+    single_final = parsed_status in {"final", "actual"} and not parsed.final_pools
+    provisional = [] if single_final else _agreement_pools(parsed.pools)
+    final = _agreement_pools(parsed.final_pools)
+    if single_final:
+        final = _agreement_pools(parsed.pools)
+    if not provisional and not final:
+        raise HTTPException(
+            status_code=422,
+            detail="No fringe, overhead or G&A rates found in the uploaded document.",
+        )
+
+    # A letter with no fiscal year still stores, under a null year, for the same
+    # reason the award face does: the rates are the hard-won figures and refusing to
+    # keep them because a year was unreadable throws away the whole upload.
+    fy = (parsed.fiscal_year or "").strip() or None
+    stored, status = (
+        (final, rates.ACTUAL) if final else (provisional, rates.PROVISIONAL)
+    )
+    db.save_rate_pools(contract_id, fy, stored, status)
+
+    # A company-wide letter names no contract, so a missing PIID is not a mismatch.
+    doc_piid = (parsed.piid or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+
+    document_id, note = _keep_source(
+        contract_id,
+        documents.RATE_AGREEMENT,
+        file.filename,
+        data,
+        file.content_type,
+    )
+    return {
+        "id": contract_id,
+        "fiscal_year": fy,
+        "status": status,
+        "pools_stored": len(stored),
+        # Said out loud: the upload carried a provisional set too, and this response
+        # is the only place that fact survives until #87 can store both.
+        "final_determination_found": status == rates.ACTUAL,
+        "provisional_pools_found": len(provisional),
+        "cognisant_agency": parsed.cognisant_agency,
+        "determination_date": parsed.determination_date,
+        "piid_mismatch": piid_mismatch,
+        "source_document_id": document_id,
+        "source_document_note": note,
+    }
+
+
 @app.get("/api/contracts/{contract_id}/documents")
 def contract_documents(contract_id: int):
     """The source documents behind this contract's numbers (#30) — metadata only.
