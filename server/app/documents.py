@@ -22,7 +22,12 @@ from typing import Optional
 
 AWARD = "award"
 RATE_SCHEDULE = "rate_schedule"
-KINDS = (AWARD, RATE_SCHEDULE)
+# The FPRA or provisional billing rate letter behind a contract's indirect rates
+# (#78). Its own kind rather than a second rate_schedule: it is the document an
+# accountant asks for by name when a burden percentage is questioned, and the
+# source panel is worth nothing if it cannot tell them apart.
+RATE_AGREEMENT = "rate_agreement"
+KINDS = (AWARD, RATE_SCHEDULE, RATE_AGREEMENT)
 
 MAX_BYTES = 25 * 1024 * 1024
 

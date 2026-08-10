@@ -158,6 +158,31 @@ export async function importRateSchedule(contractId, file) {
   return r.json();
 }
 
+// The indirect rate agreement behind those percentages (#78): an FPRA (FAR 15.407-3),
+// a provisional billing rate letter (FAR 42.704), or a final determination (FAR
+// 42.705). Distinct from `importRateSchedule`, which reads labor rates off a pricing
+// exhibit — this one reads the pools and, crucially, the base each applies to, which
+// the award face never states.
+export async function importRateAgreement(contractId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(`${BASE}/api/contracts/${contractId}/rate-agreement`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!r.ok) {
+    let detail = `Rate agreement import failed (${r.status})`;
+    try {
+      const j = await r.json();
+      if (j.detail) detail = j.detail;
+    } catch {
+      // non-JSON error body; keep the status-code message
+    }
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
 // The source documents behind a contract's numbers (#30). An empty list is normal:
 // contracts ingested before this feature, and ones typed in by hand, have none.
 export async function listContractDocuments(contractId) {
