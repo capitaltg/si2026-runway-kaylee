@@ -8,3 +8,6 @@ pytest
 # fastapi.testclient transport. Pulled in by anthropic today, but the route tests
 # import it directly, so it is named rather than left as somebody else's transitive.
 httpx
+# SF-30 text + AcroForm field reads (app.main._mod_document_text). Present
+# transitively today, but named because the mod ingest imports it directly.
+pypdf

@@ -228,6 +228,21 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
     sel.addRange(range);
   }
 
+  // A blank stops being a blank the moment it holds a real value. Drop the
+  // highlight as soon as the text differs from the placeholder, so a finished
+  // document has no orange left on it and the remaining chips still mean
+  // "this one is unanswered".
+  function onPageInput() {
+    if (!pageRef.current) return;
+    for (const chip of pageRef.current.querySelectorAll(".verify-chip")) {
+      const text = chip.textContent.trim();
+      if (text && text !== "[verify]") {
+        chip.classList.remove("verify-chip");
+        chip.removeAttribute("title");
+      }
+    }
+  }
+
   // Append a fresh paragraph at the end of the body and drop the cursor in it —
   // the draft covers the standard ground, but a real memo usually needs one more
   // sentence about this particular contract.
@@ -384,6 +399,7 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
             ref={pageRef}
             className="draft-page"
             onClick={onPageClick}
+            onInput={onPageInput}
             style={{ ...panelStyle, minHeight: 300, padding: 0, overflow: "hidden", outline: "none" }}
             suppressContentEditableWarning
           />
