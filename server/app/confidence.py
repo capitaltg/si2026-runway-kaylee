@@ -16,6 +16,7 @@ sanity-checks the CLINs:
 """
 
 import re
+from typing import Optional
 
 from .schemas import Extraction
 
@@ -28,6 +29,10 @@ _BASELINE = {
     "effective_date": 0.96,  # ISO-8601 validated
     "total_ceiling": 0.95,  # numeric + cross-checked
     "total_obligated": 0.94,  # numeric + cross-checked
+    # Printed dollar figures in a labelled Section B block, so they score with the
+    # money fields above rather than with free text (#78).
+    "total_estimated_cost": 0.94,
+    "total_fee": 0.94,
     "contract_type": 0.93,  # short controlled vocab
     "agency": 0.92,  # free text, presence only
     "contractor": 0.91,  # free text, presence only
@@ -54,9 +59,62 @@ _HEADER_CHECKS = {
     "contract_type": lambda h: _text(h.contract_type),
     "total_ceiling": lambda h: _money(h.total_ceiling),
     "total_obligated": lambda h: _money(h.total_obligated),
+    "total_estimated_cost": lambda h: _money(h.total_estimated_cost),
+    "total_fee": lambda h: _money(h.total_fee),
     "effective_date": lambda h: bool(_DATE_RE.search(str(h.effective_date or ""))),
     "contracting_officer": lambda h: _text(h.contracting_officer),
 }
+
+
+def clin_fee(cl) -> float:
+    """The fee a cost-type CLIN prints, however it prints it.
+
+    Award fee is base + pool because the CLIN total covers both; that they are two
+    fields elsewhere is about which one is *earned*, not about what the line foots
+    to. A CPIF line foots to its target fee, not to its min/max brackets — those
+    are what the fee moves to, and neither is in the printed total.
+    """
+    return sum(
+        v
+        for v in (cl.fixed_fee, cl.base_fee, cl.award_fee_pool, cl.target_fee)
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    )
+
+
+def fee_mismatch(cl) -> Optional[str]:
+    """Why this CLIN's cost + fee doesn't foot to its ceiling, or None if it does.
+
+    The identity `ceiling == estimated_cost + fee` (FAR 16.306) is the one
+    independent check available on an extracted cost-type line: the document states
+    all three, so a disagreement means a figure was misread — most often a leading
+    digit, or fee copied into the ceiling. So this reports rather than reconciles.
+    Runway must never pick which of the two it believes and silently rewrite the
+    third; the whole point of a review screen is that a human does that.
+
+    Returns a sentence for the review screen, not a bool, because "these don't
+    add up" is useless without the three numbers that didn't.
+
+    Silent when the line isn't cost-type (nothing to check), or when the award
+    prints cost with no fee at all — a cost-no-fee CLIN (FAR 16.302) is real, and
+    flagging it would mean nagging every one of them forever.
+    """
+    if cl.estimated_cost is None or not _money(cl.ceiling):
+        return None
+    fee = clin_fee(cl)
+    if not fee:
+        return None
+    expected = cl.estimated_cost + fee
+    # 0.5%: enough for a sheet that rounds its own lines to the dollar, tight
+    # enough to still catch a transposed or dropped digit.
+    if abs(expected - cl.ceiling) <= abs(cl.ceiling) * 0.005:
+        return None
+    return (
+        f"Cost + fee doesn't foot to this CLIN's ceiling: "
+        f"${cl.estimated_cost:,.2f} cost + ${fee:,.2f} fee = ${expected:,.2f}, "
+        f"but the ceiling reads ${cl.ceiling:,.2f} "
+        f"(off by ${expected - cl.ceiling:+,.2f}). One of the three was misread — "
+        f"check the award's Section B before saving."
+    )
 
 
 def apply(ext: Extraction) -> Extraction:
@@ -87,6 +145,10 @@ def apply(ext: Extraction) -> Extraction:
         score = cl.confidence if cl.confidence is not None else CLIN_BASELINE
         if not _money(cl.ceiling):
             score = min(score, FAIL_CAP)
+        note = fee_mismatch(cl)
+        if note:
+            score = min(score, CROSS_FAIL_CAP)
+        cl.confidence_note = note
         cl.confidence = round(score, 2)
         if _money(cl.ceiling):
             clin_total += cl.ceiling

@@ -11,6 +11,13 @@ class LaborRate(BaseModel):
         default=None,
         description="Fully-burdened / loaded billing rate in US dollars per hour",
     )
+    direct_rate: Optional[float] = Field(
+        default=None,
+        description="Unburdened direct labor rate in US dollars per hour, as printed "
+        "on a cost-buildup exhibit ('Direct Rate/Hr'). This is the wage before any "
+        "indirect pool or fee. Null on an ordinary rate schedule, which prints only "
+        "the loaded rate — never derive one from the loaded rate.",
+    )
     est_hours: Optional[int] = Field(
         default=None, description="Estimated hours for this LCAT on this CLIN"
     )
@@ -56,6 +63,74 @@ class CLIN(BaseModel):
     est_hours: Optional[int] = Field(
         default=None, description="Estimated labor hours, if a labor CLIN"
     )
+    # --- Cost and fee, as a cost-type CLIN prices them (#78) ---------------
+    #
+    # A cost-reimbursement award does not state one number per line. It states
+    # estimated cost and fee as separate priced lines footing to the CLIN total
+    # (FAR 16.306), because they behave differently: cost is reimbursed and may
+    # overrun, fee is negotiated and can be lost. `ceiling` stays the CLIN total
+    # and gains an identity against these — `ceiling == estimated_cost + fee` —
+    # which `confidence.py` *checks* rather than assumes. When it fails, one of
+    # the two figures was misread, and that is what review is for.
+    #
+    # Flat scalars, every one of them. `share_ratio` is a string ("50/50") and
+    # not a pair of numbers for the reason on ContractHeader.field_confidence:
+    # each nested structure added to this schema costs a dead Bedrock
+    # grammar-compilation timeout on every ingest that uses it.
+    estimated_cost: Optional[float] = Field(
+        default=None,
+        description="Total estimated (reimbursable) cost for this CLIN, exclusive of "
+        "fee — the 'Total Estimated Cost' line on a cost-type CLIN, or 'Target Cost' "
+        "on an incentive one. Null on a fixed-price CLIN, which has no cost line.",
+    )
+    fixed_fee: Optional[float] = Field(
+        default=None,
+        description="Fixed fee in dollars on a cost-plus-fixed-fee CLIN (FAR 16.306), "
+        "the 'Fixed Fee' line. Not a percentage — the dollar figure.",
+    )
+    base_fee: Optional[float] = Field(
+        default=None,
+        description="Base fee in dollars on a cost-plus-award-fee CLIN (FAR "
+        "16.401(e)) — the portion payable without regard to performance.",
+    )
+    award_fee_pool: Optional[float] = Field(
+        default=None,
+        description="The award fee pool in dollars on a CPAF CLIN: the at-risk "
+        "amount earned only as determined under the Award Fee Plan. Kept separate "
+        "from base_fee — their sum is not a fee anyone is guaranteed.",
+    )
+    target_fee: Optional[float] = Field(
+        default=None,
+        description="Target fee in dollars on a cost-plus-incentive-fee CLIN (FAR "
+        "16.304), the fee earned if allowable cost lands on the target cost.",
+    )
+    min_fee: Optional[float] = Field(
+        default=None,
+        description="Minimum fee in dollars on a CPIF CLIN — the bracket the fee "
+        "stops falling at on a cost overrun.",
+    )
+    max_fee: Optional[float] = Field(
+        default=None,
+        description="Maximum fee in dollars on a CPIF CLIN — the bracket the fee "
+        "stops rising at on a cost underrun.",
+    )
+    target_profit: Optional[float] = Field(
+        default=None,
+        description="Target profit in dollars on a fixed-price incentive CLIN (FAR "
+        "16.403). Profit, not fee: an FPI line is fixed-price, so the figure it "
+        "prints is 'Target Profit' rather than a fee.",
+    )
+    ceiling_price: Optional[float] = Field(
+        default=None,
+        description="Price ceiling in dollars on an FPI CLIN (FAR 16.403) — the "
+        "'Price Ceiling' line, above which the contractor bears all cost. Distinct "
+        "from `ceiling`, which is this CLIN's own not-to-exceed amount.",
+    )
+    share_ratio: Optional[str] = Field(
+        default=None,
+        description="The Government/Contractor share ratio on an incentive CLIN, as "
+        "printed, e.g. '50/50' or '80/20' (Government share first).",
+    )
     labor_rates: Optional[List[LaborRate]] = Field(
         default=None,
         description="For a labor CLIN, the fully-burdened Labor Rate Table if the "
@@ -67,6 +142,15 @@ class CLIN(BaseModel):
         description="Your extraction confidence for this CLIN row as a 0.0-1.0 number "
         "(how certain you are the CLIN number, type, and ceiling were read correctly). "
         "Lower it when a value is ambiguous, spans a page break, or had to be inferred.",
+    )
+    # Written by confidence.py, never by the model — it is the *reason* a
+    # deterministic check lowered this row, and a model asked to explain its own
+    # score will write one whether or not a check failed. Excluded from the
+    # extraction prompt's schema for the same reason (see extract._parse_schema).
+    confidence_note: Optional[str] = Field(
+        default=None,
+        description="Do not fill this in. Set by the server when a cross-field check "
+        "on this CLIN fails, to say which figures disagree.",
     )
 
 
@@ -112,6 +196,39 @@ class ContractHeader(BaseModel):
         "outstanding. Reframes the funding tripwire to 'funding request "
         "outstanding' rather than an over-ceiling alarm (#22).",
     )
+    total_estimated_cost: Optional[float] = Field(
+        default=None,
+        description="Contract-level total estimated (reimbursable) cost, exclusive of "
+        "fee, if the award states one. Null on a fixed-price award (#78).",
+    )
+    total_fee: Optional[float] = Field(
+        default=None,
+        description="Contract-level total fee in dollars, if the award states one. On "
+        "a CPAF award this is base fee plus the award fee pool only where the document "
+        "itself totals them — do not add them up yourself.",
+    )
+    # The negotiated indirect rates, read off the face (#78 slice 3a). A cost-type
+    # award prints them above its pricing exhibit because they are terms of the
+    # contract, so the cheap read is here rather than waiting on a separate rate
+    # agreement upload. Decimal fractions, not percents: 0.32, never 32.
+    #
+    # What the face line does NOT carry is each pool's application base or whether
+    # the rates are provisional or final — that is the FPRA / billing-rate letter,
+    # and the reason `rates.DEFAULT_BASES` and `PROVISIONAL` fill in on confirm.
+    indirect_fringe: Optional[float] = Field(
+        default=None,
+        description="Negotiated fringe rate as a decimal fraction (0.32 for 32%), "
+        "from an 'Indirect Rates: Fringe X% | Overhead Y% | G&A Z%' disclosure on the "
+        "award face. Null when the award prints no such line.",
+    )
+    indirect_overhead: Optional[float] = Field(
+        default=None,
+        description="Negotiated overhead rate as a decimal fraction, same source.",
+    )
+    indirect_gna: Optional[float] = Field(
+        default=None,
+        description="Negotiated G&A rate as a decimal fraction, same source.",
+    )
     effective_date: Optional[str] = Field(
         default=None, description="Contract effective date, ISO 8601"
     )
@@ -128,7 +245,8 @@ class ContractHeader(BaseModel):
         default=None,
         description="Optional per-field extraction confidence, 0.0-1.0, keyed by "
         "header field name (piid, agency, contractor, contract_type, total_ceiling, "
-        "total_obligated, effective_date, contracting_officer).",
+        "total_obligated, total_estimated_cost, total_fee, effective_date, "
+        "contracting_officer).",
     )
 
 
