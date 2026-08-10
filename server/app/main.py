@@ -761,6 +761,7 @@ def contract_allocation(contract_id: int):
         _cost_model(contract_id),
         db.expected_hours_by_person(),
         _hours_elsewhere(contract_id),
+        db.quals_by_person(),
     )
 
 
@@ -790,6 +791,7 @@ def contract_heat(contract_id: int):
         _cost_model(contract_id),
         db.expected_hours_by_person(),
         _hours_elsewhere(contract_id),
+        db.quals_by_person(),
     )
     payload = heat.compute_heat(contract, rows, alloc)
     payload["suggestions"] = suggest.solve_moves(alloc, payload)
@@ -1186,6 +1188,8 @@ def _all_allocations() -> list:
     behind both portfolio utilisation and conflicts."""
     # One query for every per-person expected week (#84), not one per contract.
     overrides = db.expected_hours_by_person()
+    # Same for the credentials the compliance check reads (#66).
+    quals = db.quals_by_person()
     contracts = db.list_contracts()
     timesheets = {c["id"]: db.get_timesheets(c["id"]) for c in contracts}
 
@@ -1230,6 +1234,7 @@ def _all_allocations() -> list:
                 db.list_expenses(c["id"]),
                 expected_hours_by_person=overrides,
                 hours_elsewhere_by_person=elsewhere,
+                quals_by_person=quals,
             )
         )
     return out

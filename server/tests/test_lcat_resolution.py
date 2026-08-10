@@ -331,6 +331,15 @@ def test_alias_prices_the_hours_and_clears_the_flag():
             "clin": "0001",
             "lcat": "Cybersecurity SME",
             "rate": 250.0,
+            # #66: a resolved line now carries the award's floors, and this fixture's
+            # rate table prints none. That the *alias* path reports them at all is the
+            # point — the floors that apply to these hours are the ones beside the line
+            # pricing them, not the ones beside the string the timesheet used.
+            "floors": {
+                "min_education": None,
+                "min_experience_yrs": None,
+                "clearance": None,
+            },
         }
     ]
 
@@ -417,6 +426,11 @@ def test_allocation_cells_carry_the_same_cause_burn_reports():
         "clin": "0003",
         "lcat": "Cyber Analyst",
         "rate": 120.0,
+        "floors": {
+            "min_education": None,
+            "min_experience_yrs": None,
+            "clearance": None,
+        },
     }
 
 

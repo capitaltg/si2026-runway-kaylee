@@ -340,6 +340,31 @@ test("a shift names the destination CLIN and the flag it clears", () => {
   assert.match(text, /also clears the LCAT flag/);
 });
 
+test("a move off a category they don't qualify for says so (#66)", () => {
+  const text = moveSentence({
+    kind: "trim",
+    people: ["Wei Chen"],
+    lcat: "Senior Cyber SME",
+    to_hours: 20,
+    weekly_dollars: 5_000,
+    clears_compliance_flag: true,
+  });
+  assert.match(text, /Trim Wei Chen \(Senior Cyber SME\) to 20/);
+  assert.match(text, /also clears a quals finding/);
+});
+
+test("the quals side effect is silent when there is no finding to clear", () => {
+  const text = moveSentence({
+    kind: "trim",
+    people: ["Wei Chen"],
+    lcat: "Senior Cyber SME",
+    to_hours: 20,
+    weekly_dollars: 5_000,
+    clears_compliance_flag: false,
+  });
+  assert.doesNotMatch(text, /quals/);
+});
+
 test("a group of people drops the LCAT parenthetical", () => {
   // "Dana, Marcus & Sofia (Systems Engineer)" implies they share one category, which
   // grouping does not guarantee.

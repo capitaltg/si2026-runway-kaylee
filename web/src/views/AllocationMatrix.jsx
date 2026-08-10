@@ -11,6 +11,7 @@ import {
   getLcatRates,
   getPeople,
   getPeopleUtilization,
+  savePersonQuals,
   setLcatAlias,
   deleteLcatAlias,
   setContractCapacity,
@@ -38,6 +39,12 @@ import {
   rateResolver,
   actualsDraft as buildDraft,
 } from "../drift.js";
+import {
+  badge as complianceBadge,
+  failureText,
+  uncheckedText,
+  rollupText,
+} from "../compliance.js";
 import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
@@ -176,6 +183,36 @@ const tierPill = (tier) => ({
   whiteSpace: "nowrap",
 });
 
+// #66's compliance badge, deliberately built out of the tier chip above rather than a
+// new visual language — one more pill on a row people already read, not a new column.
+//
+// The tones reuse the app's existing status palette so a clearance gap is the same red
+// as an over-ceiling CLIN. `slate` is the one that earns its own entry: "unchecked" has
+// to be visible and has to *not* look like a pass, because it is the day-one state of
+// every person on the grid and a quiet badge there would be a clean bill of health
+// nobody issued.
+const COMPLIANCE_TONES = {
+  red: { color: "var(--bad)", border: "var(--bad)" },
+  amber: { color: "var(--warn)", border: "var(--warn)" },
+  slate: { color: "var(--dim)", border: "var(--border)" },
+  blue: { color: "var(--accent)", border: "var(--accent)" },
+  green: { color: "var(--good)", border: "var(--border)" },
+};
+
+const compliancePill = (tone) => ({
+  display: "inline-block",
+  fontSize: 10,
+  fontWeight: 700,
+  fontFamily: grotesk,
+  padding: "2px 7px",
+  borderRadius: 6,
+  cursor: "pointer",
+  background: "transparent",
+  color: (COMPLIANCE_TONES[tone] || COMPLIANCE_TONES.slate).color,
+  border: `1px solid ${(COMPLIANCE_TONES[tone] || COMPLIANCE_TONES.slate).border}`,
+  whiteSpace: "nowrap",
+});
+
 // Why an LCAT didn't resolve, in words (#64). The backend classifies (see
 // `lcat.py`); this only phrases it. Every branch has to name a *fix*, because the
 // whole complaint about the old flag was that it described a problem and stopped.
@@ -228,7 +265,11 @@ export default function AllocationMatrix({
   const [removed, setRemoved] = useState([]);
   const [newPerson, setNewPerson] = useState(null); // the open "add person" form
   const [addPersonError, setAddPersonError] = useState(null);
-  const [directory, setDirectory] = useState({ people: [], utilization: {}, loading: false, error: null });
+  const [directory, setDirectory] = useState({ people: [], qualVocab: {}, utilization: {}, loading: false, error: null });
+  // #66 — the open compliance/quals panel: `{ row, draft, saving, error }`. `draft` is
+  // null until the user types, so an untouched panel saves nothing and a blank field
+  // stays the difference between "cleared" and "never entered".
+  const [qualsPanel, setQualsPanel] = useState(null);
   // #85 — dated absence. Two tiers, deliberately:
   //   `absences` is the what-if list: PTO, start and roll-off dates typed into *this*
   //   plan. Client-side and saved into `plans.data`, like `added` / `removed`.
@@ -1205,15 +1246,72 @@ export default function AllocationMatrix({
       // Seeded from the contract's resolved expectation, not a hard-coded 40.
       hrs: Math.round(contractExpected?.hours ?? FTE_HOURS_PER_WEEK),
     });
+    await loadDirectory();
+  }
+
+  // The directory fetch on its own, because two things need it now: the staffing
+  // panel's people picker and #66's quals panel. It carries `qual_vocab` — the
+  // clearance and education ladders (#98) — so the panel's dropdowns and the
+  // server's check read one set of levels rather than two that drifted apart.
+  async function loadDirectory() {
     setDirectory((d) => ({ ...d, loading: true, error: null }));
     try {
       const [directoryData, utilizationData] = await Promise.all([getPeople(), getPeopleUtilization()]);
       const utilization = Object.fromEntries(
         (utilizationData.people || []).map((person) => [person.employee_id, person])
       );
-      setDirectory({ people: directoryData.people || [], utilization, loading: false, error: null });
+      setDirectory({
+        people: directoryData.people || [],
+        qualVocab: directoryData.qual_vocab || {},
+        utilization,
+        loading: false,
+        error: null,
+      });
     } catch (e) {
       setDirectory((d) => ({ ...d, loading: false, error: e.message }));
+    }
+  }
+
+  // #66 — open the quals panel for one person on the grid. The check itself is the
+  // server's; this is the "inline path to fill in what's missing" beside it, and it
+  // is the half that matters most: the person *already billing* at a senior rate is
+  // the live audit exposure, so annotating a synced person cannot be a trip to
+  // another view.
+  async function openQuals(row) {
+    setQualsPanel({ row, saving: false, error: null, draft: null });
+    if (!directory.people.length && !directory.loading) await loadDirectory();
+  }
+
+  // Save the quals typed into the panel, then re-read the grid so the badge moves.
+  //
+  // Only fields the user actually touched are sent: the endpoint is a partial upsert
+  // that overwrites a field's source note along with its value, so replaying an
+  // untouched field would quietly erase the provenance somebody else recorded for it.
+  async function saveQuals(draft) {
+    const row = qualsPanel?.row;
+    if (!row) return;
+    const quals = Object.fromEntries(
+      Object.entries(draft || {}).map(([field, entry]) => [
+        field,
+        { value: entry.value ?? "", source_note: entry.source_note || null },
+      ]),
+    );
+    if (!Object.keys(quals).length) {
+      setQualsPanel(null);
+      return;
+    }
+    setQualsPanel((q) => q && { ...q, saving: true, error: null });
+    try {
+      await savePersonQuals(row.id, quals, null);
+      // The verdict is the server's, so re-read rather than patch it here — a badge
+      // computed client-side would be a second opinion that can disagree with the
+      // rollups on the CLIN cards. Through the same path a rate change uses, which
+      // leaves an in-progress what-if alone: a credential changes what an hour is
+      // *allowed* to bill at, never who is working which hours.
+      await Promise.all([reloadRates(), loadDirectory()]);
+      setQualsPanel(null);
+    } catch (e) {
+      setQualsPanel((q) => q && { ...q, saving: false, error: e.message });
     }
   }
 
@@ -2577,6 +2675,20 @@ export default function AllocationMatrix({
                               <span style={{ fontSize: 12, color: "var(--dim)", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {e.lcat}
                               </span>
+                              {/* #66. Only real people get a verdict: a planned add has
+                                  no employee id to hang credentials off yet, and the
+                                  add-person form already collects them at the point of
+                                  typing. */}
+                              {!isAddedId(e.id) && complianceBadge(e.compliance_status) && (
+                                <button
+                                  type="button"
+                                  onClick={() => openQuals(e)}
+                                  title={`${complianceBadge(e.compliance_status).title} — click for detail`}
+                                  style={compliancePill(complianceBadge(e.compliance_status).tone)}
+                                >
+                                  {complianceBadge(e.compliance_status).label}
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <span style={{ color: "var(--dim)" }}>—</span>
@@ -2915,6 +3027,22 @@ export default function AllocationMatrix({
                       confirmed.
                     </div>
                   )}
+                  {/* #66's per-CLIN rollup. Rendered whenever anybody charges the line —
+                      including when nothing has been checked — because "no findings" and
+                      "nobody looked" are the two readings this must never let collapse
+                      into each other, and only saying something when there's a finding
+                      makes silence mean the wrong one. */}
+                  {!!c.compliance?.people && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 10.5,
+                        color: c.compliance.has_findings ? "var(--warn)" : "var(--dim)",
+                      }}
+                    >
+                      {c.compliance.has_findings ? "⚑" : "◦"} Quals: {rollupText(c.compliance)}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -2938,6 +3066,21 @@ export default function AllocationMatrix({
             setMapping(null);
             setMapResult(null);
           }}
+        />
+      )}
+      {qualsPanel && (
+        <QualsPanel
+          row={qualsPanel.row}
+          clins={clins}
+          person={directory.people.find((p) => p.employee_id === qualsPanel.row.id)}
+          vocab={directory.qualVocab || {}}
+          loading={directory.loading}
+          draft={qualsPanel.draft}
+          setDraft={(draft) => setQualsPanel((q) => q && { ...q, draft })}
+          saving={qualsPanel.saving}
+          error={qualsPanel.error}
+          onSave={saveQuals}
+          onClose={() => setQualsPanel(null)}
         />
       )}
       {pendingDelete && (
@@ -2991,6 +3134,299 @@ export default function AllocationMatrix({
           )}
         </ConfirmDialog>
       )}
+    </div>
+  );
+}
+
+// #66's compliance detail, and the inline path to fix it.
+//
+// Three jobs, in the order somebody reading a flag needs them: what the award requires
+// and what we know, which rate line and CLIN drove that requirement, and the boxes to
+// type in whatever is missing without leaving the grid.
+//
+// The panel never asserts anything the check didn't. Fields the award prints no floor
+// for are shown as "not required" rather than hidden, because "we didn't check this"
+// and "nothing to check" are the two states a compliance screen most needs to keep
+// apart, and hiding one makes the screen look more thorough than it is.
+function QualsPanel({
+  row,
+  clins,
+  person,
+  vocab,
+  loading,
+  draft,
+  setDraft,
+  saving,
+  error,
+  onSave,
+  onClose,
+}) {
+  const stored = person?.quals || {};
+  // A field's current text: what the user has typed this session, else what's on file.
+  const valueOf = (field) =>
+    draft?.[field]?.value ?? stored[field]?.value ?? "";
+  const noteOf = (field) =>
+    draft?.[field]?.source_note ?? stored[field]?.source_note ?? "";
+  const edit = (field, patch) =>
+    setDraft({
+      ...(draft || {}),
+      [field]: {
+        value: draft?.[field]?.value ?? stored[field]?.value ?? "",
+        source_note: draft?.[field]?.source_note ?? stored[field]?.source_note ?? "",
+        ...patch,
+      },
+    });
+
+  const FIELDS = [
+    { key: "education", label: "Education", vocab: "education" },
+    { key: "years_experience", label: "Years of experience", numeric: true },
+    {
+      key: "clearance",
+      label: "Clearance",
+      vocab: "clearance",
+      // Worth saying on the screen where a clearance gap is being reported: picking
+      // "None" is an assertion that they hold none, which fails a Secret floor. It is
+      // not the same as leaving the box alone.
+      note: "“None” records that they hold no clearance — not the same as leaving this blank.",
+    },
+  ];
+
+  // Every CLIN this person charges that has a verdict worth reading, worst first, so
+  // the line that drove the badge is the one at the top.
+  const cells = Object.entries(row.cells || {})
+    .map(([clinId, cell]) => ({ clinId, cell, v: cell.compliance }))
+    .filter((x) => x.v)
+    .sort((a, b) => (b.cell.hours || 0) - (a.cell.hours || 0));
+
+  const label = { fontSize: 11, color: "var(--faint)", fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" };
+  const input = {
+    width: "100%",
+    height: 32,
+    padding: "0 10px",
+    borderRadius: 9,
+    border: "1px solid var(--border)",
+    background: "var(--panel2)",
+    color: "var(--text)",
+    fontSize: 12.5,
+  };
+  const btn = (primary) => ({
+    height: 32,
+    padding: "0 14px",
+    borderRadius: 9,
+    border: primary ? "none" : "1px solid var(--border)",
+    background: primary ? "var(--accent)" : "var(--panel2)",
+    color: primary ? "#fff" : "var(--text)",
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: saving ? "default" : "pointer",
+    opacity: saving ? 0.6 : 1,
+  });
+
+  const badgeInfo = complianceBadge(row.compliance_status);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 60,
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ ...panelStyle, padding: 20, width: 560, maxWidth: "100%", maxHeight: "90vh", overflow: "auto" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
+            {row.name}
+          </div>
+          {badgeInfo && (
+            <span style={{ ...compliancePill(badgeInfo.tone), cursor: "default" }}>{badgeInfo.label}</span>
+          )}
+        </div>
+        <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 6, lineHeight: 1.5 }}>
+          Qualifications are checked against the minimums the award prints beside the
+          rate line these hours actually bill at. Runway reports; it never blocks a charge.
+        </div>
+
+        {cells.map(({ clinId, cell, v }) => {
+          const clin = clins.find((c) => c.id === clinId);
+          return (
+            <div
+              key={clinId}
+              style={{
+                marginTop: 14,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "var(--panel2)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 700 }}>
+                CLIN {clinId}
+                {clin?.name ? ` — ${clin.name}` : ""}
+              </div>
+              {/* Which rate line drove the requirement. Named explicitly because it is
+                  not always the LCAT on the timesheet: a confirmed mapping prices these
+                  hours off another category, and its floors are the ones that apply. */}
+              <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 4, lineHeight: 1.5 }}>
+                {v.line ? (
+                  <>
+                    Billing as <b style={{ color: "var(--text)" }}>{v.line.lcat}</b>
+                    {v.line.rate ? ` at $${Math.round(v.line.rate)}/hr` : ""}
+                    {cell.lcat && cell.lcat !== v.line.lcat ? ` (charged as “${cell.lcat}”)` : ""}
+                    {v.line.clin && v.line.clin !== clinId ? ` — priced on CLIN ${v.line.clin}` : ""}
+                  </>
+                ) : (
+                  <>
+                    These hours don&apos;t resolve to a priced rate line, so there is no
+                    qualification floor to check. Map the category first.
+                  </>
+                )}
+              </div>
+              {v.failures.length > 0 && (
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text)", lineHeight: 1.6 }}>
+                  {v.failures.map((f) => (
+                    <li key={f.field}>
+                      <span style={{ color: f.field === "clearance" ? "var(--bad)" : "var(--warn)" }}>
+                        {failureText(f, v.line?.lcat)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {v.unchecked.length > 0 && (
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--dim)", lineHeight: 1.6 }}>
+                  {v.unchecked.map((u) => (
+                    <li key={u.field}>{uncheckedText(u)}</li>
+                  ))}
+                </ul>
+              )}
+              {v.status === "no_floor" && (
+                <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 8 }}>
+                  The award prints no minimum education, experience or clearance for this
+                  category, so there is nothing to check here. That&apos;s a gap in the rate
+                  schedule, not a clean result.
+                </div>
+              )}
+              {v.over_qualified_for && (
+                <div style={{ fontSize: 11.5, color: "var(--accent)", marginTop: 8, lineHeight: 1.5 }}>
+                  Meets the minimums for {v.over_qualified_for.lcat} ($
+                  {Math.round(v.over_qualified_for.rate)}/hr) on CLIN {v.over_qualified_for.clin} —
+                  not a violation, but likely money left on the table.
+                </div>
+              )}
+              {/* The requirement table, including the fields with no floor. */}
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr auto auto", gap: "4px 12px", fontSize: 11.5 }}>
+                <div style={label}>Field</div>
+                <div style={{ ...label, textAlign: "right" }}>Required</div>
+                <div style={{ ...label, textAlign: "right" }}>On file</div>
+                {v.fields.map((f) => (
+                  <React.Fragment key={f.field}>
+                    <div style={{ color: "var(--dim)" }}>{f.label}</div>
+                    <div style={{ textAlign: "right", color: f.required == null ? "var(--faint)" : "var(--text)" }}>
+                      {f.required == null ? "not required" : String(f.required)}
+                    </div>
+                    <div
+                      style={{
+                        textAlign: "right",
+                        color: f.state === "short" ? "var(--bad)" : f.held == null ? "var(--faint)" : "var(--text)",
+                      }}
+                    >
+                      {f.held == null ? "—" : String(f.held)}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{ marginTop: 18, ...label }}>What we know about them</div>
+        <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 4, lineHeight: 1.5 }}>
+          Optional, and stored against the person rather than this contract. Leave a field
+          blank to keep it unrecorded; clearing one returns it to unchecked.
+        </div>
+        {loading && !person && (
+          <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 10 }}>Loading what&apos;s on file…</div>
+        )}
+        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+          {FIELDS.map((f) => {
+            const options = f.vocab ? vocab[f.vocab] || [] : null;
+            const current = valueOf(f.key);
+            // A value typed before the vocabularies closed (#98) won't be in the list.
+            // Kept as a selectable option rather than silently swapped for a blank,
+            // which would look like the app had deleted somebody's record.
+            const offLadder = options && current && !options.includes(current);
+            return (
+              <div key={f.key}>
+                <div style={{ fontSize: 11.5, color: "var(--dim)", marginBottom: 4 }}>{f.label}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {options ? (
+                    <select
+                      value={current}
+                      onChange={(e) => edit(f.key, { value: e.target.value })}
+                      style={{ ...input, flex: "0 0 45%" }}
+                    >
+                      <option value="">Not recorded</option>
+                      {offLadder && <option value={current}>{current} (not a standard level)</option>}
+                      {options.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={current}
+                      placeholder="—"
+                      onChange={(e) => edit(f.key, { value: e.target.value })}
+                      style={{ ...input, flex: "0 0 45%" }}
+                    />
+                  )}
+                  {/* Provenance, because the first thing anybody does with a compliance
+                      flag is argue with it. "per proposal resume, 2026-03" is a different
+                      conversation from a bare number. */}
+                  <input
+                    value={noteOf(f.key)}
+                    placeholder="Source — e.g. per proposal resume, 2026-03"
+                    onChange={(e) => edit(f.key, { source_note: e.target.value })}
+                    style={{ ...input, flex: 1 }}
+                  />
+                </div>
+                {f.note && (
+                  <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 4 }}>{f.note}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 12, fontSize: 12, color: "var(--bad)" }}>{error}</div>
+        )}
+        <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" onClick={onClose} disabled={saving} style={btn(false)}>
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(draft)}
+            disabled={saving || !draft}
+            style={{ ...btn(true), opacity: saving || !draft ? 0.6 : 1 }}
+          >
+            {saving ? "Saving…" : "Save qualifications"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

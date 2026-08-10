@@ -17,6 +17,7 @@ from typing import List, Optional
 
 from . import burn
 from . import capacity
+from . import compliance
 from . import lcat as lcat_match
 from . import rates
 
@@ -97,6 +98,7 @@ def compute_allocation(
     cost_model: Optional[rates.CostModel] = None,
     expected_hours_by_person: Optional[dict] = None,
     hours_elsewhere_by_person: Optional[dict] = None,
+    quals_by_person: Optional[dict] = None,
 ) -> dict:
     """Employee x labor-CLIN allocation for the active period, plus the per-CLIN
     budget/spend/clock the simulator recomputes runway against.
@@ -115,6 +117,13 @@ def compute_allocation(
     hours get offered to two different underburning lines. Omitted means "nobody
     asked", which is why the payload says so on `cross_contract` rather than letting a
     zero pass for a checked zero.
+
+    `quals_by_person` is `{employee_id: {field: {"value": ...}}}` for #66's compliance
+    check — the same passed-in-not-looked-up arrangement, and for the sharper version
+    of the same reason: a person's degree is not a fact about a contract, so the grid
+    reading it directly would be the module reaching into the directory it is not
+    allowed to know about. Omitted means nobody has typed any quals, which produces
+    `unknown` verdicts and never `compliant` ones.
     """
     b = burn.compute(contract, rows, expenses, cost_model)
     # Level 1 when the caller supplied nothing: cost falls back to the billing rate
@@ -204,9 +213,25 @@ def compute_allocation(
     # Walk each CLIN's charges (scoped to the active PoP window, same as burn) and
     # build per-employee avg hrs/wk + the LCAT/rate that hrs bills at.
     employees = {}  # emp_id -> {id, name, cells: {clin_id: {hours, lcat, rate}}}
+    quals = quals_by_person or {}
     for c in labor:
         num = burn._clin_num(c)
         resolve = resolvers[num]
+        # This CLIN's priced lines as resolved objects, for #66's over-qualified sweep
+        # — "does this person clear a better-paid category on this same CLIN". Built
+        # here rather than reused from the `rate_lines` payload below because the sweep
+        # compares floors, and the payload is a display shape.
+        candidates = [
+            lcat_match.RateLine(
+                clin=num,
+                lcat=(lr.get("lcat") or "").strip(),
+                rate=float(lr["loaded_rate"]),
+                key=lcat_match.normalize(lr.get("lcat")),
+                floors=lcat_match.Floors.from_rate_line(lr),
+            )
+            for lr in (c.get("labor_rates") or [])
+            if (lr.get("lcat") or "").strip() and lr.get("loaded_rate")
+        ]
         # Per employee on this CLIN: total hrs in the recent window + their LCAT
         # (the one they logged the most hours under, so the rate is representative).
         hrs_by_emp, lcat_hrs, n_weeks = _clin_hours(c, rows, window)
@@ -247,6 +272,16 @@ def compute_allocation(
                 # off as a printed rate line.
                 "via": res.via,
                 "rate_line": res.line.payload() if res.matched and res.line else None,
+                # #66: is the person filling this seat qualified for the category it
+                # bills at? Checked against the *resolved* line only — when the LCAT
+                # didn't match, `res.line` is a suggestion, and grading somebody
+                # against a category nobody has agreed they bill under would be a
+                # finding invented out of a mapping guess.
+                "compliance": compliance.check(
+                    quals.get(emp),
+                    res.line if res.matched else None,
+                    candidates,
+                ),
                 # Cost next to price, per person per CLIN (#77) — the acceptance
                 # criterion that cost and price be separately readable for any
                 # (person, CLIN, week). `cost_known` false means this is the billing
@@ -274,6 +309,20 @@ def compute_allocation(
         )
         row["lcat"] = primary["lcat"] if primary else None
         row["rate"] = primary["rate"] if primary else None
+        # #66: the row's badge is the worst verdict across the person's CLINs, not the
+        # primary cell's. Somebody clean on the three CLINs they mostly sit on and
+        # short a clearance on the fourth is a clearance gap — the badge follows the
+        # exposure, and `compliance_cells` lets the panel name which CLIN it came from.
+        row["compliance_status"] = compliance.worst(
+            cell["compliance"]["status"] for cell in row["cells"].values()
+        )
+        row["compliance_cells"] = {
+            num: cell["compliance"]["status"] for num, cell in row["cells"].items()
+        }
+        # How much is on file about them at all, independent of any one line's floors —
+        # the difference between "we checked and they're short" and "there is nothing
+        # here to check", which is what the fill-in-the-blanks path hangs off.
+        row["quals_status"] = compliance.quals_coverage(quals.get(row["id"]))
         # #84: the matrix no longer divides by 40. Resolved here so the grid, the
         # portfolio endpoint and the People view all read one number resolved one way
         # — the whole reason this lives on the server.
@@ -304,6 +353,21 @@ def compute_allocation(
         key=lambda r: (-sum(c["hours"] for c in r["cells"].values()), r["name"])
     )
 
+    # #66 rollups. Per CLIN over the cells on that CLIN, then per contract over
+    # *people* — deliberately not summed from the CLIN rollups, because somebody
+    # charging three CLINs would count three times and "29 not yet checked" would come
+    # out larger than the number of people on the contract.
+    for card in clin_cards:
+        card["compliance"] = compliance.rollup(
+            [
+                cell["compliance"]["status"]
+                for row in employees.values()
+                for num, cell in row["cells"].items()
+                if num == card["id"]
+            ]
+        )
+    contract_compliance = compliance.rollup([r["compliance_status"] for r in emp_list])
+
     return {
         "contract": {
             "id": bc["id"],
@@ -333,6 +397,13 @@ def compute_allocation(
             # a surface that reads it as "hours this person has left" must say so, and
             # the solver must not spend slack it has not checked.
             "cross_contract": hours_elsewhere_by_person is not None,
+            # #66's contract-level counters. `quals_checked` says whether anybody has
+            # typed anything at all, so a surface can tell "nobody has started" apart
+            # from "everybody came back clean" — the two look identical if you only
+            # read the findings count, and reporting the first as the second is the
+            # failure mode this feature is most able to cause.
+            "compliance": contract_compliance,
+            "quals_checked": bool(quals),
         },
         "clins": clin_cards,
         "employees": emp_list,
