@@ -7,7 +7,9 @@ closing that gap: per-CLIN obligations rebuilt from the mod trail, and the optio
 period flipped into effect. See #60.
 """
 
+from app import extract
 from app.main import _merge_mod
+from app.schemas import CLIN, ContractHeader, Extraction, Period
 
 
 def _contract():
@@ -82,6 +84,96 @@ def _exercise_mod(num="P00002", amount=1_800_000.0):
 
 def _by_clin(contract):
     return {c["clin"]: c for c in contract["clins"]}
+
+
+def test_w45983_base_then_option_exercise_has_documented_cumulative_funding():
+    award = Extraction(
+        contract=ContractHeader(
+            piid="W45983-24-C-1675",
+            contract_type="Firm-Fixed-Price",
+            total_ceiling=5_960_218.40,
+            total_obligated=0.0,
+        ),
+        periods=[
+            Period(
+                name="Base",
+                pop_start="2024-09-24",
+                pop_end="2025-09-23",
+                exercised=True,
+                ceiling=3_037_736.80,
+            ),
+            Period(
+                name="Option 1",
+                pop_start="2025-09-24",
+                pop_end="2026-09-23",
+                exercised=True,
+                ceiling=2_922_481.60,
+            ),
+        ],
+        clins=[
+            CLIN(
+                clin="0001",
+                period="Base",
+                title="Base labor",
+                type="FFP",
+                is_labor=True,
+                ceiling=2_866_736.80,
+            ),
+            CLIN(
+                clin="0002",
+                period="Base",
+                title="Base travel",
+                type="COST",
+                is_labor=False,
+                ceiling=171_000.00,
+            ),
+            CLIN(
+                clin="1001",
+                period="Option 1",
+                title="Option 1 labor",
+                type="FFP",
+                is_labor=True,
+                ceiling=2_751_481.60,
+            ),
+            CLIN(
+                clin="1002",
+                period="Option 1",
+                title="Option 1 travel",
+                type="COST",
+                is_labor=False,
+                ceiling=171_000.00,
+            ),
+        ],
+    )
+    contract = extract.normalize_initial_award(award).model_dump()
+    contract["obligation_history"] = []
+
+    assert contract["contract"]["total_obligated"] == 3_037_736.80
+    assert contract["periods"][1]["exercised"] is False
+    assert [c["obligated"] for c in contract["clins"][2:]] == [None, None]
+
+    _merge_mod(
+        contract,
+        {
+            "mod_number": "P00001",
+            "effective_date": "2025-09-24",
+            "action_type": "option_exercise",
+            "amount_obligated": 2_922_481.60,
+            "cumulative_obligated": 5_960_218.40,
+            "period_exercised": "Option 1",
+            "funding_lines": [
+                {"clin": "1001", "acrn": "AB", "amount": 2_751_481.60},
+                {"clin": "1002", "acrn": "AB", "amount": 171_000.00},
+            ],
+        },
+    )
+
+    assert contract["contract"]["total_obligated"] == 5_960_218.40
+    assert contract["periods"][1]["exercised"] is True
+    assert [c["obligated"] for c in contract["clins"][2:]] == [
+        2_751_481.60,
+        171_000.00,
+    ]
 
 
 def test_option_exercise_funds_its_clins_and_opens_the_period():
