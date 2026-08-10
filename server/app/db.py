@@ -374,6 +374,27 @@ def save_direct_rates(
     return get_rate_model(contract_id)
 
 
+def get_scoped_direct_rates(contract_id: Optional[int]) -> list:
+    """The direct-rate rows belonging to exactly this scope — no company-default
+    fill-in (#78).
+
+    `get_rate_model` merges the company defaults in, which is right for pricing and
+    wrong for writing: a caller that read the merged view and saved it back would
+    silently copy every company rate onto the contract, and a later change to the
+    company set would stop reaching it. Any code that merges *into* a scope needs
+    this instead.
+    """
+    conn = get_conn()
+    where, params = _scope_clause(contract_id)
+    rows = conn.execute(
+        f"""SELECT fiscal_year, lcat, employee_id, rate, status
+            FROM direct_rates WHERE {where}""",
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def save_contract(piid: str, data: dict) -> int:
     conn = get_conn()
     cur = conn.execute(

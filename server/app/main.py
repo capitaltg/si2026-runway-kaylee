@@ -257,6 +257,50 @@ def confirm(
     }
 
 
+def _store_schedule_direct_rates(contract_id: int, header: dict, clins: list) -> int:
+    """Persist any unburdened direct rates a cost-buildup exhibit printed (#78).
+
+    This is what actually moves a contract off Level 1: `rates.CostModel` has read
+    `direct_rates` since #77, but nothing ever wrote to that table except a human
+    typing into the rates view. A cost-type exhibit prints the direct rate per labor
+    category, so ingesting one should be enough to make margin real.
+
+    Merged, not replaced. `save_direct_rates` is a delete-then-insert over the whole
+    (scope, fiscal year), so writing only what this sheet carried would silently drop
+    the per-person rates behind Level 3 — a schedule upload must never cost someone
+    their payroll-grade cost model. Rows for an LCAT this sheet *does* price are
+    overwritten, which is the one thing the document is more authoritative about.
+
+    Returns how many LCAT direct rates the sheet supplied.
+    """
+    incoming = {}
+    for cl in clins or []:
+        for r in cl.get("labor_rates") or []:
+            name, rate = (r.get("lcat") or "").strip(), r.get("direct_rate")
+            if name and rate is not None:
+                incoming[name] = float(rate)
+    if not incoming:
+        return 0
+
+    fy = _fiscal_year(header.get("effective_date"))
+    # Compared on the normalised key so a sheet naming a category "Sr. Software
+    # Engineer" replaces the "Senior Software Engineer" row it means, instead of
+    # sitting beside it as a second answer for the same category (#64).
+    replaced = {lcat.normalize(k) for k in incoming}
+    keep = [
+        r
+        for r in db.get_scoped_direct_rates(contract_id)
+        if r.get("employee_id") or lcat.normalize(r.get("lcat")) not in replaced
+    ]
+    db.save_direct_rates(
+        contract_id,
+        fy,
+        keep + [{"lcat": k, "rate": v} for k, v in incoming.items()],
+        rates.PROVISIONAL,
+    )
+    return len(incoming)
+
+
 @app.post("/api/contracts/{contract_id}/rates")
 async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
     """Supplemental import: attach a labor-rate schedule to an already-ingested
@@ -319,10 +363,18 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
         data,
         file.content_type,
     )
+    # A loaded-rate-only sheet writes nothing here and prices exactly as it did
+    # before: no direct rate means no cost of our own to compare the price against,
+    # which is Level 1 and the normal case, not a degraded one.
+    direct_stored = _store_schedule_direct_rates(
+        contract_id, existing.get("contract") or {}, existing.get("clins") or []
+    )
+
     return {
         "id": contract_id,
         "clins_updated": merged,
         "rate_tables_found": len(incoming),
+        "direct_rates_stored": direct_stored,
         "piid_mismatch": piid_mismatch,
         "source_document_id": document_id,
         "source_document_note": note,
