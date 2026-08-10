@@ -718,6 +718,10 @@ export default function AllocationMatrix({
   // contract, enforced by a unique index), and a second copy here would be the thing
   // that goes stale after somebody designates a different one.
   const baseline = plans.find((p) => p.is_baseline) || null;
+  // Is the grid showing reality rather than a what-if? Not simply "no plan loaded":
+  // an unnamed what-if typed straight onto the actuals has no plan id either, and
+  // ticking that as "what's running now" would be the same lie #62 fixed.
+  const onActuals = !loadedPlan && !dirty;
   const [baselineBusy, setBaselineBusy] = useState(false);
   const [baselineErr, setBaselineErr] = useState(null);
 
@@ -906,6 +910,23 @@ export default function AllocationMatrix({
         ? `Discard unsaved changes to “${loadedPlanName}”? The saved plan itself is kept.`
         : "Discard this what-if and go back to the synced actuals?";
     if (!window.confirm(warning)) return;
+    reset();
+  }
+
+  // Back out of a plan to what is actually running. The same `reset()` Discard uses,
+  // reached from the plans menu and framed as a destination rather than as a loss:
+  // "Discard changes" is the right name for throwing away an edit and the wrong one
+  // for "show me the synced actuals again", which is a place you go, not damage you
+  // do. It confirms only when there is genuinely something unsaved to lose —
+  // switching back from a cleanly-saved plan costs nothing and shouldn't ask.
+  function showActuals() {
+    if (!loadedPlan && !dirty) return;
+    if (unsaved) {
+      const warning = loadedPlanName
+        ? `Go back to the synced actuals? Unsaved changes to “${loadedPlanName}” are lost — the saved plan itself is kept.`
+        : "Go back to the synced actuals? This unsaved what-if is lost.";
+      if (!window.confirm(warning)) return;
+    }
     reset();
   }
 
@@ -1801,10 +1822,34 @@ export default function AllocationMatrix({
                           </button>
                         </div>
                       )}
-                      {plans.length > 0 && (
+                      {(plans.length > 0 || dirty || loadedPlan) && (
                         <>
                           <div style={menuDivider} />
-                          <div style={menuLabel}>Saved plans</div>
+                          {/* One group, read as a radio list: the actuals and the saved
+                              plans are alternative things the grid can be showing, and
+                              the menu was previously only able to express half of that
+                              — you could move between plans but never back out of one.
+                              Hence "Modelling from" rather than "Saved plans". */}
+                          <div style={menuLabel}>Modelling from</div>
+                          <button
+                            onClick={() => {
+                              showActuals();
+                              setPlansMenuOpen(false);
+                            }}
+                            title="Show the synced actuals — who is charging, at the hours they are actually charging"
+                            style={{
+                              ...menuItem,
+                              color: onActuals ? "var(--accent)" : "var(--text)",
+                            }}
+                          >
+                            <div>
+                              {onActuals ? "✓ " : ""}
+                              What's running now
+                            </div>
+                            <div style={{ fontSize: 10.5, color: "var(--faint)", fontWeight: 400 }}>
+                              The synced actuals, no what-if
+                            </div>
+                          </button>
                           {plans.map((p) => (
                             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <button
