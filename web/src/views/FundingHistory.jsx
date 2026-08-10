@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getFunding, addMod } from "../api.js";
+import { runningTotals } from "../funding-total.js";
 
 // Funding History — the contract's dated obligation timeline (SF-26 award +
 // every ingested SF-30 mod) with a cumulative-vs-ceiling bar, and a dropzone
@@ -280,6 +281,8 @@ export default function FundingHistory({ contractId }) {
 
   const history = data?.obligation_history || [];
 
+  const cumulative = runningTotals(history, data?.total_ceiling ?? null);
+
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px" }}>
       <h1
@@ -402,7 +405,7 @@ export default function FundingHistory({ contractId }) {
                         fontWeight: 600,
                       }}
                     >
-                      {money(h.cumulative_obligated)}
+                      {money(cumulative[i]?.total)}
                     </td>
                   </tr>
                 ))}

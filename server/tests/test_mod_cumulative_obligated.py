@@ -80,11 +80,12 @@ def test_a_mod_that_states_no_cumulative_at_all_still_adds_its_money():
 def test_a_genuine_cumulative_above_the_sum_still_wins():
     """The reason the stated figure is consulted at all: a trail missing a mod sums
     to less than the contract really carries, and the running total on the mod we DO
-    have is the only evidence of the one we don't."""
+    have is the only evidence of the one we don't. Stays inside the ceiling, which
+    is what separates it from a misread — see the ceiling test below."""
     c = _contract()
-    _merge_mod(c, _option_mod(cumulative_obligated=9_000_000.0))
+    _merge_mod(c, _option_mod(cumulative_obligated=7_500_000.0))
 
-    assert c["contract"]["total_obligated"] == 9_000_000.0
+    assert c["contract"]["total_obligated"] == 7_500_000.0
 
 
 def test_a_consistent_trail_is_unchanged():
@@ -113,3 +114,33 @@ def test_the_option_money_reaches_the_incrementally_funded_flag():
 
     assert c["contract"]["incrementally_funded"] is True
     assert c["contract"]["total_obligated"] == 6_709_487.60
+
+
+def test_a_cumulative_above_the_ceiling_is_a_misread_not_an_over_obligation():
+    """The read that motivated the ceiling gate: a narrative stating "cumulative
+    obligated $6,709,487.60" extracted as $16,709,487.80. Obligating past the
+    ceiling is an Anti-Deficiency Act problem, not a routine funding action, so the
+    arithmetic every other figure on the document agrees with wins."""
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=16_709_487.80))
+
+    assert c["contract"]["total_obligated"] == 6_709_487.60
+    assert summary["cumulative_ignored"] == [16_709_487.80]
+
+
+def test_a_cumulative_at_the_ceiling_exactly_is_still_trusted():
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=14_535_792.80))
+
+    assert c["contract"]["total_obligated"] == 14_535_792.80
+    assert summary["cumulative_ignored"] == []
+
+
+def test_a_well_read_trail_reports_nothing_ignored():
+    c = _contract()
+    c["contract"]["total_ceiling"] = 14_535_792.80
+    summary = _merge_mod(c, _option_mod(cumulative_obligated=6_709_487.60))
+
+    assert summary["cumulative_ignored"] == []

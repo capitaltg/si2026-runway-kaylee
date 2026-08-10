@@ -874,10 +874,22 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
     # mod ingested twice is one action. It would overcount a mod whose `amount` was
     # itself misread as a cumulative restatement, which is why `amount_obligated` is
     # the field the prompt is most explicit about.
-    bounds = list(cums) + ([round(sum(amts), 2)] if amts else [])
+    # And a stated total only beats the arithmetic while it stays inside the
+    # ceiling. Obligating past the ceiling is an Anti-Deficiency Act problem rather
+    # than a routine funding action, so a cumulative above it is far likelier to be a
+    # misread digit than a real over-obligation — and trusting it lets one bad
+    # character overwrite a figure every other number on the document agrees with.
+    # The read that motivated this: a narrative saying "cumulative obligated
+    # $6,709,487.60" came back as $16,709,487.80, against a $14,535,792.80 ceiling.
+    #
+    # Discarded, not silenced — `cumulative_ignored` reports it, because a figure we
+    # could not reconcile is the sort of thing that should send somebody to the PDF.
+    ceiling = header.get("total_ceiling")
+    credible = [c for c in cums if ceiling is None or c <= float(ceiling)]
+    disputed = sorted(set(cums) - set(credible))
+    bounds = credible + ([round(sum(amts), 2)] if amts else [])
     if bounds:
         header["total_obligated"] = max(bounds)
-    ceiling = header.get("total_ceiling")
     if header.get("total_obligated") is not None and ceiling:
         header["incrementally_funded"] = float(header["total_obligated"]) < float(
             ceiling
@@ -895,6 +907,9 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
         "clins_funded": clins_funded,
         "periods_exercised": periods_exercised,
         "ceilings_revised": ceilings_revised,
+        # Cumulative figures read off the documents that sit above the ceiling, and
+        # so were not used. Empty on every well-read trail.
+        "cumulative_ignored": disputed,
     }
 
 
