@@ -329,6 +329,26 @@ export async function deletePlan(contractId, planId) {
   return r.json();
 }
 
+// The active baseline (#67) — which saved plan the contract is being run against.
+// Designating swaps: the server stands the previous baseline down in the same write.
+export async function setBaselinePlan(contractId, planId) {
+  const r = await fetch(
+    `${BASE}/api/contracts/${contractId}/plans/${planId}/baseline`,
+    { method: "PUT" },
+  );
+  if (!r.ok) throw new Error(`Set baseline failed (${r.status})`);
+  return r.json();
+}
+
+export async function clearBaselinePlan(contractId, planId) {
+  const r = await fetch(
+    `${BASE}/api/contracts/${contractId}/plans/${planId}/baseline`,
+    { method: "DELETE" },
+  );
+  if (!r.ok) throw new Error(`Clear baseline failed (${r.status})`);
+  return r.json();
+}
+
 // Ask Runway (#15). Streams a plain-text answer grounded in the burn engine's
 // numbers; onChunk fires with each incremental piece so the panel can render the
 // answer as it arrives. Returns the full answer once the stream closes.

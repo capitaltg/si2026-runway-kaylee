@@ -6,6 +6,8 @@ import {
   savePlan,
   updatePlan,
   deletePlan,
+  setBaselinePlan,
+  clearBaselinePlan,
   getLcatRates,
   getPeople,
   getPeopleUtilization,
@@ -710,6 +712,34 @@ export default function AllocationMatrix({
   }, [plans, liveSnapshot]);
   const loadedStale = (loadedPlan && staleReasons[loadedPlan]) || [];
 
+  // The active baseline (#67 item 1) — the one saved plan this contract is being run
+  // against, as opposed to the ten what-ifs sitting beside it. Read off the list
+  // rather than held in its own state: the server owns which plan it is (one per
+  // contract, enforced by a unique index), and a second copy here would be the thing
+  // that goes stale after somebody designates a different one.
+  const baseline = plans.find((p) => p.is_baseline) || null;
+  const [baselineBusy, setBaselineBusy] = useState(false);
+  const [baselineErr, setBaselineErr] = useState(null);
+
+  // Designate or stand down, from the plans menu. Refetches rather than patching the
+  // list locally, because designating is a swap — the plan that lost the baseline is
+  // also changing, and guessing which one that was is how the menu ends up showing
+  // two baselines.
+  async function toggleBaseline(plan) {
+    if (baselineBusy) return;
+    setBaselineBusy(true);
+    setBaselineErr(null);
+    try {
+      if (plan.is_baseline) await clearBaselinePlan(contractId, plan.id);
+      else await setBaselinePlan(contractId, plan.id);
+      refreshPlans();
+    } catch (e) {
+      setBaselineErr(e.message || "Could not change the baseline.");
+    } finally {
+      setBaselineBusy(false);
+    }
+  }
+
   // Per-person avatar hue keyed to roster order, so a person keeps their color
   // regardless of filtering/sorting.
   const hueOf = useMemo(() => {
@@ -1271,6 +1301,24 @@ export default function AllocationMatrix({
               plan, under the same name, now says something it didn't say when it was
               written. Saying which terms moved is what makes the numbers on screen
               readable; saving over it re-baselines the snapshot. */}
+          {/* #67 — what this contract is actually being run against, stated where the
+              matrix says what it is modelling. Without it a saved plan is one of a
+              list; with it, one of them is the commitment and the rest are what-ifs.
+              Absent entirely when nothing is designated: an empty "Baseline: —" would
+              read as a broken field rather than as a decision nobody has made. */}
+          {baseline && (
+            <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>
+              <span style={baselineChip}>BASELINE</span>{" "}
+              <b style={{ color: "var(--text)" }}>“{baseline.name}”</b> — the staffing
+              this contract is committed to
+              {loadedPlan === baseline.id ? " · open now" : ""}
+            </div>
+          )}
+          {baselineErr && (
+            <div style={{ fontSize: 12, color: "var(--bad)", marginTop: 6 }}>
+              {baselineErr}
+            </div>
+          )}
           {loadedStale.length > 0 && (
             <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 6, display: "flex", gap: 6 }}>
               <span aria-hidden="true">⚠</span>
@@ -1769,6 +1817,7 @@ export default function AllocationMatrix({
                                     {loadedPlan === p.id ? "✓ " : ""}
                                     {p.name}
                                   </span>
+                                  {p.is_baseline && <span style={baselineChip}>BASELINE</span>}
                                   {staleReasons[p.id]?.length > 0 && (
                                     <span style={staleChip}>STALE</span>
                                   )}
@@ -1783,6 +1832,28 @@ export default function AllocationMatrix({
                                     ? `Updated ${shortDate(p.updated_at)}`
                                     : `Saved ${shortDate(p.created_at)}`}
                                 </div>
+                              </button>
+                              {/* Designate / stand down, on the row rather than behind a
+                                  submenu: which plan is the baseline is a property of
+                                  the plan, and the only place all the plans are listed
+                                  is here. Deliberately reversible and unconfirmed —
+                                  unlike delete, nothing is lost by getting it wrong. */}
+                              <button
+                                onClick={() => toggleBaseline(p)}
+                                disabled={baselineBusy}
+                                aria-pressed={Boolean(p.is_baseline)}
+                                title={
+                                  p.is_baseline
+                                    ? `“${p.name}” is the active baseline — click to stand it down`
+                                    : `Make “${p.name}” the active baseline — the staffing this contract is committed to`
+                                }
+                                style={{
+                                  ...baselineToggle,
+                                  color: p.is_baseline ? "var(--accent)" : "var(--faint)",
+                                  cursor: baselineBusy ? "default" : "pointer",
+                                }}
+                              >
+                                {p.is_baseline ? "★" : "☆"}
                               </button>
                               {/* The same quiet trash the contract delete uses (#29),
                                   rather than a × that could be a close button. It
@@ -3236,6 +3307,27 @@ const staleChip = {
   border: "1px solid var(--warn)",
   borderRadius: 5,
   padding: "0 4px",
+  flexShrink: 0,
+};
+// The active baseline (#67). Accent rather than warn: a baseline is a decision that
+// has been made, not a problem — the chip has to read differently from STALE sitting
+// next to it on the same row.
+const baselineChip = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: ".05em",
+  color: "var(--accent)",
+  border: "1px solid var(--accent)",
+  borderRadius: 5,
+  padding: "0 4px",
+  flexShrink: 0,
+};
+const baselineToggle = {
+  border: "none",
+  background: "transparent",
+  padding: "0 2px",
+  fontSize: 14,
+  lineHeight: 1,
   flexShrink: 0,
 };
 const staleTitle = (reasons) =>
