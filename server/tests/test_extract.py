@@ -215,6 +215,18 @@ def test_initial_ffp_award_does_not_recompute_from_partial_period_labels():
     assert normalized.contract.incrementally_funded is True
 
 
+def test_initial_ffp_award_does_not_recompute_from_unresolved_period_label():
+    e = _w45983_award()
+    e.clins[1].period = "Base Year"
+
+    normalized = extract.normalize_initial_award(e)
+
+    assert normalized.clins[0].obligated == 2_866_736.80
+    assert normalized.clins[1].obligated is None
+    assert normalized.contract.total_obligated == 0.0
+    assert normalized.contract.incrementally_funded is True
+
+
 def test_ffp_null_with_acrn_is_missing_not_an_explicit_zero_in_full_pipeline():
     e = _w45983_award()
     e.clins[0].acrn = "AA"

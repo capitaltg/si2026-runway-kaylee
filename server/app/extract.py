@@ -294,8 +294,9 @@ def normalize_initial_award(parsed: Extraction) -> Extraction:
     # On a multi-period schedule, one unlabeled CLIN might belong to Base. We may
     # still normalize the lines positively identified as Base, but cannot claim
     # their subtotal is the complete award obligation.
+    period_names = {period.name.strip().lower() for period in parsed.periods}
     period_labels_complete = all(
-        (clin.period or "").strip() for clin in parsed.clins
+        (clin.period or "").strip().lower() in period_names for clin in parsed.clins
     )
     if period_labels_complete and all(
         clin.obligated is not None for clin in base_clins
