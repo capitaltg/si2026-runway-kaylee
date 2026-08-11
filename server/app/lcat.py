@@ -57,6 +57,10 @@ from typing import Dict, List, Optional, Tuple
 #   AMBIGUOUS          — two rate lines, one normalised key, different rates.
 #   NO_RATE_LINE       — cause C. Carries the closest candidate when there is one.
 RATE_TABLE_MISSING = "clin_unpriced"
+#   RATE_TABLE_UNBURDENED — cause A's other half (#139). Also a property of the
+#     CLIN, and also stated once, but the rate schedule is already ingested: it
+#     prices each category at an unburdened direct rate. No import fixes it.
+RATE_TABLE_UNBURDENED = "clin_unburdened"
 PRICED_ELSEWHERE = "priced_elsewhere"
 AMBIGUOUS = "ambiguous_rate_line"
 NO_RATE_LINE = "no_rate_line"
@@ -420,6 +424,36 @@ def suggest(
     return (best, round(best_score, 3)) if best else (None, None)
 
 
+#: A CLIN with at least one rate line we can bill from.
+TABLE_PRESENT = "present"
+#: Rate lines were ingested, but none carries a loaded rate — a cost-type award
+#: prints unburdened direct rates per LCAT and the indirect factors separately,
+#: so there is nothing for `resolver` to bill at even though the schedule is in
+#: (#139). Not the same absence as `TABLE_ABSENT`, and no document fixes it.
+TABLE_UNBURDENED = "unburdened"
+#: No rate lines at all — the continuation sheet never landed. Importing a rate
+#: schedule is the remedy.
+TABLE_ABSENT = "absent"
+
+
+def rate_table_state(clin: dict) -> str:
+    """Why a CLIN's rate table is or isn't usable, as one of the three labels above.
+
+    `resolver` skips any line without a `loaded_rate`, which collapses "we have no
+    rate lines" and "we have rate lines priced a way we can't bill from" into one
+    `source == "blended"`. Both are a rate gap; only one is a missing document, and
+    the UI has to tell them apart before it names a fix.
+    """
+    named = [
+        lr for lr in (clin.get("labor_rates") or []) if (lr.get("lcat") or "").strip()
+    ]
+    if any(lr.get("loaded_rate") for lr in named):
+        return TABLE_PRESENT
+    if named:
+        return TABLE_UNBURDENED
+    return TABLE_ABSENT
+
+
 def resolver(
     clin: dict,
     index: Optional[Dict[str, List[RateLine]]] = None,
@@ -534,9 +568,14 @@ def resolver(
                     rate=line.rate, matched=True, via=VIA_ALIAS, line=line
                 )
 
-        # Unmatched: which of the three, in order of how much it explains.
+        # Unmatched: which of the four, in order of how much it explains.
         if not by_exact:
-            return _unmatched(RATE_TABLE_MISSING)
+            # Cause A splits on whether a document is actually missing (#139).
+            return _unmatched(
+                RATE_TABLE_UNBURDENED
+                if rate_table_state(clin) == TABLE_UNBURDENED
+                else RATE_TABLE_MISSING
+            )
         elsewhere = [ln for ln in index.get(key, []) if ln.clin != num]
         if elsewhere:
             return _unmatched(PRICED_ELSEWHERE, line=elsewhere[0])

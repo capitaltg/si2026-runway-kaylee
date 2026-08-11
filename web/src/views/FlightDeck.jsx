@@ -1148,6 +1148,11 @@ export default function FlightDeck({
           red ⚠ on every person charging the CLIN, for one missing PDF page. */}
       {activeAlert.kind === "rate-gap" && (() => {
         const g = activeAlert.item;
+        // Two different gaps wear one flag (#139). `unburdened` means the award's
+        // rate schedule IS ingested — it just prints direct rates with the
+        // indirects listed apart from them — so the banner must not claim the
+        // document is missing, and must not offer to import it again.
+        const unburdened = g.rate_table_state === "unburdened";
         return (
         <div
           key={g.code}
@@ -1161,14 +1166,16 @@ export default function FlightDeck({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
             <span style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 14.5, color: "var(--warn)" }}>
-              {g.code} has no rate table
+              {g.code} {unburdened ? "has no burdened rates" : "has no rate table"}
             </span>
             <span style={{ fontSize: 11.5, color: "var(--dim)" }}>{g.name}</span>
           </div>
           <div style={{ fontSize: 13, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
             Every labor category on this CLIN prices at the blended{" "}
-            <b>{g.blended_rate ? money(g.blended_rate) : "—"}/hr</b> (its ceiling ÷ estimated hours), because
-            the award we ingested carries a CLIN summary but no rate schedule.{" "}
+            <b>{g.blended_rate ? money(g.blended_rate) : "—"}/hr</b> (its ceiling ÷ estimated hours), because{" "}
+            {unburdened
+              ? "the award prices each category at an unburdened direct rate and states the indirect factors separately, so no line carries an hourly rate we can bill from."
+              : "the award we ingested carries a CLIN summary but no rate schedule."}{" "}
             {g.lcats.length > 0 && (
               <>
                 {g.lcats.length} categor{g.lcats.length === 1 ? "y" : "ies"} affected:{" "}
@@ -1176,11 +1183,15 @@ export default function FlightDeck({
                 {g.lcats.length > 4 ? ` +${g.lcats.length - 4} more` : ""}.{" "}
               </>
             )}
-            The burn figures are real, but nothing on this CLIN is per-person until the schedule lands.
+            {unburdened
+              ? "The burn figures are real, and the schedule is already imported — what a direct rate bills at on a cost-plus line is a pricing decision still to be made, not a document to go find."
+              : "The burn figures are real, but nothing on this CLIN is per-person until the schedule lands."}
           </div>
-          <div style={{ marginTop: 10 }}>
-            <ImportRateSchedule contractId={contractId} onImported={onRatesImported} />
-          </div>
+          {!unburdened && (
+            <div style={{ marginTop: 10 }}>
+              <ImportRateSchedule contractId={contractId} onImported={onRatesImported} />
+            </div>
+          )}
         </div>
         );
       })()}
