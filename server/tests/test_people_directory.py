@@ -269,6 +269,9 @@ def test_allocation_clin_exposes_rate_line_qualifications():
         {
             "lcat": "Senior Engineer",
             "rate": 225.0,
+            # #144: every offered line says whether its rate is one the award
+            # printed or one built from its cost buildup.
+            "basis": "loaded",
             "min_education": "Bachelor's",
             "min_experience_yrs": 8,
             "clearance": "Secret",

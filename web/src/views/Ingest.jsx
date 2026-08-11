@@ -337,7 +337,7 @@ const emptyClin = (period) => ({
   labor_rates: null, confidence: null,
 });
 const emptyRate = () => ({
-  lcat: "", loaded_rate: null, est_hours: null,
+  lcat: "", loaded_rate: null, direct_rate: null, est_hours: null,
   min_education: null, min_experience_yrs: null, clearance: null,
 });
 
@@ -1228,6 +1228,13 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
                   <tr style={{ color: "var(--faint)", fontSize: 10, textTransform: "uppercase", background: "var(--panel2)" }}>
                     <th style={{ ...cell, textAlign: "left" }}>Labor category (LCAT)</th>
                     <th style={{ ...cell, textAlign: "right" }}>Loaded rate/hr</th>
+                    {/* The other rate an award can print (#138). A cost-type award
+                        states an unburdened direct rate per category with the
+                        indirect factors listed separately — extraction has always
+                        captured it and confirm has always stored it, but this table
+                        showed only the loaded column, so every row on a CPFF award
+                        read "—" and the rate looked like it had been dropped. */}
+                    <th style={{ ...cell, textAlign: "right" }}>Direct rate/hr</th>
                     <th style={{ ...cell, textAlign: "right" }}>Est. hrs</th>
                     <th style={{ ...cell, textAlign: "left" }}>Min. education</th>
                     <th style={{ ...cell, textAlign: "center" }}>Min. yrs</th>
@@ -1238,7 +1245,7 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
                 <tbody>
                   {rates.length === 0 && (
                     <tr>
-                      <td colSpan={editing ? 7 : 6} style={{ ...cell, color: "var(--faint)" }}>
+                      <td colSpan={editing ? 8 : 7} style={{ ...cell, color: "var(--faint)" }}>
                         No labor rates {editing ? "— add the LCAT rate lines below." : "on this CLIN."}
                       </td>
                     </tr>
@@ -1257,6 +1264,15 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
                           <NumberField value={r.loaded_rate} onChange={(v) => setRate(idx, ri, "loaded_rate", v)} />
                         ) : r.loaded_rate != null ? (
                           "$" + Number(r.loaded_rate).toLocaleString("en-US", { minimumFractionDigits: 2 })
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td style={{ ...cell, textAlign: "right", ...mono }}>
+                        {editing ? (
+                          <NumberField value={r.direct_rate} onChange={(v) => setRate(idx, ri, "direct_rate", v)} />
+                        ) : r.direct_rate != null ? (
+                          "$" + Number(r.direct_rate).toLocaleString("en-US", { minimumFractionDigits: 2 })
                         ) : (
                           "—"
                         )}

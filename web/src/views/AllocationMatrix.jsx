@@ -2415,6 +2415,8 @@ export default function AllocationMatrix({
                   {newPersonRateOptions.map((line) => (
                     <option key={line.lcat} value={line.lcat}>
                       {line.lcat} — {money(line.rate)}/hr
+                      {/* A built rate is never allowed to pass for a printed one (#144). */}
+                      {line.basis === "burdened" ? " (burdened)" : ""}
                     </option>
                   ))}
                   <option value="other">Other — not on the rate schedule…</option>
@@ -2987,15 +2989,30 @@ export default function AllocationMatrix({
                       a single misspelled category read identically. */}
                   {c.rate_table_missing ? (
                     <div
-                      style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}
+                      style={{
+                        marginTop: 10,
+                        fontSize: 11,
+                        // Not a warning when the spend didn't ride the blended rate
+                        // (#144) — it's a note about what the picker can offer.
+                        color: c.blended_priced_spend === false ? "var(--dim)" : "var(--warn)",
+                      }}
                       onClick={(ev) => ev.stopPropagation()}
                     >
-                      {c.rate_table_state === "unburdened"
-                        ? "Direct rates only on this CLIN — no burdened rate to bill from, so all "
-                        : "No rate table on this CLIN — all "}
-                      {c.unmatched_lcats?.length || 0} categor
-                      {(c.unmatched_lcats?.length || 0) === 1 ? "y" : "ies"} bill at the blended
-                      {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : " rate"}.
+                      {c.blended_priced_spend === false ? (
+                        <>
+                          Direct rates only on this CLIN — its spend is priced per category from the
+                          award&apos;s own buildup, so there is no billable rate line to map onto.
+                        </>
+                      ) : (
+                        <>
+                          {c.rate_table_state === "unburdened"
+                            ? "Direct rates only on this CLIN — no burdened rate to bill from, so all "
+                            : "No rate table on this CLIN — all "}
+                          {c.unmatched_lcats?.length || 0} categor
+                          {(c.unmatched_lcats?.length || 0) === 1 ? "y" : "ies"} bill at the blended
+                          {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : " rate"}.
+                        </>
+                      )}
                       {/* No import offer when the schedule is already in (#139). */}
                       {c.rate_table_state !== "unburdened" && (
                         <div style={{ marginTop: 6 }}>
@@ -3580,6 +3597,7 @@ function MappingPanel({
                 {rateLines.map((l) => (
                   <option key={`${l.clin}|${l.lcat}`} value={`${l.clin}|${l.lcat}`}>
                     {l.lcat} — CLIN {l.clin} — {money(l.rate)}/hr
+                    {l.basis === "burdened" ? " (burdened)" : ""}
                     {l.clin !== mapping.clinId ? " (other CLIN)" : ""}
                   </option>
                 ))}

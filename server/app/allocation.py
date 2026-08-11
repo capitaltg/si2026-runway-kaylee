@@ -137,7 +137,10 @@ def compute_allocation(
     # Rate-line resolution context (#64), built on the same period-scoped CLIN set
     # burn uses — so a cell's flag and the Flight Deck's banner are the same verdict
     # from the same index, including the user's confirmed LCAT mappings.
-    rate_index = lcat_match.build_index(burn._period_clins(contract, period))
+    # …and burdened the same way, or a cost-type CLIN's direct-rate lines would be
+    # priced on the Flight Deck and unpriced here (#144).
+    burden = burn.burden_fn(cost_model, contract.get("contract") or {})
+    rate_index = lcat_match.build_index(burn._period_clins(contract, period), burden)
     aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
 
     # Per-CLIN money/clock read straight off the burn payload — the simulator's
@@ -147,7 +150,7 @@ def compute_allocation(
     resolvers = {}  # clin id -> resolve(lcat) -> lcat.Resolution
     for c in labor:
         num = burn._clin_num(c)
-        resolve, blended, source = burn._rate_resolver(c, rate_index, aliases)
+        resolve, blended, source = burn._rate_resolver(c, rate_index, aliases, burden)
         resolvers[num] = resolve
         card = burn_by_id.get(num, {})
         clin_cards.append(
@@ -187,17 +190,25 @@ def compute_allocation(
                 # contract-wide mapping targets. Keep the award's qualification
                 # floors beside each rate so staffing can be planned with the same
                 # information the later compliance check will read.
+                # Priced through `lcat.line_rate`, the same call the resolver and
+                # the index use, so a cost-type CLIN's burdened lines are offered
+                # here too (#144). Before that the picker was empty on exactly the
+                # CLINs whose hours it was being opened to fix. `basis` rides along
+                # so the UI can say a rate was built rather than printed.
                 "rate_lines": [
                     {
                         "lcat": (line.get("lcat") or "").strip(),
-                        "rate": round(float(line["loaded_rate"]), 2),
+                        "rate": round(float(priced), 2),
+                        "basis": basis,
                         "min_education": line.get("min_education"),
                         "min_experience_yrs": line.get("min_experience_yrs"),
                         "clearance": line.get("clearance"),
                     }
-                    for line in (c.get("labor_rates") or [])
-                    if (line.get("lcat") or "").strip()
-                    and line.get("loaded_rate") is not None
+                    for line, priced, basis in (
+                        (ln,) + lcat_match.line_rate(ln, c, burden)
+                        for ln in (c.get("labor_rates") or [])
+                    )
+                    if (line.get("lcat") or "").strip() and priced is not None
                 ],
                 "unmatched_lcats": card.get("unmatched_lcats", []),
                 # Why this CLIN's LCATs didn't match, from burn (#64). The card
@@ -210,6 +221,12 @@ def compute_allocation(
                 "rate_table_state": card.get(
                     "rate_table_state", lcat_match.TABLE_ABSENT
                 ),
+                # …and whether that gap reaches the spend this card reports (#144).
+                # False on a cost-measured CLIN priced entirely from declared direct
+                # rates: the mapping is still missing and the picker still has no rate
+                # to offer, but "all N categories bill at the blended rate" is not
+                # what the money on this card did.
+                "blended_priced_spend": card.get("blended_priced_spend", True),
                 "lcat_issues": card.get("lcat_issues", []),
                 "aliased_lcats": card.get("aliased_lcats", []),
             }

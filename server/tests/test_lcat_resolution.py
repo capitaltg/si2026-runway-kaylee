@@ -340,6 +340,11 @@ def test_alias_prices_the_hours_and_clears_the_flag():
                 "min_experience_yrs": None,
                 "clearance": None,
             },
+            # #144: a resolved line now states whether its rate is one the award
+            # printed or one built from its cost buildup. This one is printed, and
+            # a loaded line was never built from anything.
+            "basis": "loaded",
+            "direct": None,
         }
     ]
 
@@ -431,6 +436,8 @@ def test_allocation_cells_carry_the_same_cause_burn_reports():
             "min_experience_yrs": None,
             "clearance": None,
         },
+        "basis": "loaded",
+        "direct": None,
     }
 
 

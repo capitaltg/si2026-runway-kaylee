@@ -72,6 +72,24 @@ VIA_NORMALIZED = "normalized"
 VIA_ALIAS = "alias"
 VIA_BLENDED = "blended"
 VIA_NONE = "none"
+#   VIA_BURDENED — a real rate line backed this hour, but the award printed no rate
+#     to bill from: the $/hr is that category's direct rate carried through the
+#     contract's own indirect pools (#144). Reported apart from VIA_EXACT because
+#     it is a match on a derived number, and a reader must be able to see that.
+VIA_BURDENED = "burdened"
+
+# What a resolved rate line's $/hr actually is (#144). `loaded` is a figure the
+# award printed. `burdened` is one built from the award's own cost buildup — this
+# category's direct rate carried through the contract's fringe, overhead and G&A —
+# for the cost-type CLINs where the award prints no rate to bill from at all.
+#
+# Kept on the line, and reported, because the two are not interchangeable: a user
+# looking at $123.14/hr for a Business Analyst is entitled to know the document
+# never printed $123.14, and an accountant is entitled to know which indirect rates
+# produced it. It is still a rate the award fully determines — every input is on
+# the page — which is what makes it a rate line rather than an assumption.
+BASIS_LOADED = "loaded"
+BASIS_BURDENED = "burdened"
 
 # Token-level folding applied before matching. Deliberately short and boring:
 # every entry here changes what money a timesheet row bills at, so the bar is
@@ -287,6 +305,13 @@ class RateLine:
     # that prints no minimums is indistinguishable from one nobody extracted — both
     # are "no floor", which is the honest reading of either.
     floors: "Floors" = Floors()
+    # Whether `rate` is the award's printed figure or one built from its cost
+    # buildup (#144). Defaults to `loaded`, so every pre-existing construction site
+    # keeps describing exactly what it always described.
+    basis: str = BASIS_LOADED
+    # The direct rate a burdened line was built from, kept so the buildup can be
+    # shown without re-deriving it. None on a loaded line, which was never built.
+    direct: Optional[float] = None
 
     def payload(self) -> dict:
         return {
@@ -294,6 +319,8 @@ class RateLine:
             "lcat": self.lcat,
             "rate": round(self.rate, 2),
             "floors": self.floors.payload(),
+            "basis": self.basis,
+            "direct": round(self.direct, 2) if self.direct is not None else None,
         }
 
 
@@ -325,20 +352,52 @@ class Resolution:
     candidates: Tuple[RateLine, ...] = field(default_factory=tuple)
 
 
-def build_index(clins: List[dict]) -> Dict[str, List[RateLine]]:
+def line_rate(lr: dict, clin: Optional[dict] = None, burden=None):
+    """What one rate line bills at, as `(rate, basis)` — or `(None, None)`.
+
+    The one place that answers this question, so the index, the resolver and
+    `rate_table_state` can never disagree about whether a line is priced.
+
+    A printed `loaded_rate` always wins: it is what the award says the hour costs
+    the government, and no derivation may override a stated price. Only when there
+    is none does `burden` get a say — a cost-type award prints an unburdened
+    `direct_rate` per category and its indirect factors separately, which fully
+    determines the rate without ever printing it (#144).
+
+    `burden` is `fn(clin, direct) -> Optional[float]`, passed in rather than
+    computed here: which pools apply, and whether burdening is even the right
+    reading of this CLIN's type, are contract-scoped facts this module cannot see.
+    Returning None means "not on this line", and the line stays unpriced.
+    """
+    loaded = lr.get("loaded_rate")
+    if loaded:
+        return float(loaded), BASIS_LOADED
+    direct = lr.get("direct_rate")
+    if direct and burden:
+        built = burden(clin or {}, float(direct))
+        if built:
+            return float(built), BASIS_BURDENED
+    return None, None
+
+
+def build_index(clins: List[dict], burden=None) -> Dict[str, List[RateLine]]:
     """Normalised LCAT → the rate lines pricing it, across a set of CLINs.
 
     Built from the *active period's* CLINs by the callers, not the whole award: a
     rate line on an un-exercised option year prices nothing today, and offering it
     as the fix for an unmatched LCAT would send the user to a CLIN that has no
     money on it.
+
+    `burden` is `line_rate`'s, and reaches here for the same reason it reaches the
+    resolver: a burdened line is a priced line, so leaving it out of the index would
+    let "priced elsewhere" and the alias picker disagree with what actually billed.
     """
     index: Dict[str, List[RateLine]] = {}
     for c in clins:
         num = str(c.get("clin") or "").strip()
         for lr in c.get("labor_rates") or []:
             name = (lr.get("lcat") or "").strip()
-            rate = lr.get("loaded_rate")
+            rate, basis = line_rate(lr, c, burden)
             if not name or not rate:
                 continue
             key = normalize(name)
@@ -351,6 +410,8 @@ def build_index(clins: List[dict]) -> Dict[str, List[RateLine]]:
                     rate=float(rate),
                     key=key,
                     floors=Floors.from_rate_line(lr),
+                    basis=basis,
+                    direct=lr.get("direct_rate"),
                 )
             )
     return index
@@ -436,18 +497,24 @@ TABLE_UNBURDENED = "unburdened"
 TABLE_ABSENT = "absent"
 
 
-def rate_table_state(clin: dict) -> str:
+def rate_table_state(clin: dict, burden=None) -> str:
     """Why a CLIN's rate table is or isn't usable, as one of the three labels above.
 
-    `resolver` skips any line without a `loaded_rate`, which collapses "we have no
-    rate lines" and "we have rate lines priced a way we can't bill from" into one
+    `resolver` skips any line it cannot price, which collapses "we have no rate
+    lines" and "we have rate lines priced a way we can't bill from" into one
     `source == "blended"`. Both are a rate gap; only one is a missing document, and
     the UI has to tell them apart before it names a fix.
+
+    With a `burden` the second case largely stops existing: a direct-rate line the
+    contract's own indirect pools can carry through IS a line we can bill from, so
+    the table reads `present` (#144). `unburdened` then means what it now says —
+    direct rates and no way to burden them, because no indirect pool was ever
+    stored — and remains the state the app cannot resolve for the user.
     """
     named = [
         lr for lr in (clin.get("labor_rates") or []) if (lr.get("lcat") or "").strip()
     ]
-    if any(lr.get("loaded_rate") for lr in named):
+    if any(line_rate(lr, clin, burden)[0] for lr in named):
         return TABLE_PRESENT
     if named:
         return TABLE_UNBURDENED
@@ -458,6 +525,7 @@ def resolver(
     clin: dict,
     index: Optional[Dict[str, List[RateLine]]] = None,
     aliases: Optional[Dict[str, dict]] = None,
+    burden=None,
 ):
     """Build the LCAT → $/hr resolver for one CLIN.
 
@@ -480,6 +548,12 @@ def resolver(
       3. an alias the user confirmed, which may point at another CLIN's line.
     Alias comes last so a mapping written to fix an early misspelling can't
     silently outrank a rate line the award actually prints today.
+
+    `burden` is `line_rate`'s (#144). With one, a cost-type CLIN's direct-rate lines
+    become priced lines and resolve exactly as printed ones do — same order, same
+    causes, same ambiguity refusal — differing only in the `basis` they carry and
+    the `VIA_BURDENED` they report. Without one the behaviour is bit-for-bit what it
+    was: `loaded_rate` or nothing.
     """
     index = index or {}
     aliases = aliases or {}
@@ -490,14 +564,26 @@ def resolver(
     # The floors beside each printed line, keyed the same way the rate is, so the
     # exact-match path below can carry them without re-reading the table (#66).
     floors_by_exact: Dict[str, Floors] = {}
+    # …and the same for how each rate was arrived at (#144), so an exact match can
+    # say whether it landed on a printed figure or a derived one.
+    line_by_exact: Dict[str, RateLine] = {}
     own_lines: Dict[str, List[RateLine]] = {}
     for lr in table:
         name = (lr.get("lcat") or "").strip()
-        rate = lr.get("loaded_rate")
+        rate, basis = line_rate(lr, clin, burden)
         if not name or not rate:
             continue
         by_exact[name.lower()] = float(rate)
         floors_by_exact[name.lower()] = Floors.from_rate_line(lr)
+        line_by_exact[name.lower()] = RateLine(
+            clin=num,
+            lcat=name,
+            rate=float(rate),
+            key=normalize(name),
+            floors=Floors.from_rate_line(lr),
+            basis=basis,
+            direct=lr.get("direct_rate"),
+        )
         key = normalize(name)
         if key:
             own_lines.setdefault(key, []).append(
@@ -507,6 +593,8 @@ def resolver(
                     rate=float(rate),
                     key=key,
                     floors=Floors.from_rate_line(lr),
+                    basis=basis,
+                    direct=lr.get("direct_rate"),
                 )
             )
 
@@ -521,6 +609,16 @@ def resolver(
             rate=blended, matched=False, via=fallback_via, cause=cause, **kw
         )
 
+    def _matched(line: RateLine, via: str) -> Resolution:
+        # A burdened line says so however it was reached (#144). The route — exact,
+        # normalised, alias — is a matching fact; the basis is a money fact, and the
+        # money fact is the one a reader must not miss, so it wins the one field
+        # both would otherwise want. `line.basis` still carries the route's answer
+        # for anyone who needs both.
+        if line.basis == BASIS_BURDENED:
+            via = VIA_BURDENED
+        return Resolution(rate=line.rate, matched=True, via=via, line=line)
+
     def resolve(lcat: Optional[str]) -> Resolution:
         raw = (lcat or "").strip()
         key = normalize(raw)
@@ -528,17 +626,18 @@ def resolver(
         # 1. exact
         hit = by_exact.get(raw.lower())
         if hit is not None:
-            return Resolution(
-                rate=hit,
-                matched=True,
-                via=VIA_EXACT,
-                line=RateLine(
+            printed = line_by_exact.get(raw.lower())
+            return _matched(
+                RateLine(
                     clin=num,
                     lcat=raw,
                     rate=hit,
                     key=key,
                     floors=floors_by_exact.get(raw.lower(), Floors()),
+                    basis=printed.basis if printed else BASIS_LOADED,
+                    direct=printed.direct if printed else None,
                 ),
+                VIA_EXACT,
             )
 
         # 2. normalised, on this CLIN only. Distinct rates behind one key is the
@@ -546,10 +645,7 @@ def resolver(
         lines = own_lines.get(key) or []
         distinct = {round(ln.rate, 4) for ln in lines}
         if len(distinct) == 1:
-            line = lines[0]
-            return Resolution(
-                rate=line.rate, matched=True, via=VIA_NORMALIZED, line=line
-            )
+            return _matched(lines[0], VIA_NORMALIZED)
         if len(distinct) > 1:
             return _unmatched(AMBIGUOUS, candidates=tuple(lines))
 
@@ -564,16 +660,14 @@ def resolver(
             for line in index.get(target_key, []):
                 if alias["clin"] and line.clin != alias["clin"]:
                     continue
-                return Resolution(
-                    rate=line.rate, matched=True, via=VIA_ALIAS, line=line
-                )
+                return _matched(line, VIA_ALIAS)
 
         # Unmatched: which of the four, in order of how much it explains.
         if not by_exact:
             # Cause A splits on whether a document is actually missing (#139).
             return _unmatched(
                 RATE_TABLE_UNBURDENED
-                if rate_table_state(clin) == TABLE_UNBURDENED
+                if rate_table_state(clin, burden) == TABLE_UNBURDENED
                 else RATE_TABLE_MISSING
             )
         elsewhere = [ln for ln in index.get(key, []) if ln.clin != num]
