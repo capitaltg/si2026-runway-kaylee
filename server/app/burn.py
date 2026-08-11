@@ -1000,7 +1000,15 @@ def _compute_clin(
 
         # What the same hour cost us, down the fallback ladder (#77). Accumulated
         # alongside billings, never mixed into them.
-        cr = cost_model.cost_for(label or None, res.rate, r.get("employee_id"))
+        #
+        # Priced by the rate set covering the week it was worked (#158). A contract
+        # running across October 1 has two years of indirect rates and its hours do
+        # not all cost the same; a plain `CostModel` answers with its own single set
+        # here, so a Level-1 or single-year contract is untouched by this.
+        week_model = (
+            cost_model.for_week(wk) if hasattr(cost_model, "for_week") else cost_model
+        )
+        cr = week_model.cost_for(label or None, res.rate, r.get("employee_id"))
         # Hours the blended fallback actually priced, counted on each side (#144).
         # Counted rather than inferred from `cost_known` or `source`: those are
         # CLIN-level flags answering a near-enough question, and the one asked here

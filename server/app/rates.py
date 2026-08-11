@@ -57,7 +57,9 @@ work on an FFP and a CPFF contract. The buildup here stops at total cost; #80 ea
 the fee and #79 is where the engine starts choosing between cost and revenue.
 """
 
+import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 from . import lcat as lcat_match
@@ -162,6 +164,37 @@ class Buildup:
             "burdened": round(self.burdened, 4),
             "total_cost": round(self.total_cost, 4),
         }
+
+
+def normalize_fiscal_year(label) -> Optional[str]:
+    """A stored fiscal-year label as a comparable four-digit year string.
+
+    The same year reaches us written several ways — ingest files rates under the
+    bare `"2026"` it derives from the award's effective date, a user typing into the
+    rates panel writes `"FY26"`, and a rate agreement PDF may say `"FY 2026"`. They
+    are one year and have to sort and match as one, or a contract ends up holding
+    two rate sets that are really the same set entered twice.
+    """
+    text = str(label or "").strip()
+    if not text:
+        return None
+    m = re.search(r"(\d{4}|\d{2})\s*$", text)
+    if not m:
+        return None
+    digits = m.group(1)
+    # Two digits are a century-abbreviated FY ("FY26"), never a year 26 AD.
+    return digits if len(digits) == 4 else f"20{digits}"
+
+
+def fiscal_year_of(iso_date) -> Optional[str]:
+    """The federal fiscal year an ISO date falls in — FY runs Oct 1 to Sep 30, so
+    October onward belongs to the next calendar year's FY. None when the date is
+    absent or unparseable."""
+    try:
+        d = date.fromisoformat(str(iso_date or "")[:10])
+    except ValueError:
+        return None
+    return str(d.year + 1 if d.month >= 10 else d.year)
 
 
 @dataclass(frozen=True)
@@ -466,3 +499,123 @@ def model_from_rows(
         lcat_direct=lcat_direct,
         employee_direct=employee_direct,
     )
+
+
+@dataclass
+class RateSchedule:
+    """Every fiscal year of rates a contract holds, so an hour is priced by the set
+    that covered the week it was worked (#158).
+
+    The bug this exists to close: the rows were stored with a fiscal year and then
+    folded into one map keyed by pool alone, so a contract holding FY25 and FY26
+    rates priced *all* of its hours with whichever row the merge happened to see
+    last. A contract crossing October 1 — which is most of them, since the federal
+    year turns over mid-period-of-performance — repriced its whole history at one
+    year's overhead.
+
+    Delegates every other attribute to `base`, so callers that legitimately have no
+    charge date (the rates panel, the LCAT buildup, the payload) keep reading a
+    plain `CostModel` and only the row-level pricing loop opts into `for_week`.
+    """
+
+    base: CostModel
+    by_year: Dict[str, CostModel] = field(default_factory=dict)
+
+    def for_year(self, fiscal_year) -> CostModel:
+        """The model covering a fiscal year, with declared fallbacks.
+
+        Order, most defensible first:
+          1. that exact year
+          2. the closest *earlier* year we hold — rates carry forward until they are
+             superseded, which is what a contractor actually bills on while the new
+             year's provisional rates are still being negotiated (FAR 42.704)
+          3. the closest later year, so hours predating the first set we were given
+             are still costed rather than dropping to Level 1
+          4. `base` — undated rows, or none at all
+        """
+        year = normalize_fiscal_year(fiscal_year)
+        if not year or not self.by_year:
+            return self.base
+        if year in self.by_year:
+            return self.by_year[year]
+        earlier = [y for y in self.by_year if y < year]
+        if earlier:
+            return self.by_year[max(earlier)]
+        later = [y for y in self.by_year if y > year]
+        if later:
+            return self.by_year[min(later)]
+        return self.base
+
+    def for_week(self, week_ending) -> CostModel:
+        """The model covering a timesheet week. The week's ending date decides the
+        year: a week straddling September 30 is a rounding question worth one line
+        of arithmetic at most, and splitting it would imply a precision the weekly
+        timesheet grain does not have."""
+        return self.for_year(fiscal_year_of(week_ending))
+
+    @property
+    def fiscal_years(self) -> List[str]:
+        return sorted(self.by_year)
+
+    def __getattr__(self, name):
+        # Only reached for attributes RateSchedule does not define itself, so the
+        # dataclass fields above never come through here. Dunders are refused
+        # outright: forwarding `__deepcopy__` or `__getstate__` to `base` before
+        # `base` is set recurses forever.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return getattr(self.base, name)
+
+
+def schedule_from_rows(
+    pool_rows: List[dict],
+    direct_rows: List[dict],
+    scope: str = "contract",
+) -> RateSchedule:
+    """Build a `RateSchedule` from the full multi-year rows (`db.get_rate_rows`).
+
+    Undated rows are folded into every year rather than kept as a fourth bucket: a
+    rate entered without a year is a statement about the contract, not about 2026,
+    and the alternative — a year's set silently losing the fringe rate the user
+    entered before years existed — is the migration surprise #77 promised to avoid.
+    """
+    pool_rows = list(pool_rows or [])
+    direct_rows = list(direct_rows or [])
+    undated_pools = [
+        r for r in pool_rows if not normalize_fiscal_year(r.get("fiscal_year"))
+    ]
+    undated_direct = [
+        r for r in direct_rows if not normalize_fiscal_year(r.get("fiscal_year"))
+    ]
+    years = sorted(
+        {
+            y
+            for r in pool_rows + direct_rows
+            if (y := normalize_fiscal_year(r.get("fiscal_year")))
+        }
+    )
+    by_year = {
+        y: model_from_rows(
+            undated_pools
+            + [
+                r for r in pool_rows if normalize_fiscal_year(r.get("fiscal_year")) == y
+            ],
+            undated_direct
+            + [
+                r
+                for r in direct_rows
+                if normalize_fiscal_year(r.get("fiscal_year")) == y
+            ],
+            fiscal_year=y,
+            scope=scope,
+        )
+        for y in years
+    }
+    # The base is the newest year on file, which is the one a dateless caller means
+    # — and is deterministic, where "whatever the merge saw last" was not.
+    base = (
+        by_year[years[-1]]
+        if years
+        else model_from_rows(undated_pools, undated_direct, scope=scope)
+    )
+    return RateSchedule(base=base, by_year=by_year)

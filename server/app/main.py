@@ -2,7 +2,6 @@ import asyncio
 import io
 import os
 import re
-from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -188,11 +187,7 @@ def _fiscal_year(iso_date: Optional[str]) -> Optional[str]:
     absent or unparseable: a rate set with no year is still storable (fiscal_year is
     nullable) and is better than one filed under a guessed year, which #87 would
     later true up against the wrong incurred-cost submission."""
-    try:
-        d = date.fromisoformat((iso_date or "")[:10])
-    except ValueError:
-        return None
-    return str(d.year + 1 if d.month >= 10 else d.year)
+    return rates.fiscal_year_of(iso_date)
 
 
 def _store_face_rates(contract_id: int, header: dict) -> Tuple[bool, Optional[str]]:
@@ -1471,8 +1466,13 @@ def sync_timesheets(
     }
 
 
-def _cost_model(contract_id: int) -> rates.CostModel:
-    """The indirect-cost buildup in force for a contract (#77).
+def _cost_model(contract_id: int) -> rates.RateSchedule:
+    """The indirect-cost buildup in force for a contract (#77), every fiscal year of
+    it (#158).
+
+    A `RateSchedule` reads as the single `CostModel` it wraps for every caller that
+    has no charge date, so the return type widened without a call-site sweep; the
+    engine's row loop asks it for the year each week was worked.
 
     Returns an empty model when the user has provided nothing, which is Level 1 and
     a fully supported state: billing burn, PoP clock and every tripwire work off the
@@ -1480,10 +1480,7 @@ def _cost_model(contract_id: int) -> rates.CostModel:
     presenting billing dollars as cost. Nobody is ever required to upload salaries to
     use this app.
     """
-    stored = db.get_rate_model(contract_id)
-    return rates.model_from_rows(
-        stored["pools"], stored["direct_rates"], scope=stored["scope"]
-    )
+    return db.get_rate_schedule(contract_id)
 
 
 @app.get("/api/contracts/{contract_id}/burn")
