@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ingest, confirm, getSources } from "../api.js";
+import { offersCostFeeFields } from "../pricing.js";
 
 const money = (v) =>
   v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -1005,17 +1006,18 @@ const COST_FEE_FIELDS = [
   ["share_ratio", "Share ratio", "text"],
 ];
 
-// Whether to offer the cost/fee fields on a CLIN that has none filled in yet.
-// A firm-fixed-price line has one price and no fee, so ten empty money inputs on
-// it would be noise on the common case; a line whose type says cost-plus or
-// incentive is one where the user has a real reason to type them.
-const COST_TYPE_RE = /^(cp|cr|cost|fpi)/i;
+// Whether to offer the cost/fee fields on a CLIN that has none filled in yet is
+// `offersCostFeeFields`, which reads the type text the way the server's classifier does.
+// A firm-fixed-price line has one price and no fee, so ten empty money inputs on it
+// would be noise on the common case; a line whose type says cost-plus or incentive is
+// one where the user has a real reason to type them — and that is true of "Fixed Price
+// Incentive" however it is spelled, which a prefix match on `fpi` got wrong (#163).
 
 // Cost, fee, and whether they foot to the ceiling. Hidden entirely on a CLIN with
 // nothing to say — an FFP line is not missing these, it does not have them.
 function CostFeeBlock({ cl, idx, editing, setClin }) {
   const filled = COST_FEE_FIELDS.filter(([k]) => cl[k] != null && cl[k] !== "");
-  const show = editing && (filled.length > 0 || COST_TYPE_RE.test(cl.type || ""))
+  const show = editing && (filled.length > 0 || offersCostFeeFields(cl.type))
     ? COST_FEE_FIELDS
     : filled;
   if (show.length === 0 && !cl.confidence_note) return null;
