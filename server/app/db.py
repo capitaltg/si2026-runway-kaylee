@@ -8,6 +8,7 @@ from . import documents
 from . import lcat
 from . import people
 from . import pricing
+from . import rates
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "runway.db")
 
@@ -293,13 +294,18 @@ def _scope_clause(contract_id: Optional[int]) -> tuple:
     return "contract_id = ?", (contract_id,)
 
 
-def get_rate_model(contract_id: Optional[int] = None) -> dict:
-    """The indirect pools + direct rates in force, with the company default filling
-    in per-pool gaps (#77).
+def get_rate_rows(contract_id: Optional[int] = None) -> dict:
+    """Every fiscal year of rates in force, with the company default filling in
+    per-pool gaps *within each year* (#77, #158).
 
     Merged per pool, not all-or-nothing: a company that sets fringe and G&A centrally
     and negotiates overhead per contract is normal, and an all-or-nothing merge would
     make them re-enter the two they had already given us.
+
+    The merge key carries the fiscal year, so FY25's overhead and FY26's overhead
+    both survive it. Collapsing on pool alone — what this did before — meant a
+    contract holding two years kept one arbitrary rate per pool and repriced its
+    whole history with it.
     """
     conn = get_conn()
     pool_rows = conn.execute(
@@ -319,10 +325,17 @@ def get_rate_model(contract_id: Optional[int] = None) -> dict:
     # Contract-specific rows sort first, so the first row seen for a key wins.
     pools = {}
     for r in pool_rows:
-        pools.setdefault(r["pool"], dict(r))
+        pools.setdefault(
+            (rates.normalize_fiscal_year(r["fiscal_year"]), r["pool"]), dict(r)
+        )
     direct_rates = {}
     for r in direct:
-        direct_rates.setdefault((r["employee_id"], r["lcat"]), dict(r))
+        key = (
+            rates.normalize_fiscal_year(r["fiscal_year"]),
+            r["employee_id"],
+            r["lcat"],
+        )
+        direct_rates.setdefault(key, dict(r))
     return {
         "pools": list(pools.values()),
         "direct_rates": list(direct_rates.values()),
@@ -334,6 +347,47 @@ def get_rate_model(contract_id: Optional[int] = None) -> dict:
             else "company"
         ),
     }
+
+
+def get_rate_model(
+    contract_id: Optional[int] = None, fiscal_year: Optional[str] = None
+) -> dict:
+    """One fiscal year's rows, for the callers that hold no charge date — the rates
+    panel, the buildup preview, the save round-trip.
+
+    `fiscal_year=None` means the newest year on file rather than "whichever row the
+    merge saw last" (#158). Undated rows always come along: they were entered as a
+    statement about the contract, not about a year, and dropping them out of the
+    panel the moment a dated set arrives would read as data loss.
+    """
+    all_rows = get_rate_rows(contract_id)
+    years = {
+        y
+        for r in all_rows["pools"] + all_rows["direct_rates"]
+        if (y := rates.normalize_fiscal_year(r.get("fiscal_year")))
+    }
+    want = rates.normalize_fiscal_year(fiscal_year) or (max(years) if years else None)
+
+    def keep(r):
+        y = rates.normalize_fiscal_year(r.get("fiscal_year"))
+        return y is None or y == want
+
+    return {
+        **all_rows,
+        "pools": [r for r in all_rows["pools"] if keep(r)],
+        "direct_rates": [r for r in all_rows["direct_rates"] if keep(r)],
+        "fiscal_year": want,
+        "fiscal_years": sorted(years),
+    }
+
+
+def get_rate_schedule(contract_id: Optional[int] = None):
+    """The multi-year `rates.RateSchedule` — what anything pricing dated hours needs
+    (#158). One call so every consumer resolves years the same way."""
+    all_rows = get_rate_rows(contract_id)
+    return rates.schedule_from_rows(
+        all_rows["pools"], all_rows["direct_rates"], scope=all_rows["scope"]
+    )
 
 
 def save_rate_pools(
