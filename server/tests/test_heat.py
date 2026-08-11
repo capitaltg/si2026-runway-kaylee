@@ -384,6 +384,86 @@ def test_hours_charged_past_the_contracted_estimate_report_the_overrun():
     assert ceiling["exhaust_week"] is None
 
 
+# --- the ceiling counts the hours that actually bill against it (#168) -------
+
+
+def test_a_spelling_the_rate_resolver_folds_still_consumes_the_ceiling():
+    """The defect: matching charges to a category by raw string. A timesheet's
+    "Senior Systems Engineer" already bills at the award's "Sr. Systems Engineer"
+    line — the hours were priced against it and then went missing from the ceiling
+    built from that same line, so a category 80 hours past its estimate reported no
+    finding at all."""
+    contract = _contract(lcat_est=100)
+    contract["clins"][0]["labor_rates"][0]["lcat"] = "Sr. Systems Engineer"
+    rows = [_row("Alex Cole", wk, 45.0, lcat="Senior Systems Engineer") for wk in WEEKS]
+    result, alloc = _run(contract, rows)
+    # The hours are priced on that line — which is what makes their absence a bug.
+    assert alloc["employees"][0]["cells"]["0001"]["rate"] == 100.0
+    (ceiling,) = result["hours_ceilings"]
+    assert ceiling["lcat"] == "Sr. Systems Engineer"
+    assert ceiling["charged_hours"] == 180.0
+    assert ceiling["overrun_hours"] == 80.0
+    assert ceiling["early"] is True
+
+
+def test_hours_priced_through_a_confirmed_alias_consume_the_target_ceiling():
+    """An alias is the only path that moves money to a line the timesheet doesn't
+    name (#64). The hours it prices are hours of that category, so they come off that
+    category's contracted quantity."""
+    contract = _contract(lcat_est=1000)
+    contract["lcat_aliases"] = [
+        {"from": "Cyber Analyst III", "lcat": "Systems Engineer"}
+    ]
+    rows = [_row("Wei Chen", wk, 45.0, lcat="Cyber Analyst III") for wk in WEEKS]
+    result, alloc = _run(contract, rows)
+    assert alloc["employees"][0]["cells"]["0001"]["via"] == "alias"
+    (ceiling,) = result["hours_ceilings"]
+    assert ceiling["lcat"] == "Systems Engineer"
+    assert ceiling["charged_hours"] == 180.0
+
+
+def test_mixed_spellings_on_one_clin_never_report_hours_remaining():
+    """The sharp edge — not a missing row but a wrong number. Two spellings of one
+    category, 320 hours charged against a 200-hour estimate: the raw-string match
+    counted half of them and reported 40 hours *remaining* on a category 120 hours
+    over."""
+    contract = _contract(lcat_est=200)
+    rows = [_row("A One", wk, 40.0, lcat="Systems Engineer") for wk in WEEKS] + [
+        _row("B Two", wk, 40.0, lcat="systems  engineer") for wk in WEEKS
+    ]
+    result, _ = _run(contract, rows)
+    (ceiling,) = result["hours_ceilings"]
+    assert ceiling["charged_hours"] == 320.0
+    assert ceiling["hours_remaining"] == -120.0
+    assert ceiling["overrun_hours"] == 120.0
+    assert ceiling["exhaust_week"] is None
+
+
+def test_two_lines_for_one_category_produce_one_ceiling_not_two():
+    """Folding charges by key means two spellings of a category on one schedule would
+    otherwise both claim the same hours. They are one category, so they are one row,
+    and the award contracted the sum of what it printed."""
+    contract = _contract(lcat_est=100)
+    contract["clins"][0]["labor_rates"].append(
+        {"lcat": "Systems  Engineer", "loaded_rate": 100.0, "est_hours": 300}
+    )
+    result, _ = _run(contract, _rows_for({"Alex Cole": 45.0}))
+    (ceiling,) = result["hours_ceilings"]
+    assert ceiling["contracted_hours"] == 400.0
+    assert ceiling["charged_hours"] == 180.0
+
+
+def test_a_category_nobody_charged_still_reports_nothing():
+    """Normalising what counts must not start inventing rows: a priced category with
+    an estimate and no charges against it is not a finding."""
+    contract = _contract(lcat_est=1000)
+    contract["clins"][0]["labor_rates"].append(
+        {"lcat": "Principal Engineer", "loaded_rate": 250.0, "est_hours": 500}
+    )
+    result, _ = _run(contract, _rows_for({"Alex Cole": 45.0}))
+    assert [c["lcat"] for c in result["hours_ceilings"]] == ["Systems Engineer"]
+
+
 # --- window reporting -------------------------------------------------------
 
 
