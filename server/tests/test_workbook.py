@@ -344,7 +344,7 @@ def test_a_pending_award_fee_period_has_no_amount():
                 "name": "Period 1",
                 "start": "2025-10-01",
                 "end": "2026-03-31",
-                "pool_share": 0.5,
+                "pool_share": 50_000.0,
                 "status": "determined",
                 "determined_amount": 25_000.0,
                 "score": 88,
@@ -353,7 +353,7 @@ def test_a_pending_award_fee_period_has_no_amount():
                 "name": "Period 2",
                 "start": "2026-04-01",
                 "end": "2026-09-30",
-                "pool_share": 0.5,
+                "pool_share": 50_000.0,
                 "status": "pending",
                 "determined_amount": None,
                 "score": None,
@@ -361,11 +361,16 @@ def test_a_pending_award_fee_period_has_no_amount():
         ],
     )
     ws = _wb(burn)["Fee position"]
-    cells = {}
+    cells, shares = {}, {}
     for r in range(1, ws.max_row + 1):
         if ws.cell(r, 1).value in ("Period 1", "Period 2"):
             cells[ws.cell(r, 1).value] = ws.cell(r, 6)
+            shares[ws.cell(r, 1).value] = ws.cell(r, 4)
     assert cells["Period 1"].value == 25_000.0
+    # A pool share is dollars, not a fraction — an unpriced plan splits the pool
+    # evenly (pricing.py:887), and the view fixed the same mis-format in d632fca.
+    assert shares["Period 1"].value == 50_000.0
+    assert '"$"' in shares["Period 1"].number_format
     assert cells["Period 2"].value == W.DASH
     assert "not determined" in cells["Period 2"].comment.text
 

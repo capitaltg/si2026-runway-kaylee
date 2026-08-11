@@ -932,7 +932,7 @@ def _fee_sheet(ws, burn: dict):
                         "Evaluation period",
                         "Start",
                         "End",
-                        "Pool share",
+                        "Pool share ($)",
                         "Status",
                         "Determined amount",
                         "Score",
@@ -948,7 +948,11 @@ def _fee_sheet(ws, burn: dict):
                     _cell(ws, row, 1, p.get("name"))
                     _cell(ws, row, 2, _as_date(p.get("start")), DATE_FMT)
                     _cell(ws, row, 3, _as_date(p.get("end")), DATE_FMT)
-                    _cell(ws, row, 4, p.get("pool_share"), PCT)
+                    # Dollars, not a fraction: an award-fee plan that names its
+                    # periods without pricing them splits the pool evenly
+                    # (`pricing.py:887`), so a share is money. The view fixed the
+                    # same mis-format in d632fca.
+                    _cell(ws, row, 4, p.get("pool_share"), MONEY)
                     _cell(ws, row, 5, p.get("status"))
                     # A pending period's amount is not money yet, and a zero there would
                     # read as a determination of zero — which is a different fact.
