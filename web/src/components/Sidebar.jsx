@@ -56,6 +56,24 @@ const ICONS = {
       <path d="M8 13h8M8 17h5" strokeLinecap="round" />
     </svg>
   ),
+  // A currency mark rather than another chart: `funding` already owns bars-with-a-
+  // trend-line and `flightdeck` owns the gauge, so a third chart in the same column
+  // would read as a variant of one of them. The percent-style `rates` mark is the
+  // precedent for a glyph in this set. The growth arrow is the .55-opacity secondary
+  // layer the rest of the family carries — margin is the part of the dollar this view
+  // is about.
+  profitability: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M11 3.5v17" strokeLinecap="round" />
+      <path d="M15 7H9.2a2.9 2.9 0 000 5.8h3.9a2.9 2.9 0 010 5.8H7.4" strokeLinecap="round" />
+      <path
+        d="M16.8 9.8L20.5 6M20.5 6h-2.8M20.5 6v2.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity=".55"
+      />
+    </svg>
+  ),
   people: (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
       <circle cx="9" cy="8" r="3.2" />
@@ -82,6 +100,10 @@ const CONTRACT_NAV = [
   { key: "expenses", label: "Expenses", sub: "Non-labor CLINs" },
   { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
   { key: "rates", label: "Indirect Rates", sub: "Cost vs. billing (optional)" },
+  // Sits directly after Indirect Rates because that is where its inputs come from:
+  // a Level-1 contract sees this view withhold every margin figure and point back
+  // up one row (#82).
+  { key: "profitability", label: "Profitability", sub: "Cost · revenue · fee" },
   { key: "drafts", label: "Drafts", sub: "Memos · invoices · check-ins" },
 ];
 

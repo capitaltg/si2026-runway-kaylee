@@ -13,6 +13,7 @@ test("supported global and contract routes round-trip", () => {
     ["expenses", 42, "/contract/42/expenses"],
     ["funding", 42, "/contract/42/funding"],
     ["rates", 42, "/contract/42/rates"],
+    ["profitability", 42, "/contract/42/profitability"],
     ["drafts", 42, "/contract/42/drafts"],
   ]) {
     assert.equal(pathFor(route[0], route[1]), route[2]);
