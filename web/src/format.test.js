@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shortDate, stopPhrase, asOfLabel } from "./format.js";
+import { shortDate, stopPhrase, asOfLabel, clauseRisk } from "./format.js";
 
 test("shortDate renders an ISO date without shifting it", () => {
   // The reason this is regex-parsed and not `new Date(s)`: that parses a bare ISO
@@ -89,4 +89,71 @@ test("asOfLabel still labels a sync whose age is unknown", () => {
   // `data_age_days` absent but `as_of` present: name the date, claim nothing about
   // how old it is.
   assert.equal(asOfLabel({ as_of: "2026-04-10" }), "as of 10 Apr 26");
+});
+
+// ── #81 part 4: the fee-erosion pill ────────────────────────────────────────────
+
+test("fee_eroding is amber, and says so with the fee that is left", async () => {
+  const { pill, statusColor } = await import("./format.js");
+
+  // Amber, beside the funding states — not a red. Every red on a cost-type CLIN names
+  // a funding limit, and this one names the fee: the funded dollars are not at risk,
+  // the company's profit is. Green was the bug: before #81 the backend had no state
+  // for this, so a CPFF CLIN eating its fee read "On pace".
+  assert.equal(statusColor("fee_eroding"), "var(--warn)");
+  assert.equal(pill("fee_eroding").label, "Fee eroding");
+  assert.equal(pill("fee_eroding").color, "var(--warn)");
+
+  // Sharpened when there is no fee left to erode. Mirrors burn.py's `_pill`, and reads
+  // the card's `fee_exhausted` rather than string-matching the label.
+  assert.equal(pill("fee_eroding", true, false, false, true).label, "Fee exhausted");
+  assert.equal(pill("fee_eroding", true, false, false, true).color, "var(--warn)");
+
+  // The over/funds labels are unaffected by the new argument.
+  assert.equal(pill("over", true, false, false, true).label, "Over ceiling");
+  assert.equal(pill("over", false, false, false, true).label, "Funds short");
+});
+
+// ── #81 part 5: the T&M ceiling price is its own limit ──────────────────────────
+
+test("a ceiling-price limit is named as a price, not as a ceiling", async () => {
+  const { pill, stopPhrase } = await import("./format.js");
+
+  // T&M's ceiling is FAR 16.601(c)(1)'s negotiated not-to-exceed, and the remedy for
+  // breaching it is a ceiling increase under 52.232-7. A cost-type ceiling is estimated
+  // cost plus fee, raised by a mod. The two tripwires looked identical before #81.
+  assert.equal(pill("over", true, false, false, false, true).label, "Over ceiling price");
+  assert.equal(pill("over", true, false, false, false, false).label, "Over ceiling");
+
+  // `stop_reason` mirrors `limited_by`, so the hard-stop phrase names the same limit
+  // the banner does. Unknown reasons still fall through to the ceiling wording.
+  assert.equal(
+    stopPhrase("2026-09-14", "ceiling_price", false),
+    "Charging stops ~14 Sep 26 at the ceiling price",
+  );
+  assert.equal(
+    stopPhrase("2026-09-14", "ceiling", false),
+    "Charging stops ~14 Sep 26 at ceiling",
+  );
+  assert.equal(
+    stopPhrase("2026-09-14", "funding", false),
+    "Charging stops ~14 Sep 26 without a mod",
+  );
+
+  // A funds-exhaustion label is unaffected by the ceiling-price flag: the funded slice
+  // running dry is the same event whatever kind of ceiling sits above it.
+  assert.equal(pill("over", false, false, false, false, true).label, "Funds short");
+  assert.equal(pill("over", true, true, false, false, true).label, "Funds exceeded");
+});
+
+test("a funding-limit warning cites the clause the CLIN is actually under", () => {
+  // -22 is only the incrementally funded cost-reimbursement case (#81). Every other
+  // type used to be warned under it, which named a clause its award doesn't contain.
+  assert.equal(clauseRisk("52.232-22"), "a risk under FAR 52.232-22 (Limitation of Funds)");
+  assert.equal(clauseRisk("52.232-20"), "a risk under FAR 52.232-20 (Limitation of Cost)");
+  assert.match(clauseRisk("52.232-7"), /FAR 52\.232-7 \(Payments under Time-and-Materials/);
+  // Fixed price has no limitation-of-funds mechanic, so there is nothing to cite and
+  // the caller is expected to drop the sentence rather than print a bare number.
+  assert.equal(clauseRisk(null), null);
+  assert.equal(clauseRisk("52.216-8"), null);
 });

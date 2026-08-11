@@ -100,7 +100,11 @@ const sectionLabel = {
 function healthOf(hero) {
   const s = hero?.status;
   if (s === "over") return { label: "At risk", color: "var(--bad)", dot: "var(--bad)" };
-  if (s === "watch") return { label: "Watch closely", color: "var(--warn)", dot: "var(--warn)" };
+  // `fee_eroding` (#81) sits with `watch`: on plan against its funding, losing fee to
+  // the overrun. Without it the health card reads "On plan" green on a contract whose
+  // fee the overrun is eating, which is the blind spot the state exists to close.
+  if (s === "watch" || s === "fee_eroding")
+    return { label: "Watch closely", color: "var(--warn)", dot: "var(--warn)" };
   return { label: "On plan", color: "var(--good)", dot: "var(--good)" };
 }
 

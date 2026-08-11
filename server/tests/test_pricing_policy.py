@@ -382,13 +382,40 @@ def test_pricing_unknown_counts_the_clins_that_could_not_be_typed():
 def _type_blind(payload):
     """The burn payload with everything that legitimately depends on contract type
     removed: the #76 fields themselves, plus `vehicle`, which has always echoed the
-    header text verbatim. What's left must not vary with the type at all."""
-    drop = {"pricing_policy"}
+    header text verbatim. What's left must not vary with the type at all.
+
+    #81 added four more, all of them *vocabulary* rather than arithmetic, and all four
+    are the ticket's actual deliverable on this type — so stripping them here is what
+    keeps the bar meaningful instead of deleting it. What the bar guards, and still
+    guards to the cent, is that no **number** moves on a billings-measured type: every
+    dollar, fraction, week, day and date below is compared unstripped.
+
+      * `funding_clause`  — which clause governs is precisely a fact about the type.
+      * `ceiling_is_price`— T&M's ceiling is a negotiated not-to-exceed (52.232-7);
+                            a cost-type ceiling is estimated cost plus fee.
+      * `limited_by` /    — the *name* of the limit and the copy switched off it.
+        `stop_reason`       T&M resolves to `ceiling_price`, untyped to `ceiling`,
+                            and both point at the identical dollar figure and date.
+      * `status_label`    — the pill's wording. `status` itself is NOT stripped: the
+                            band a CLIN lands in must still be type-blind here.
+
+    If a future ticket wants to add to this list, the question to answer first is
+    whether the key is a word or a quantity. Words belong here; quantities do not."""
+    drop = {
+        "pricing_policy",
+        "funding_clause",
+        "ceiling_is_price",
+        "limited_by",
+        "stop_reason",
+        "status_label",
+    }
+    scrub = lambda d: {k: v for k, v in d.items() if k not in drop}
     return {
         **payload,
-        "clins": [
-            {k: v for k, v in c.items() if k not in drop} for c in payload["clins"]
-        ],
+        "clins": [scrub(c) for c in payload["clins"]],
+        "hero": scrub(payload["hero"]) if payload.get("hero") else payload.get("hero"),
+        "tripwires": [scrub(t) for t in payload["tripwires"]],
+        "funding": [scrub(f) for f in payload["funding"]],
         "contract": {
             k: v
             for k, v in payload["contract"].items()

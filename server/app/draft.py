@@ -16,10 +16,17 @@ DRAFT_DOC_TYPES = {"funding", "invoice", "cdrl"}
 # What narrative each document needs. Numbers are filled on the client, so the
 # model is told to write words only.
 _DOC_GUIDANCE = {
+    # Deliberately not "an incremental-funding request": which FAR clause governs
+    # decides what is being asked for — an obligation of funds (52.232-22), an increase
+    # in estimated cost (52.232-20), or a ceiling increase (52.232-7). The client picks
+    # the clause and writes the ask (#81); this narrative has to fit all three, so it
+    # justifies continued performance without naming the remedy.
     "funding": (
-        "an incremental-funding request memo to the contracting officer: write the "
-        "justification narrative — why continued funding is needed and the impact of "
-        "a lapse."
+        "a funding-limitation notification to the contracting officer: write the "
+        "justification narrative — why continued performance requires the contract's "
+        "funding limit to be raised, and the impact of a lapse. Do not name which "
+        "clause applies or what form the increase should take; that is stated "
+        "separately."
     ),
     "invoice": (
         "an SF-1034 public voucher (invoice): write only a one-sentence cover remark. "

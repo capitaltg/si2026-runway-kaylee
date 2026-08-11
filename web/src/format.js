@@ -29,10 +29,32 @@ export function shortDate(s) {
 export function stopPhrase(stopDate, reason, passed) {
   if (!stopDate) return null;
   if (passed) return `Charging stops today (funds out ${shortDate(stopDate)})`;
-  return reason === "funding"
-    ? `Charging stops ~${shortDate(stopDate)} without a mod`
-    : `Charging stops ~${shortDate(stopDate)} at ceiling`;
+  if (reason === "funding") return `Charging stops ~${shortDate(stopDate)} without a mod`;
+  // `ceiling_price` is T&M's negotiated not-to-exceed (#81 part 5). Saying "at the
+  // ceiling price" rather than "at ceiling" is the difference between a limit that
+  // needs renegotiating under FAR 52.232-7 and a cost estimate that needs a mod.
+  if (reason === "ceiling_price")
+    return `Charging stops ~${shortDate(stopDate)} at the ceiling price`;
+  return `Charging stops ~${shortDate(stopDate)} at ceiling`;
 }
+
+// FAR clause number → its official title. The one home for that mapping, because a
+// clause number is a fact about the award and two copies of it drift. The engine
+// resolves *which* clause governs a given CLIN (#81, `funding_clause`); this only
+// spells out the one it named.
+export const CLAUSE_NAME = {
+  "52.232-22": "Limitation of Funds",
+  "52.232-20": "Limitation of Cost",
+  "52.232-7": "Payments under Time-and-Materials and Labor-Hour Contracts",
+};
+
+// A clause citation for prose that warns about a funding limit — "a risk under FAR
+// 52.232-22 (Limitation of Funds)". Null when the CLIN's policy carries no funding
+// clause at all (fixed price, which has no limitation-of-funds mechanic), so the
+// caller drops the sentence instead of citing a clause that doesn't apply. Never
+// assume -22: it is only the incrementally funded cost-reimbursement case.
+export const clauseRisk = (clause) =>
+  CLAUSE_NAME[clause] ? `a risk under FAR ${clause} (${CLAUSE_NAME[clause]})` : null;
 
 // How stale a sync has to be before the "as of" label also says how old it is.
 // Weekly timekeeping means a healthy contract is always a few days behind, and
@@ -76,6 +98,11 @@ const PILL = {
   // backend has emitted this since #22 but PILL had no entry, so it rendered "—".
   funding: { label: "Funding due", color: "--warn", bg: "--warnBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
+  // Cost past estimated cost, with the fee absorbing it (#81). Amber, beside the
+  // funding states rather than among the reds: it is money the company loses, not a
+  // funding limit, and every red on a cost-type CLIN names a funding limit. `pill()`
+  // sharpens the label to "Fee exhausted" when there is no fee left to erode.
+  fee_eroding: { label: "Fee eroding", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
   under: { label: "Under pace", color: "--warn", bg: "--warnBg" },
   paused: { label: "Paused", color: "--faint", bg: "--panel2" },
@@ -120,11 +147,17 @@ const pillStyle = (p) => ({
 // All three labels above name a funding limit and fixed-price work has none — its red
 // means cost is projected past the price and the fee is gone. Same statuses, different
 // vocabulary, so the pill can never tell an FFP reader their funding ran out.
+// `feeExhausted` sharpens the amber `fee_eroding` label the same way (#81): the state
+// is the same, but "Fee eroding" on a CLIN with none of its fee left understates it by
+// exactly the amount that matters. Read it off the card's `fee_exhausted`, never by
+// string-matching the label.
 export function pill(
   status,
   ceilingBreached = true,
   fundsExceeded = false,
   marginManaged = false,
+  feeExhausted = false,
+  ceilingIsPrice = false,
 ) {
   if (marginManaged) {
     const m = MARGIN_PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
@@ -134,10 +167,17 @@ export function pill(
   const overLabel = fundsExceeded
     ? "Funds exceeded"
     : ceilingBreached
-      ? p.label
+      ? // T&M's ceiling is a negotiated not-to-exceed under FAR 52.232-7, whose remedy
+        // is a ceiling increase — not a cost-plus-fee ceiling raised by a mod (#81).
+        (ceilingIsPrice ? "Over ceiling price" : p.label)
       : "Funds short";
   return {
-    label: status === "over" ? overLabel : p.label,
+    label:
+      status === "over"
+        ? overLabel
+        : status === "fee_eroding" && feeExhausted
+          ? "Fee exhausted"
+          : p.label,
     color: `var(${p.color})`,
     style: pillStyle(p),
   };
@@ -147,7 +187,10 @@ export function pill(
 export const statusColor = (status) =>
   status === "over" || status === "unpriced"
     ? "var(--bad)"
-    : status === "watch" || status === "under" || status === "funding"
+    : status === "watch" ||
+        status === "under" ||
+        status === "funding" ||
+        status === "fee_eroding"
       ? "var(--warn)"
       : "var(--good)";
 
