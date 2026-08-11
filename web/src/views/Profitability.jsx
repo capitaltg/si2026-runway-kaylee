@@ -197,6 +197,10 @@ export default function Profitability({ contractId, setActiveId }) {
   const margin = marginAvailable(burn);
   const tiles = useMemo(() => summary(burn), [burn]);
   const clins = useMemo(() => orderedClins(burn), [burn]);
+  const unsupported = useMemo(
+    () => clins.map((c) => c.pricing_policy).filter((p) => p?.status === "unsupported"),
+    [clins],
+  );
   const fee = useMemo(() => feeClins(burn), [burn]);
   const chain = useMemo(() => rateChain(burn), [burn]);
   const variance = useMemo(() => rateVariance(burn), [burn]);
@@ -238,6 +242,30 @@ export default function Profitability({ contractId, setActiveId }) {
           {contract.piid ? ` · ${contract.piid}` : ""} · cost model level {level}
         </div>
       </div>
+
+      {unsupported.length > 0 && (
+        <div
+          style={{
+            ...panelStyle,
+            marginTop: 14,
+            fontSize: 13,
+            color: "var(--dim)",
+            lineHeight: 1.55,
+            borderColor: "var(--bad)",
+          }}
+        >
+          {unsupported.map((p, i) => (
+            <div key={`${p.notice || "unsupported"}-${i}`}>
+              <strong style={{ color: "var(--bad)" }}>
+                {p.notice || "Contract policy is currently unsupported."}
+              </strong>
+            </div>
+          ))}
+          <div style={{ marginTop: 4 }}>
+            Fees and margins are withheld until a supported contract policy is available.
+          </div>
+        </div>
+      )}
 
       {/* ---- Contract summary --------------------------------------------- */}
       <div
@@ -411,7 +439,11 @@ export default function Profitability({ contractId, setActiveId }) {
                       <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{c.name}</div>
                     </td>
                     <td style={{ ...tdLeft, fontSize: 12.5 }}>
-                      <div>{c.pricing_policy?.label || "Not stated"}</div>
+                      <div>
+                        {c.pricing_policy?.status === "unsupported"
+                          ? c.pricing_policy.notice || "Unsupported contract policy"
+                          : c.pricing_policy?.label || "Not stated"}
+                      </div>
                       <div style={{ fontSize: 11, color: "var(--faint)" }}>
                         measured in {measuredIn(c)}
                       </div>

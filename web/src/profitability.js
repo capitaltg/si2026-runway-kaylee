@@ -85,6 +85,11 @@ const PASS_THROUGH =
 // bug. Cost keeps its own gate, so a level-1 T&M contract reads exactly as it did.
 export function summary(burn) {
   const t = burn?.totals || {};
+  const unsupported = (burn?.clins || [])
+    .map((c) => c?.pricing_policy)
+    .find((p) => p?.status === "unsupported");
+  const unsupportedNotice =
+    unsupported?.notice || "Contract policy is currently unsupported.";
   const margin = marginAvailable(burn);
   // The gate is the engine's cost truth, not the rate ladder's tier (#152): a total
   // cost that is part buildup and part billing stand-in is not a contract cost, and a
@@ -100,7 +105,9 @@ export function summary(burn) {
     // fixes and only one of them is a fix at all: supplying direct rates will not
     // unlock a fee that has no recognised revenue underneath it, so sending a user to
     // the rates form on a fixed-price contract wastes the trip twice over.
-    fee: !revenueKnown
+    fee: unsupported
+      ? withheld(unsupportedNotice)
+      : !revenueKnown
       ? withheld(PRICE_NOT_REVENUE_FEE)
       : !costKnown
         ? withheld(margin ? PARTIAL_FEE : LEVEL_1_FEE)
@@ -111,7 +118,9 @@ export function summary(burn) {
     // margin per CLIN, not per contract. Same definition as `margin_pct` — fee over
     // revenue — so the two reconcile; guarded on revenue so a contract with no
     // recognised revenue yet reports nothing instead of dividing by zero.
-    margin: !revenueKnown
+    margin: unsupported
+      ? withheld(unsupportedNotice)
+      : !revenueKnown
       ? withheld(PRICE_NOT_REVENUE)
       : !costKnown
         ? withheld(costWhy)
@@ -125,6 +134,10 @@ export function summary(burn) {
 // mixed award can price one line fully and leave another's fee terms unstated, and
 // collapsing that to a contract-level flag would withhold a fee that is actually known.
 export function clinFigures(clin, margin) {
+  const policy = clin?.pricing_policy || {};
+  const unsupported = policy.status === "unsupported";
+  const unsupportedNotice =
+    policy.notice || "Contract policy is currently unsupported.";
   // Non-labor cards carry no `cost` / `revenue` / `fee_earned` keys at all — they are
   // logged actuals, not priced hours, so the engine reports one figure (`spent`) and
   // the contract totals count it as both cost and revenue to keep
@@ -139,8 +152,8 @@ export function clinFigures(clin, margin) {
     return {
       revenue: fact(spent),
       cost: fact(spent),
-      fee: withheld(PASS_THROUGH),
-      margin: withheld(PASS_THROUGH),
+      fee: withheld(unsupported ? unsupportedNotice : PASS_THROUGH),
+      margin: withheld(unsupported ? unsupportedNotice : PASS_THROUGH),
     };
   }
   // This CLIN's own cost truth, never the contract's (#152). A mixed award prices one
@@ -154,6 +167,14 @@ export function clinFigures(clin, margin) {
   // to it recognises revenue every week and must keep printing it.
   const revenueKnown = clinRevenueKnown(clin);
   const costWhy = margin ? COST_IS_STANDIN : LEVEL_1_COST;
+  if (unsupported) {
+    return {
+      revenue: revenueKnown ? fact(clin.revenue ?? 0) : withheld(PRICE_NOT_REVENUE_CLIN),
+      cost: costKnown ? fact(clin.cost ?? 0) : withheld(costWhy),
+      fee: withheld(unsupportedNotice),
+      margin: withheld(unsupportedNotice),
+    };
+  }
   return {
     revenue: revenueKnown ? fact(clin.revenue ?? 0) : withheld(PRICE_NOT_REVENUE_CLIN),
     cost: costKnown ? fact(clin.cost ?? 0) : withheld(costWhy),

@@ -97,6 +97,7 @@ PARTIAL_FEE = (
     "stand-in."
 )
 NO_REVENUE_CLIN = "No revenue recognised on this CLIN yet."
+UNSUPPORTED_POLICY = "Contract policy is currently unsupported."
 PRICE_NOT_REVENUE = (
     "Fixed-price work earns its price on delivery, and Runway has no milestone or "
     "delivery input — so a contract total counting that price as revenue would report "
@@ -216,13 +217,16 @@ def clin_figures(clin: dict, margin: bool) -> dict:
     fallback, and a contract-wide unlock would print the fallback line's billings under
     a cost heading.
     """
+    policy = clin.get("pricing_policy") or {}
+    unsupported = policy.get("status") == "unsupported"
+    unsupported_notice = policy.get("notice") or UNSUPPORTED_POLICY
     if not clin.get("is_labor"):
         spent = clin.get("spent") or 0
         return {
             "revenue": fact(spent),
             "cost": fact(spent),
-            "fee": withheld(PASS_THROUGH),
-            "margin": withheld(PASS_THROUGH),
+            "fee": withheld(unsupported_notice if unsupported else PASS_THROUGH),
+            "margin": withheld(unsupported_notice if unsupported else PASS_THROUGH),
         }
     cost_known = clin.get("cost_known") is True
     # Per CLIN, never off the contract flag: on a mixed award the T&M line beside a
@@ -230,6 +234,17 @@ def clin_figures(clin: dict, margin: bool) -> dict:
     revenue_known = clin.get("revenue_known") is True
     cost_why = COST_IS_STANDIN if margin else LEVEL_1_COST
     margin_pct = clin.get("margin_pct")
+    if unsupported:
+        return {
+            "revenue": (
+                fact(clin.get("revenue") or 0)
+                if revenue_known
+                else withheld(PRICE_NOT_REVENUE_CLIN)
+            ),
+            "cost": fact(clin.get("cost") or 0) if cost_known else withheld(cost_why),
+            "fee": withheld(unsupported_notice),
+            "margin": withheld(unsupported_notice),
+        }
     return {
         "revenue": (
             fact(clin.get("revenue") or 0)
@@ -410,7 +425,9 @@ def _contract_type(burn: dict) -> str:
     labels = []
     for c in ordered_clins(burn):
         p = c.get("pricing_policy") or {}
-        label = p.get("label") if p.get("known") else None
+        label = "Unsupported" if p.get("status") == "unsupported" else (
+            p.get("label") if p.get("known") else None
+        )
         if label and label not in labels:
             labels.append(label)
     if not labels:
@@ -463,7 +480,18 @@ def _clin_sheet(ws, burn: dict, margin: bool) -> dict:
         policy = c.get("pricing_policy") or {}
         _cell(ws, row, 1, c.get("code") or c.get("id"))
         _cell(ws, row, 2, c.get("name"))
-        _cell(ws, row, 3, policy.get("label") if policy.get("known") else "Not stated")
+        policy_cell = _cell(
+            ws,
+            row,
+            3,
+            "Unsupported"
+            if policy.get("status") == "unsupported"
+            else policy.get("label") if policy.get("known") else "Not stated",
+        )
+        if policy.get("status") == "unsupported":
+            policy_cell.comment = Comment(
+                policy.get("notice") or UNSUPPORTED_POLICY, "Runway"
+            )
         _cell(
             ws,
             row,

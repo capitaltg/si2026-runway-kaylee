@@ -68,6 +68,27 @@ test("a known cost model with unstated fee terms withholds the fee but keeps the
   assert.match(s.fee.withheld, /no fee figures/);
 });
 
+test("an unsupported contract policy names the refusal and withholds fee and margin", () => {
+  const notice = "Contract policy 'Cost-No-Fee' is currently unsupported.";
+  const burn = level(2, true);
+  burn.clins = [
+    {
+      is_labor: true,
+      pricing_policy: { status: "unsupported", notice },
+      revenue_known: true,
+      cost_known: true,
+      revenue: 500000,
+      cost: 400000,
+      fee_known: false,
+      margin_pct: null,
+    },
+  ];
+  assert.equal(summary(burn).fee.withheld, notice);
+  assert.equal(summary(burn).margin.withheld, notice);
+  assert.equal(clinFigures(burn.clins[0], true).fee.withheld, notice);
+  assert.equal(clinFigures(burn.clins[0], true).margin.withheld, notice);
+});
+
 test("a CLIN whose own fee terms are unstated withholds only its fee, not the contract's", () => {
   const priced = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
   const unpriced = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 450000, fee_earned: 50000, fee_known: false, margin_pct: 0.1 };

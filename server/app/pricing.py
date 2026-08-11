@@ -31,9 +31,9 @@ the same arithmetic.
 Two rules this module exists to enforce:
 
 **Normalise, never guess.** Extraction reads free text off a PDF, so "CPFF",
-"Cost Plus Fixed Fee", "CPFF (Completion)", "COST-PLUS-FIXED-FEE" and "CR" are one
-policy and have to resolve identically. Text that isn't in the synonym table
-resolves to `UNKNOWN` — it never gets rounded to the nearest plausible type.
+"Cost Plus Fixed Fee", "CPFF (Completion)" and "COST-PLUS-FIXED-FEE" are one
+policy and have to resolve identically. Ambiguous labels such as bare "CR" resolve
+to an explicit unsupported state rather than a guessed fee-bearing type.
 
 **`unknown` is a first-class value, not a default.** It carries *today's* engine
 behaviour (see `UNKNOWN` below) so an unlabelled award's numbers cannot move, and
@@ -118,7 +118,7 @@ class PricingPolicy:
     source: Optional[str] = None
     # The raw text it was read from, verbatim, so the UI can show what we saw.
     raw: Optional[str] = None
-    # "absent" | "unrecognized" | "vehicle" — why this resolved to unknown.
+    # "absent" | "unsupported" | "vehicle" — why this resolved to unknown.
     unknown_reason: Optional[str] = None
     # Type text that was present and unmappable on a *more specific* field than the
     # one that won. Set when a CLIN prints something we can't read and the header
@@ -126,6 +126,8 @@ class PricingPolicy:
     # is still a data-quality problem and must not vanish because the fallback
     # happened to work.
     rejected_type: Optional[str] = None
+    status: str = "supported"
+    notice: Optional[str] = None
 
     @property
     def is_fixed_price(self) -> bool:
@@ -166,6 +168,8 @@ class PricingPolicy:
             "revenue_basis": self.revenue_basis,
             "funding_clauses": list(self.funding_clauses),
             "funding_tripwire": self.funding_tripwire,
+            "status": self.status,
+            "notice": self.notice,
         }
 
 
@@ -274,6 +278,7 @@ UNKNOWN = PricingPolicy(
     funding_clauses=(_LOF,),
     known=False,
     unknown_reason="absent",
+    status="unknown",
 )
 
 POLICIES = {p.code: p for p in (FFP, TM, CPFF, CPIF, CPAF, FPI)}
@@ -329,17 +334,6 @@ _SYNONYMS = {
         "cpff",
         "cost plus fixed fee",
         "costplusfixedfee",
-        # "CR" and bare "cost reimbursable" are what awards print when they mean a
-        # cost contract without naming its fee arrangement; CPFF is by far the most
-        # common of those and is what `schemas.py`'s own example text ("'CR'")
-        # refers to. Same policy, per #76.
-        "cr",
-        "cost reimbursable",
-        "costreimbursable",
-        "cost reimbursement",
-        "costreimbursement",
-        "cost plus",
-        "costplus",
     ),
     "CPIF": (
         "cpif",
@@ -406,7 +400,7 @@ def classify(text: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     """`(code, unknown_reason)`. Exactly one of the two is set.
 
     `unknown_reason` is "absent" for empty text, "vehicle" for an ordering vehicle
-    (IDIQ, BPA, …), and "unrecognized" for text we read but can't map."""
+    (IDIQ, BPA, …), and "unsupported" for text we cannot safely map."""
     if not (text or "").strip():
         return None, "absent"
     k = _key(text)
@@ -414,12 +408,12 @@ def classify(text: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     # read and could not map. Calling that "absent" would report a missing extraction
     # where there was a failed one — a different problem with a different fix.
     if not k:
-        return None, "unrecognized"
+        return None, "unsupported"
     if k in _BY_KEY:
         return _BY_KEY[k], None
     if k in _VEHICLE_KEYS:
         return None, "vehicle"
-    return None, "unrecognized"
+    return None, "unsupported"
 
 
 def policy_for(clin: Optional[dict], header: Optional[dict]) -> PricingPolicy:
@@ -472,7 +466,18 @@ def policy_for(clin: Optional[dict], header: Optional[dict]) -> PricingPolicy:
             raw = (candidate or "").strip()
             break
 
-    return replace(UNKNOWN, unknown_reason=reason, raw=raw, source=None)
+    return replace(
+        UNKNOWN,
+        unknown_reason=reason,
+        raw=raw,
+        source=None,
+        status="unsupported" if reason == "unsupported" else "unknown",
+        notice=(
+            f"Contract policy '{raw}' is currently unsupported."
+            if reason == "unsupported" and raw
+            else None
+        ),
+    )
 
 
 # =============================================================================

@@ -126,6 +126,7 @@ const PILL = {
   // Charged rows the engine couldn't price (#40) — a data gap, flagged red because
   // it masks the burn rather than reporting one.
   unpriced: { label: "Unpriced", color: "--bad", bg: "--badBg" },
+  unsupported: { label: "Unsupported", color: "--bad", bg: "--badBg" },
   tracked: { label: "Tracked", color: "--dim", bg: "--panel2" },
 };
 
@@ -202,7 +203,7 @@ export function pill(
 
 // status → the accent color a runway/exhaustion figure should take.
 export const statusColor = (status) =>
-  status === "over" || status === "unpriced"
+  status === "over" || status === "unpriced" || status === "unsupported"
     ? "var(--bad)"
     : status === "watch" ||
         status === "under" ||
