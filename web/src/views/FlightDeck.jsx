@@ -48,6 +48,27 @@ const btnSecondary = {
   cursor: "pointer",
 };
 
+// The remedy clause a breach sentence ends on, picked from `limited_by` (#81 part 5).
+// Three limits, three different conversations: a funding shortfall is fixed by
+// obligating money (a mod), a T&M ceiling price by renegotiating the not-to-exceed
+// under FAR 52.232-7, and a cost-type ceiling by a mod raising the estimated cost —
+// which the sentence has already named, so that one adds nothing rather than repeating
+// itself. The distinction matters because the tripwires look identical and are not:
+// telling a PM to chase an allotment when the ceiling is what ran out sends them to the
+// wrong person.
+// "ceiling" vs "ceiling price", for the sentences that name the dollar figure. Same
+// reason as `remedyClause`: on T&M the number is a negotiated not-to-exceed, and a
+// reader who has to ask "which ceiling?" is a reader who can't act on it.
+const ceilingWord = (limitedBy) =>
+  limitedBy === "ceiling_price" ? "ceiling price" : "ceiling";
+
+const remedyClause = (limitedBy, connector) =>
+  limitedBy === "funding"
+    ? ` ${connector} more funding is obligated`
+    : limitedBy === "ceiling_price"
+      ? ` ${connector} the ceiling price is raised`
+      : "";
+
 // "Runway suggests" strip that hangs under an alert card. Renders the
 // deterministic heuristic copy immediately; when AI is on it streams a phrased
 // version over the top of it, and silently keeps the heuristic text if the
@@ -687,12 +708,12 @@ export default function FlightDeck({
                     </>
                   ) : (
                     <>
-                      <b>{moneyM(tw.budget)}</b> ceiling
+                      <b>{moneyM(tw.budget)}</b> {ceilingWord(tw.limited_by)}
                     </>
                   )}
                   . That's a realized breach, not a forecast — the cost is at risk
                   today
-                  {tw.limited_by === "funding" ? " until more funding is obligated" : ""}.
+                  {remedyClause(tw.limited_by, "until")}.
                 </>
               ) : (
                 <>
@@ -704,7 +725,8 @@ export default function FlightDeck({
                     </>
                   ) : (
                     <>
-                      blows its {moneyM(tw.budget)} ceiling in week{" "}
+                      blows its {moneyM(tw.budget)} {ceilingWord(tw.limited_by)} in
+                      week{" "}
                       {Math.round(tw.exhaust_week)}
                     </>
                   )}{" "}
@@ -723,27 +745,21 @@ export default function FlightDeck({
                   {!tw.stop_date ? (
                     <>
                       Only {tw.runway_days} days of runway remain
-                      {tw.limited_by === "funding"
-                        ? " unless more funding is obligated"
-                        : ""}
+                      {remedyClause(tw.limited_by, "unless")}
                       .
                     </>
                   ) : tw.stop_date_passed ? (
                     <>
                       That money is already spent through — it ran out around{" "}
                       {shortDate(tw.stop_date)}, so charging should stop <b>today</b>
-                      {tw.limited_by === "funding"
-                        ? " until more funding is obligated"
-                        : ""}
+                      {remedyClause(tw.limited_by, "until")}
                       .
                     </>
                   ) : (
                     <>
                       Only {tw.runway_days} days of runway remain, so charging stops
                       around <b>{shortDate(tw.stop_date)}</b>
-                      {tw.limited_by === "funding"
-                        ? " unless more funding is obligated"
-                        : ""}
+                      {remedyClause(tw.limited_by, "unless")}
                       .
                     </>
                   )}
@@ -1563,7 +1579,14 @@ export default function FlightDeck({
           // card with odd numbers in it — the figures below are a different question.
           const mm = !!c.margin_managed;
           const pos = c.margin_position;
-          const p = pill(c.status, c.ceiling_breached !== false, !!c.funds_exceeded, mm);
+          const p = pill(
+            c.status,
+            c.ceiling_breached !== false,
+            !!c.funds_exceeded,
+            mm,
+            !!c.fee_exhausted,
+            !!c.ceiling_is_price,
+          );
           // Colour off the *binding* budget, not the ceiling (#39). A CLIN at 40% of
           // its ceiling but 89% of its funded slice is nearly out of money, and the
           // pill already says so — a cool bar next to a red pill reads as a bug.

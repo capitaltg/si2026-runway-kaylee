@@ -29,9 +29,13 @@ export function shortDate(s) {
 export function stopPhrase(stopDate, reason, passed) {
   if (!stopDate) return null;
   if (passed) return `Charging stops today (funds out ${shortDate(stopDate)})`;
-  return reason === "funding"
-    ? `Charging stops ~${shortDate(stopDate)} without a mod`
-    : `Charging stops ~${shortDate(stopDate)} at ceiling`;
+  if (reason === "funding") return `Charging stops ~${shortDate(stopDate)} without a mod`;
+  // `ceiling_price` is T&M's negotiated not-to-exceed (#81 part 5). Saying "at the
+  // ceiling price" rather than "at ceiling" is the difference between a limit that
+  // needs renegotiating under FAR 52.232-7 and a cost estimate that needs a mod.
+  if (reason === "ceiling_price")
+    return `Charging stops ~${shortDate(stopDate)} at the ceiling price`;
+  return `Charging stops ~${shortDate(stopDate)} at ceiling`;
 }
 
 // How stale a sync has to be before the "as of" label also says how old it is.
@@ -135,6 +139,7 @@ export function pill(
   fundsExceeded = false,
   marginManaged = false,
   feeExhausted = false,
+  ceilingIsPrice = false,
 ) {
   if (marginManaged) {
     const m = MARGIN_PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
@@ -144,7 +149,9 @@ export function pill(
   const overLabel = fundsExceeded
     ? "Funds exceeded"
     : ceilingBreached
-      ? p.label
+      ? // T&M's ceiling is a negotiated not-to-exceed under FAR 52.232-7, whose remedy
+        // is a ceiling increase — not a cost-plus-fee ceiling raised by a mod (#81).
+        (ceilingIsPrice ? "Over ceiling price" : p.label)
       : "Funds short";
   return {
     label:

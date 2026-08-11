@@ -384,12 +384,31 @@ def _type_blind(payload):
     removed: the #76 fields themselves, plus `vehicle`, which has always echoed the
     header text verbatim. What's left must not vary with the type at all.
 
-    `funding_clause` joined the list in #81. It is a citation, not a number — which
-    clause governs is precisely a fact about the type — and it rides several surfaces,
-    so the strip follows it onto the hero and the tripwire lists. Keeping it inside
-    this helper rather than relaxing the assertion is the point: the bar below still
-    holds that no *number* moves on a billings-measured type."""
-    drop = {"pricing_policy", "funding_clause"}
+    #81 added four more, all of them *vocabulary* rather than arithmetic, and all four
+    are the ticket's actual deliverable on this type — so stripping them here is what
+    keeps the bar meaningful instead of deleting it. What the bar guards, and still
+    guards to the cent, is that no **number** moves on a billings-measured type: every
+    dollar, fraction, week, day and date below is compared unstripped.
+
+      * `funding_clause`  — which clause governs is precisely a fact about the type.
+      * `ceiling_is_price`— T&M's ceiling is a negotiated not-to-exceed (52.232-7);
+                            a cost-type ceiling is estimated cost plus fee.
+      * `limited_by` /    — the *name* of the limit and the copy switched off it.
+        `stop_reason`       T&M resolves to `ceiling_price`, untyped to `ceiling`,
+                            and both point at the identical dollar figure and date.
+      * `status_label`    — the pill's wording. `status` itself is NOT stripped: the
+                            band a CLIN lands in must still be type-blind here.
+
+    If a future ticket wants to add to this list, the question to answer first is
+    whether the key is a word or a quantity. Words belong here; quantities do not."""
+    drop = {
+        "pricing_policy",
+        "funding_clause",
+        "ceiling_is_price",
+        "limited_by",
+        "stop_reason",
+        "status_label",
+    }
     scrub = lambda d: {k: v for k, v in d.items() if k not in drop}
     return {
         **payload,

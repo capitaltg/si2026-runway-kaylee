@@ -567,12 +567,32 @@ def _funded_shortfall_status(
     return "over"
 
 
+def _limited_by(incrementally_funded: bool, ceiling_is_price: bool) -> str:
+    """Which limit runs out first, in the vocabulary every banner switches on.
+
+    `funding` whenever the CLIN is incrementally funded — the funded slice can never
+    exceed the ceiling, so obligated money is always what runs dry first, and that is
+    already exactly what `budget` is. Otherwise the terminal limit is the ceiling, and
+    `ceiling_price` distinguishes the T&M kind (#81 part 5): a negotiated not-to-exceed
+    under FAR 52.232-7, whose remedy is a ceiling increase, from a cost-type ceiling of
+    estimated cost plus fee, whose remedy is a mod raising the estimate.
+
+    Third value added rather than a parallel flag because every consumer already reads
+    this one, and all of them are written as `=== "funding" ? … : ceiling-copy` — so
+    `ceiling_price` falls through to the ceiling wording it is a specialisation of, and
+    only the surfaces that want to say something sharper have to change."""
+    if incrementally_funded:
+        return "funding"
+    return "ceiling_price" if ceiling_is_price else "ceiling"
+
+
 def _pill(
     status: str,
     ceiling_breached: bool = True,
     funds_exceeded: bool = False,
     margin_managed: bool = False,
     fee_exhausted: bool = False,
+    ceiling_is_price: bool = False,
 ) -> str:
     """Status → pill label. `over` names whichever limit is actually in jeopardy.
 
@@ -610,7 +630,12 @@ def _pill(
     if status == "over":
         if funds_exceeded:
             return "Funds exceeded"
-        return "Over ceiling" if ceiling_breached else "Funds short"
+        if not ceiling_breached:
+            return "Funds short"
+        # A T&M ceiling is a negotiated not-to-exceed, not estimated cost plus fee
+        # (#81 part 5). Naming it as a price is what tells a reader the remedy is a
+        # ceiling increase under 52.232-7 rather than a mod raising an estimate.
+        return "Over ceiling price" if ceiling_is_price else "Over ceiling"
     if status == "fee_eroding":
         # Two labels for one state, because "Fee eroding" on a CLIN whose fee is
         # entirely gone understates it by exactly the amount that matters. Both stay
@@ -981,6 +1006,23 @@ def _compute_clin(
     # margin position is reported in their place.
     margin_managed = policy.funding_tripwire == "none"
 
+    # The third row of the same declaration, and until #81 part 5 it was consumed
+    # nowhere: `funding_tripwire == "at_ceiling"` means the reportable limit on this
+    # type is the **ceiling price** (FAR 16.601(c)(1) — a not-to-exceed the contractor
+    # exceeds at its own risk), governed by 52.232-7 rather than by a limitation-of-
+    # funds clause. T&M is the type that says it.
+    #
+    # Read narrowly, and deliberately so: it does *not* mean the funded slice stops
+    # mattering. An incrementally funded T&M CLIN cannot bill dollars nobody obligated,
+    # so the obligation is still the limit that runs out first and still the one the
+    # runway is measured against. What changes is that a *ceiling* breach here is a
+    # different event from a cost-type ceiling breach — a cost-type ceiling is estimated
+    # cost plus fee and the remedy is a mod raising it, while this one is a negotiated
+    # not-to-exceed and the remedy is a ceiling increase. Same statuses, different
+    # limit, so it gets its own `limited_by` value and its own copy (#79 did the same
+    # thing for fixed-price wording rather than inventing statuses).
+    ceiling_is_price = policy.funding_tripwire == "at_ceiling"
+
     # Forward weekly pace = mean weekly spend over the most recent PACE_WEEKS weeks
     # that actually have charges. Steadier than a single noisy week. Measured in the
     # same quantity as `spent`, so `remaining / weekly` stays dimensionally honest.
@@ -1331,7 +1373,7 @@ def _compute_clin(
         # already exactly what `budget` is. So "the earlier of the two dates" and
         # `_pill`'s realized-over-forecast precedence agree here by construction.
         # Mirrors the `limited_by` on the tripwire lists so the copy can match.
-        stop_reason = "funding" if incrementally_funded else "ceiling"
+        stop_reason = _limited_by(incrementally_funded, ceiling_is_price)
         # Zero counts as passed: the wall is today, and "stops today" is the honest
         # copy for both that and a date already behind us.
         stop_date_passed = stop_days <= 0
@@ -1398,6 +1440,11 @@ def _compute_clin(
         # those decide in dollars, this is a pure lookup, and handing them a clause
         # invites a threshold to be derived from it there instead of from the policy.
         "funding_clause": funding_clause,
+        # Whether this CLIN's terminal limit is a negotiated not-to-exceed rather than a
+        # cost-plus-fee ceiling (#81 part 5) — the T&M case, where the remedy for a
+        # breach is a ceiling increase and the clause governing it is 52.232-7. Carried
+        # so the tripwire rows can resolve `limited_by` without re-reading the policy.
+        "ceiling_is_price": ceiling_is_price,
         # Funding-pace read (#22): obligated vs elapsed-clock fraction, whether
         # funding is keeping pace, and whether a mod is flagged outstanding.
         "funded_frac": round(funded_frac, 4),
@@ -1445,7 +1492,12 @@ def _compute_clin(
         "stop_date_passed": stop_date_passed,
         "status": status,
         "status_label": _pill(
-            status, ceiling_breached, funds_exceeded, margin_managed, fee_exhausted
+            status,
+            ceiling_breached,
+            funds_exceeded,
+            margin_managed,
+            fee_exhausted,
+            ceiling_is_price,
         ),
         # Whether the fee is fully absorbed rather than merely eroding (#81). Carried
         # because `status` alone can't tell the two apart and the pill's own wording is
@@ -1968,6 +2020,7 @@ def compute(
         else:
             funding_keeps_pace = clin_funded_frac >= elapsed_frac - _FUND_LAG_SLACK
         nl_policy = policy_of(c)
+        nl_ceiling_is_price = nl_policy.funding_tripwire == "at_ceiling"
         status = _nl_status(spent, budget, ceiling, incrementally_funded)
         nl_funds_exceeded = _funds_exceeded(
             spent, budget, ceiling, incrementally_funded
@@ -2050,7 +2103,10 @@ def compute(
                 "elapsed_frac": round(elapsed_frac, 4),
                 "funding_keeps_pace": funding_keeps_pace,
                 "mod_in_progress": bool(mod_in_progress),
-                "limited_by": "funding" if incrementally_funded else "ceiling",
+                # A travel/ODC CLIN on a T&M line carries the same not-to-exceed its
+                # labor does, so it resolves the same way (#81 part 5).
+                "ceiling_is_price": nl_ceiling_is_price,
+                "limited_by": _limited_by(incrementally_funded, nl_ceiling_is_price),
             }
         )
 
@@ -2106,7 +2162,7 @@ def compute(
             # What the CLIN runs out of first: its funded dollars (incremental
             # funding) or the full ceiling. Drives whether the UI says "funding
             # runs out" vs "blows the ceiling".
-            "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+            "limited_by": _limited_by(c["incrementally_funded"], c["ceiling_is_price"]),
             # And the clause that governs the limit `limited_by` names (#81), so a
             # banner or a letter built from this row cites what actually applies
             # instead of assuming -22. None where the type has no funding clause.
@@ -2210,7 +2266,7 @@ def compute(
             "projected_unspent": round(
                 max(0.0, c["budget"] - (c["spent"] + c["weekly"] * weeks_remaining)), 2
             ),
-            "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+            "limited_by": _limited_by(c["incrementally_funded"], c["ceiling_is_price"]),
         }
         for c in computed
         # Fixed-price CLINs can't reach `under` (their margin bands don't emit it), so
@@ -2444,8 +2500,8 @@ def compute(
                 "days": worst["runway_days"],
                 "clin": worst["code"],
                 "status": worst["status"],
-                "limited_by": (
-                    "funding" if worst["incrementally_funded"] else "ceiling"
+                "limited_by": _limited_by(
+                    worst["incrementally_funded"], worst["ceiling_is_price"]
                 ),
                 # The clause governing the hero's limit (#81).
                 "funding_clause": worst["funding_clause"],

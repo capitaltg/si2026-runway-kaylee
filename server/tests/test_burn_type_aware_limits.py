@@ -427,3 +427,117 @@ def test_fee_erosion_moves_no_funding_figure():
         "pct_budget",
     ):
         assert eroding[key] == no_terms[key], key
+
+
+# ── Part 5: the T&M ceiling price is its own limit ───────────────────────────────
+#
+# `funding_tripwire == "at_ceiling"` has been on the TM policy since #76 and was read
+# by nothing — only `== "none"` (fixed price) was ever consulted. It declares that the
+# reportable limit on this type is the **ceiling price**: FAR 16.601(c)(1)'s
+# not-to-exceed, governed by 52.232-7, whose remedy is a ceiling increase.
+#
+# Read narrowly on purpose. It does *not* mean the funded slice stops mattering — an
+# incrementally funded T&M CLIN cannot bill dollars nobody obligated, so the obligation
+# is still what runs out first and still what the runway measures against. What it means
+# is that a T&M *ceiling* breach is a different event from a cost-type one, and until now
+# the two were indistinguishable in the payload.
+
+
+def _tm_card(obligated=_CEILING, weeks=40):
+    p = burn.compute(
+        _contract(header_type="T&M", obligated=obligated), _rows(weeks=weeks)
+    )
+    return p["clins"][0], p
+
+
+def test_a_tm_ceiling_breach_names_the_ceiling_price():
+    # Fully funded, so the ceiling is the terminal limit and the breach is a ceiling
+    # breach. Before #81 this said "Over ceiling" — true, but indistinguishable from a
+    # cost-type CLIN blowing estimated cost plus fee, which needs a different remedy
+    # from a different person.
+    c, _ = _tm_card()
+    assert c["ceiling_is_price"] is True
+    assert c["stop_reason"] == "ceiling_price"
+    assert c["status_label"] == "Over ceiling price"
+    assert c["funding_clause"] == "52.232-7"
+
+
+def test_the_cost_type_ceiling_keeps_its_own_wording():
+    # The control. A cost-type ceiling is estimated cost plus fee and stays "ceiling",
+    # so the new value can only ever appear where the ceiling really is a price.
+    c = burn.compute(
+        _contract(header_type="CPFF", obligated=_CEILING), _rows(weeks=40)
+    )["clins"][0]
+    assert c["ceiling_is_price"] is False
+    assert c["stop_reason"] == "ceiling"
+    assert c["status_label"] == "Over ceiling"
+
+
+def test_an_incrementally_funded_tm_clin_still_runs_out_of_money_first():
+    # The line part 5 does not cross. `at_ceiling` is about which limit gets *named*,
+    # not about pretending obligated dollars are unlimited: the funded slice can never
+    # exceed the ceiling, so it is still what runs dry first and still what the runway
+    # is measured against. Reading `at_ceiling` as "measure T&M against the ceiling"
+    # would hand every incrementally funded T&M contract a longer runway than it has
+    # money for — the exact class of falsehood #79 existed to remove.
+    c, _ = _tm_card(obligated=500_000)
+    assert c["ceiling_is_price"] is True
+    assert c["incrementally_funded"] is True
+    assert c["budget"] == 500_000.0
+    assert c["stop_reason"] == "funding"
+
+
+def test_the_tripwire_row_and_the_hero_carry_the_ceiling_price_limit():
+    # The tripwire row is what the banner copy switches on, and the hero is what the
+    # tile does. A row that says `ceiling` sends the reader after a mod raising an
+    # estimate that this contract does not have.
+    c, p = _tm_card()
+    assert c["status"] == "over"
+    assert [t["limited_by"] for t in p["tripwires"]] == ["ceiling_price"]
+    assert p["tripwires"][0]["funding_clause"] == "52.232-7"
+    assert p["hero"]["limited_by"] == "ceiling_price"
+
+
+def test_stop_reason_matches_the_limit_that_produces_the_date():
+    # `stop_reason` on the card and `limited_by` on the row are one derivation, so the
+    # hard-stop phrase and the banner can never name different limits for the same date.
+    c, p = _tm_card()
+    assert c["stop_reason"] == p["tripwires"][0]["limited_by"] == "ceiling_price"
+
+
+def test_the_new_limit_value_moves_no_number():
+    # Same bar as part 1, for the same reason: `ceiling_price` is a *name*. A T&M CLIN
+    # and an untyped one are the same billings-measured read to the cent — the one thing
+    # the pre-#79 engine got right — and the only differences are words.
+    tm, _ = _tm_card()
+    untyped = burn.compute(_contract(obligated=_CEILING), _rows(weeks=40))["clins"][0]
+    assert tm["stop_reason"] != untyped["stop_reason"]
+    assert tm["status"] == untyped["status"]
+    for key in (
+        "budget",
+        "spent",
+        "billings",
+        "remaining",
+        "weekly",
+        "weeks_left",
+        "exhaust_week",
+        "runway_days",
+        "stop_date",
+        "pct",
+        "pct_budget",
+        "funds_exceeded",
+        "ceiling_breached",
+    ):
+        assert tm[key] == untyped[key], key
+
+
+def test_fixed_price_never_reaches_the_ceiling_price_vocabulary():
+    # FFP's ceiling is a firm price it is *owed*, not a limit it may not pass. Its
+    # policy declares `funding_tripwire: "none"`, so `ceiling_is_price` is False and the
+    # margin vocabulary from #79 stands — "Margin exceeded", not "Over ceiling price".
+    c = burn.compute(_contract(header_type="FFP", obligated=_CEILING), _rows(weeks=40))[
+        "clins"
+    ][0]
+    assert c["ceiling_is_price"] is False
+    assert c["margin_managed"] is True
+    assert c["status_label"] == "Margin exceeded"

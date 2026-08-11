@@ -113,3 +113,35 @@ test("fee_eroding is amber, and says so with the fee that is left", async () => 
   assert.equal(pill("over", true, false, false, true).label, "Over ceiling");
   assert.equal(pill("over", false, false, false, true).label, "Funds short");
 });
+
+// ── #81 part 5: the T&M ceiling price is its own limit ──────────────────────────
+
+test("a ceiling-price limit is named as a price, not as a ceiling", async () => {
+  const { pill, stopPhrase } = await import("./format.js");
+
+  // T&M's ceiling is FAR 16.601(c)(1)'s negotiated not-to-exceed, and the remedy for
+  // breaching it is a ceiling increase under 52.232-7. A cost-type ceiling is estimated
+  // cost plus fee, raised by a mod. The two tripwires looked identical before #81.
+  assert.equal(pill("over", true, false, false, false, true).label, "Over ceiling price");
+  assert.equal(pill("over", true, false, false, false, false).label, "Over ceiling");
+
+  // `stop_reason` mirrors `limited_by`, so the hard-stop phrase names the same limit
+  // the banner does. Unknown reasons still fall through to the ceiling wording.
+  assert.equal(
+    stopPhrase("2026-09-14", "ceiling_price", false),
+    "Charging stops ~14 Sep 26 at the ceiling price",
+  );
+  assert.equal(
+    stopPhrase("2026-09-14", "ceiling", false),
+    "Charging stops ~14 Sep 26 at ceiling",
+  );
+  assert.equal(
+    stopPhrase("2026-09-14", "funding", false),
+    "Charging stops ~14 Sep 26 without a mod",
+  );
+
+  // A funds-exhaustion label is unaffected by the ceiling-price flag: the funded slice
+  // running dry is the same event whatever kind of ceiling sits above it.
+  assert.equal(pill("over", false, false, false, false, true).label, "Funds short");
+  assert.equal(pill("over", true, true, false, false, true).label, "Funds exceeded");
+});
