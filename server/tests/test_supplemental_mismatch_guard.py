@@ -217,6 +217,10 @@ def test_allow_mismatch_explicitly_imports_schedule(client, contract, monkeypatc
     assert response.json()["piid_mismatch"] is True
     assert response.json()["clins_updated"] == 1
     assert response.json()["direct_rates_stored"] == 1
+    stored_contract = db.get_contract(contract)
+    assert stored_contract["clins"][0]["labor_rates"][0]["direct_rate"] == 82.0
+    assert db.get_scoped_direct_rates(contract)[0]["rate"] == 82.0
+    assert [doc["filename"] for doc in db.list_documents(contract)] == ["rates.pdf"]
 
 
 def test_allow_mismatch_explicitly_imports_rate_agreement(
@@ -229,3 +233,8 @@ def test_allow_mismatch_explicitly_imports_rate_agreement(
     assert response.status_code == 200
     assert response.json()["piid_mismatch"] is True
     assert response.json()["pools_stored"] == 1
+    pools = db.get_rate_model(contract)["pools"]
+    assert [(pool["contract_id"], pool["pool"], pool["rate"]) for pool in pools] == [
+        (contract, "fringe", 0.268)
+    ]
+    assert [doc["filename"] for doc in db.list_documents(contract)] == ["fpra.pdf"]
