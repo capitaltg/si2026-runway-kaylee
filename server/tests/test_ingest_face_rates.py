@@ -9,6 +9,10 @@ What the face does *not* state is each pool's application base or whether the ra
 are provisional or final, so those are filled with the conventional bases and
 `provisional`. That default is load-bearing: calling a face rate `actual` would let
 #87 skip a year-end true-up that is genuinely owed.
+
+The same exhibit prices each labor category at an unburdened direct rate, and #138
+covers the second half: confirm stores those too, so a cost buildup on the page is
+enough to reach Level 2 without re-uploading the award as a rate schedule.
 """
 
 import os
@@ -127,3 +131,55 @@ def test_an_unparseable_effective_date_still_stores_the_rates(client):
     assert body["indirect_rates_fiscal_year"] is None
     pools = client.get(f"/api/contracts/{body['id']}/rate-model").json()["pools"]
     assert [p["pool"] for p in pools] == ["overhead"]
+
+
+def _with_direct_rates(lines, **header):
+    """An extraction whose CLIN carries a cost buildup — a direct rate per labor
+    category and no loaded rate, which is how a cost-type exhibit prices work."""
+    e = _extraction(**header)
+    e["clins"][0]["labor_rates"] = [
+        {"lcat": name, "direct_rate": rate, "est_hours": 1_000.0}
+        for name, rate in lines
+    ]
+    return e
+
+
+def test_a_cost_buildup_reaches_level_two_at_ingest(client):
+    """#138: confirming the award is the whole ceremony. Before this, the direct
+    rates sat on the CLIN unread and the only way to store them was to re-upload the
+    same PDF as a supplemental rate schedule."""
+    body = client.post(
+        "/api/contracts/confirm",
+        json=_with_direct_rates(
+            [("Senior Software Engineer", 97.63), ("Business Analyst", 61.86)],
+            effective_date="2026-03-02",
+            indirect_fringe=0.272,
+            indirect_overhead=0.449,
+            indirect_gna=0.08,
+        ),
+    ).json()
+    assert body["direct_rates_stored"] == 2
+
+    model = client.get(f"/api/contracts/{body['id']}/rate-model").json()
+    assert {r["lcat"]: r["rate"] for r in model["direct_rates"]} == {
+        "Senior Software Engineer": 97.63,
+        "Business Analyst": 61.86,
+    }
+    # The point of storing them: margin is now a real figure on this contract.
+    assert model["model"]["level"] == rates.LEVEL_CATEGORY_COST
+    assert model["model"]["margin_available"] is True
+
+
+def test_a_loaded_rate_only_award_stores_no_direct_rates(client):
+    """A fixed-price schedule prices the work without disclosing our cost, so there
+    is nothing to store and Level 1 is the correct, undegraded answer."""
+    e = _extraction(effective_date="2026-03-02", indirect_fringe=0.31)
+    e["clins"][0]["labor_rates"] = [
+        {"lcat": "Program Manager", "loaded_rate": 194.00, "est_hours": 500.0}
+    ]
+    body = client.post("/api/contracts/confirm", json=e).json()
+    assert body["direct_rates_stored"] == 0
+    assert (
+        client.get(f"/api/contracts/{body['id']}/rate-model").json()["direct_rates"]
+        == []
+    )

@@ -271,6 +271,14 @@ def confirm(
     cid = db.save_contract(extraction.contract.piid, data)
     stored = db.claim_document(document_id, cid) if document_id is not None else False
     rates_stored, rate_fy = _store_face_rates(cid, data.get("contract") or {})
+    # The other half of the same reading (#138). An award that prints its own cost
+    # buildup states a direct rate per labor category as well as the indirect
+    # factors, and both were extracted — storing only the percentages left the
+    # contract pinned at billing-only and forced the user to re-upload the very PDF
+    # they had just ingested through the supplemental rate-schedule button.
+    direct_stored = _store_schedule_direct_rates(
+        cid, data.get("contract") or {}, data.get("clins") or []
+    )
     return {
         "id": cid,
         "piid": extraction.contract.piid,
@@ -285,6 +293,9 @@ def confirm(
         # than leave the user wondering why the rates view is suddenly non-empty.
         "indirect_rates_stored": rates_stored,
         "indirect_rates_fiscal_year": rate_fy,
+        # Zero on a fixed-price award, which prices the work without disclosing what
+        # it costs us — that is Level 1 by nature, not a failed read.
+        "direct_rates_stored": direct_stored,
     }
 
 
