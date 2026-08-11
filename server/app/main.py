@@ -345,7 +345,11 @@ def _store_schedule_direct_rates(contract_id: int, header: dict, clins: list) ->
 
 
 @app.post("/api/contracts/{contract_id}/rates")
-async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
+async def add_rate_schedule(
+    contract_id: int,
+    file: UploadFile = File(...),
+    allow_mismatch: bool = False,
+):
     """Supplemental import: attach a labor-rate schedule to an already-ingested
     contract. Some award forms print the CLIN summary on the face but carry the
     fully-burdened rates on a separate schedule (e.g. a 'Continuation of SF-1449,
@@ -379,10 +383,21 @@ async def add_rate_schedule(contract_id: int, file: UploadFile = File(...)):
             detail="No labor rate table found in the uploaded schedule.",
         )
 
-    # A schedule usually repeats the contract number; flag (don't block) a
-    # mismatch, since some continuation sheets omit or abbreviate it.
+    # A missing PIID is tolerated because continuation sheets sometimes omit it.
+    # A PIID that is present and belongs to another contract is refused before any
+    # contract, rate, or source-document write unless explicitly reviewed.
     doc_piid = ((parsed.get("contract") or {}).get("piid") or "").strip()
-    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+    existing_piid = (existing.get("piid") or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != existing_piid
+    if piid_mismatch and not allow_mismatch:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Supplemental upload refused: document names {doc_piid}, not "
+                f"{existing_piid}. Retry with ?allow_mismatch=true only after "
+                "reviewing the mismatch."
+            ),
+        )
 
     merged = 0
     for clin in existing.get("clins", []):
@@ -455,7 +470,11 @@ def _agreement_pools(pools) -> list:
 
 
 @app.post("/api/contracts/{contract_id}/rate-agreement")
-async def add_rate_agreement(contract_id: int, file: UploadFile = File(...)):
+async def add_rate_agreement(
+    contract_id: int,
+    file: UploadFile = File(...),
+    allow_mismatch: bool = False,
+):
     """Supplemental import: attach an indirect rate agreement to a contract (#78).
 
     The award face states the three percentages; this document states what they
@@ -507,11 +526,22 @@ async def add_rate_agreement(contract_id: int, file: UploadFile = File(...)):
     stored, status = (
         (final, rates.ACTUAL) if final else (provisional, rates.PROVISIONAL)
     )
-    db.save_rate_pools(contract_id, fy, stored, status)
 
     # A company-wide letter names no contract, so a missing PIID is not a mismatch.
     doc_piid = (parsed.piid or "").strip()
-    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+    existing_piid = (existing.get("piid") or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != existing_piid
+    if piid_mismatch and not allow_mismatch:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Supplemental upload refused: document names {doc_piid}, not "
+                f"{existing_piid}. Retry with ?allow_mismatch=true only after "
+                "reviewing the mismatch."
+            ),
+        )
+
+    db.save_rate_pools(contract_id, fy, stored, status)
 
     document_id, note = _keep_source(
         contract_id,
@@ -1038,7 +1068,11 @@ def _merge_mod(existing: dict, mod: dict) -> dict:
 
 
 @app.post("/api/contracts/{contract_id}/mods")
-async def add_modification(contract_id: int, file: UploadFile = File(...)):
+async def add_modification(
+    contract_id: int,
+    file: UploadFile = File(...),
+    allow_mismatch: bool = False,
+):
     """Ingest one SF-30 modification against an already-ingested contract. The
     dated funding action is folded into the contract's obligation history and
     total_obligated is refreshed, so the burn engine can read funding *pace*
@@ -1069,10 +1103,20 @@ async def add_modification(contract_id: int, file: UploadFile = File(...)):
         if (file.filename or "").lower().endswith(".pdf")
         else data.decode("utf-8", "ignore")
     )
-    # A mod restates the contract number (block 10A); flag (don't block) a
-    # mismatch, since OCR/extraction of that block can be imperfect.
+    # A mod restates the contract number in block 10A. Refuse a different PIID
+    # before merging the action unless the caller explicitly reviewed it.
     doc_piid = (parsed.get("piid") or "").strip()
-    piid_mismatch = bool(doc_piid) and doc_piid != (existing.get("piid") or "").strip()
+    existing_piid = (existing.get("piid") or "").strip()
+    piid_mismatch = bool(doc_piid) and doc_piid != existing_piid
+    if piid_mismatch and not allow_mismatch:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Supplemental upload refused: document names {doc_piid}, not "
+                f"{existing_piid}. Retry with ?allow_mismatch=true only after "
+                "reviewing the mismatch."
+            ),
+        )
 
     summary = _merge_mod(existing, parsed)
     blob = {k: v for k, v in existing.items() if k not in ("id", "piid", "created_at")}

@@ -63,9 +63,10 @@ def _pool(pool, rate, base=None):
     return IndirectPool(pool=pool, rate=rate, base=base)
 
 
-def _upload(client, contract):
+def _upload(client, contract, allow_mismatch=False):
+    query = "?allow_mismatch=true" if allow_mismatch else ""
     return client.post(
-        f"/api/contracts/{contract}/rate-agreement",
+        f"/api/contracts/{contract}/rate-agreement{query}",
         files={"file": ("fpra.pdf", PDF, "application/pdf")},
     )
 
@@ -201,7 +202,7 @@ def test_a_company_wide_letter_names_no_contract_and_is_not_a_mismatch(
     assert _upload(client, contract).json()["piid_mismatch"] is False
 
 
-def test_a_letter_for_another_contract_is_flagged_not_blocked(
+def test_a_letter_for_another_contract_can_be_explicitly_allowed(
     client, contract, monkeypatch
 ):
     _stub(
@@ -210,7 +211,7 @@ def test_a_letter_for_another_contract_is_flagged_not_blocked(
         pools=PROVISIONAL_SET,
         piid="N00019-26-C-9999",
     )
-    body = _upload(client, contract).json()
+    body = _upload(client, contract, allow_mismatch=True).json()
     assert body["piid_mismatch"] is True
     assert body["pools_stored"] == 3
 
