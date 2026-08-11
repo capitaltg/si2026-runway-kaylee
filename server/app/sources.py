@@ -407,6 +407,62 @@ def provenance(rows: list, piid: str) -> dict:
     }
 
 
+def piid_relation(want, got) -> str:
+    """How two PIIDs disagree — `"renumbered"`, `"unrelated"` or `"same"`.
+
+    Which half of a (seed, opts) pairing to blame for a refused batch (#137). A DoD
+    PIID's segments are an issuing office, a fiscal year, an instrument type and a
+    serial, and Fixtura builds the fiscal-year digits off the award's effective date
+    — which `pop_in_progress` moves back a year per preceding option period. So one
+    seed draws `W45983-24-C-1675` as a historical contract and `W45983-25-C-1675` as
+    an in-progress one: same office, same type, same serial, one digit apart.
+
+    That shape is `renumbered`: the batch IS this contract, drawn under different
+    opts, and no value of `?seed=` reconciles it because the serial — the part the
+    seed decides — already agrees. Anything else is `unrelated`: a different serial
+    means a different draw, which is a seed problem.
+
+    Deliberately narrow. Only a same-arity, single-segment fiscal-year difference
+    counts, because the whole value of the verdict is that it sends the user to the
+    one dial that can help; a loose match would send them to the wrong one with the
+    same false confidence #137 is about.
+    """
+    a, b = normalize_piid(want), normalize_piid(got)
+    if not a or not b:
+        return "unrelated"
+    if a == b:
+        return "same"
+    left, right = a.split("-"), b.split("-")
+    if len(left) != len(right) or len(left) < 3:
+        return "unrelated"
+    differing = [i for i, (x, y) in enumerate(zip(left, right)) if x != y]
+    # Segment 1 is the fiscal year in every PIID Fixtura generates.
+    if differing == [1] and left[1].isdigit() and right[1].isdigit():
+        return "renumbered"
+    return "unrelated"
+
+
+def format_opts(opts: dict) -> str:
+    """Generation opts as the `key=value` text `parse_opts` reads back.
+
+    So a refusal can hand the user something pasteable into the review screen's Opts
+    box rather than a Python dict repr they have to translate. Falls back to JSON for
+    a value the short form cannot round-trip (a list, like `lcat_lines`).
+    """
+    if not opts:
+        return "(none)"
+    parts = []
+    for key in sorted(opts):
+        value = opts[key]
+        if isinstance(value, bool):
+            parts.append(f"{key}={'true' if value else 'false'}")
+        elif isinstance(value, (int, float, str)):
+            parts.append(f"{key}={value}")
+        else:
+            return json.dumps(opts, sort_keys=True)
+    return ", ".join(parts)
+
+
 # The five commercial systems we show as placeholders. Real GovCon timesheet /
 # payroll / billing tools, matching the design's vendor set — marked "Not
 # connected" because we have no live integration with them here.
