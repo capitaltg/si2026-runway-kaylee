@@ -74,6 +74,7 @@ money are the same ones the Flight Deck and the matrix already agree on.
 from typing import List, Optional
 
 from . import burn
+from . import lcat as lcat_match
 
 # A person's excess has to clear this many hrs/wk before they are named. Below it
 # the finding is rounding on a four-week window — a single 90-minute long day — and
@@ -231,11 +232,21 @@ def _hours_ceilings(
     Charged hours are the whole active period, not the trailing window — a ceiling is
     consumed cumulatively. The *pace* is the trailing window, because that is what
     forecasts the week it runs out.
+
+    A charge is attributed to a category the way the rest of the app attributes it —
+    on `lcat.normalize`'s key, then a confirmed alias (#64) — never on the raw string.
+    Raw-string equality was the original defect: a timesheet's "Senior Systems
+    Engineer" already bills at an award's "Sr. Systems Engineer" line, so the hours
+    were priced against it while the ceiling built from that same line could not see
+    them. It reported no finding on a category 80 hours past its estimate, and where
+    two spellings shared a CLIN it reported hours *remaining* on a category 120 hours
+    over — a forecast the module exists to withhold.
     """
     out = []
     card_by_id = {c["id"]: c for c in clin_cards}
     recent = set(weeks)
     n_recent = len(recent) or 1
+    aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
 
     for c in burn._period_clins(contract, period):
         if not c.get("is_labor"):
@@ -250,29 +261,57 @@ def _hours_ceilings(
             for line in (c.get("labor_rates") or [])
             if (line.get("lcat") or "").strip() and line.get("est_hours")
         ]
+        # Every category this CLIN prices, priced or not, so a charge that folds onto
+        # one of its own lines is never handed to an alias — the same precedence
+        # `lcat.resolver` uses, where a line the award actually prints outranks a
+        # mapping written to fix an old misspelling.
+        own_keys = {
+            lcat_match.normalize(line.get("lcat"))
+            for line in (c.get("labor_rates") or [])
+            if (line.get("lcat") or "").strip()
+        }
+
+        def charged_key(row) -> str:
+            key = lcat_match.normalize(row.get("labor_category"))
+            if key in own_keys:
+                return key
+            alias = aliases.get(key)
+            # A cross-CLIN alias is deliberately left alone: it moves the *rate* to
+            # another line item's rate line, and whether it should also consume that
+            # line item's contracted quantity is a question about the award, not a
+            # matching bug. Noted rather than guessed.
+            if alias and (not alias["clin"] or alias["clin"] == num):
+                return lcat_match.normalize(alias["lcat"])
+            return key
+
+        keyed_rows = [(r, charged_key(r)) for r in clin_rows]
+
         if lines:
+            # Folded by key, so two spellings of one category on the same schedule
+            # produce one row rather than two that both claim the same charges. Their
+            # estimates sum: the award contracted that many hours of that category,
+            # however many lines it took to print them.
+            merged: dict = {}
+            for line in lines:
+                name = (line["lcat"] or "").strip()
+                key = lcat_match.normalize(name)
+                if key in merged:
+                    merged[key]["contracted"] += float(line["est_hours"])
+                    continue
+                merged[key] = {"lcat": name, "contracted": float(line["est_hours"])}
             targets = [
-                (
-                    (line["lcat"] or "").strip(),
-                    float(line["est_hours"]),
-                    "rate_line",
-                )
-                for line in lines
+                (m["lcat"], key, m["contracted"], "rate_line")
+                for key, m in merged.items()
             ]
         elif c.get("est_hours"):
-            targets = [(None, float(c["est_hours"]), "clin_total")]
+            targets = [(None, None, float(c["est_hours"]), "clin_total")]
         else:
             continue
 
-        for lcat, contracted, source in targets:
+        for lcat, key, contracted, source in targets:
             if contracted <= 0:
                 continue
-            matching = [
-                r
-                for r in clin_rows
-                if lcat is None
-                or (r.get("labor_category") or "").strip().lower() == lcat.lower()
-            ]
+            matching = [r for r, row_key in keyed_rows if key is None or row_key == key]
             if not matching:
                 continue
             charged = sum(burn.billable_hours(r) for r in matching)
