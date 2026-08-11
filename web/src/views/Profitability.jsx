@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getBurn, listContracts } from "../api.js";
 import { money, pct, panelStyle, pill, statusColor } from "../format.js";
 import {
+  awardPoolShareLabel,
   awardPeriods,
   clinFigures,
   feeBasisLabel,
@@ -135,7 +136,7 @@ function AwardPeriods({ award }) {
             <div style={{ fontWeight: 600, minWidth: 96 }}>{p.name}</div>
             <div style={{ color: "var(--dim)", flex: 1, minWidth: 0 }}>
               {p.start && p.end ? `${p.start} → ${p.end}` : "Window not stated"}
-              {p.pool_share != null ? ` · ${pct(p.pool_share)} of pool` : ""}
+              {p.pool_share != null ? ` · ${awardPoolShareLabel(p.pool_share)}` : ""}
               {p.score != null ? ` · score ${p.score}` : ""}
             </div>
             <div style={{ fontFamily: mono }}>

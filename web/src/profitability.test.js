@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  awardPoolShareLabel,
   pricedBy,
   rateChain,
   rateVariance,
@@ -276,13 +277,15 @@ test("an undetermined award-fee period is provisional; a zero determination is a
     periods_determined: 2,
     periods_total: 3,
     periods: [
-      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 0.33 },
-      { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 0.33 },
-      { name: "Period 3", status: "pending", determined_amount: null, pool_share: 0.34 },
+      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 45000 },
+      { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 45000 },
+      { name: "Period 3", status: "pending", determined_amount: null, pool_share: 45000 },
     ],
   };
   const a = awardPeriods(cpaf);
   assert.equal(a.pool, 200000);
+  assert.equal(awardPoolShareLabel(a.periods[0].pool_share), "$45,000 of pool");
+  assert.equal(awardPoolShareLabel(null), "");
   assert.deepEqual(
     a.periods.map((p) => p.provisional),
     [false, false, true],
