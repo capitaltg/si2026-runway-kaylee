@@ -40,7 +40,7 @@ const iconBtn = {
   cursor: "pointer",
 };
 
-export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, toggleAi, onExport, onAskRunway }) {
+export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, toggleAi, onExport, onExportCsv, onAskRunway }) {
   const h = HEADERS[view] || { main: view, sub: "", meta: false };
   const showMeta = h.meta && !!contract;
   const main = h.main || contract?.name || "Runway";
@@ -142,17 +142,24 @@ export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, 
           </div>
         )}
 
+        {/* Two artifacts, not one action with a mode (#86). The workbook is what an
+            accountant reconciles in — seven sheets, live formulas, and figures the
+            engine withheld still withheld. The CSV beside it stays because "give me
+            this grid" is a real use case with a faster path; #86 added the first
+            without removing the second. The workbook needs no loaded contract: with
+            none open it is the portfolio one, which is why only the CSV disables. */}
         <button
           onClick={onExport}
-          disabled={!contract}
-          title={contract ? "Download the loaded burn data as a spreadsheet (CSV)" : "Open a contract first"}
+          title={
+            contract
+              ? "Download the full Excel workbook — summary, CLINs, people, rate buildup, fee position, timesheets, funding"
+              : "Download the portfolio workbook — one row per contract"
+          }
           style={{
             ...iconBtn,
             border: "1px solid var(--good)",
             background: "var(--goodBg)",
             color: "var(--good)",
-            opacity: contract ? 1 : 0.45,
-            cursor: contract ? "pointer" : "not-allowed",
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -161,6 +168,23 @@ export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, 
             <path d="M9 13l2 2M11 15l-2 2M15 13l-2 2M13 15l2 2" strokeLinecap="round" />
           </svg>
           Export to Excel
+        </button>
+
+        <button
+          onClick={onExportCsv}
+          disabled={!contract}
+          title={contract ? "Download this contract's CLIN grid as flat CSV" : "Open a contract first"}
+          style={{
+            ...iconBtn,
+            padding: "0 10px",
+            border: "1px solid var(--border)",
+            background: "var(--panel2)",
+            color: "var(--dim)",
+            opacity: contract ? 1 : 0.45,
+            cursor: contract ? "pointer" : "not-allowed",
+          }}
+        >
+          CSV
         </button>
 
         <button

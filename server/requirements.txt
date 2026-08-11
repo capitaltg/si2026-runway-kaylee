@@ -11,3 +11,6 @@ httpx
 # SF-30 text + AcroForm field reads (app.main._mod_document_text). Present
 # transitively today, but named because the mod ingest imports it directly.
 pypdf
+# Multi-sheet .xlsx export (#86, app.workbook). Writes formulas, number formats and
+# cell comments without an Excel dependency.
+openpyxl
