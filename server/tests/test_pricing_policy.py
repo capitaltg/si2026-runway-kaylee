@@ -127,8 +127,7 @@ def test_cost_reimbursement_picks_its_clause_from_the_funding_state():
 
 def test_every_spelling_of_cpff_resolves_identically():
     # The acceptance criterion, verbatim: case, punctuation, a spelled-out name, a
-    # trailing parenthetical qualifier and the bare "CR" an award prints when it
-    # names a cost contract without naming its fee arrangement.
+    # trailing parenthetical qualifier.
     for text in (
         "CPFF",
         "cpff",
@@ -138,8 +137,6 @@ def test_every_spelling_of_cpff_resolves_identically():
         "CPFF (Completion)",
         "cpff (completion form)",
         "  Cost Plus Fixed Fee  ",
-        "CR",
-        "Cost Reimbursable",
     ):
         assert pricing.normalize_type(text) == "CPFF", text
 
@@ -170,7 +167,7 @@ def test_unreadable_text_is_never_rounded_to_the_nearest_type():
     # apply the wrong pricing rules to every CLIN on the award.
     for text in ("FFP/T&M", "see section B", "Firm", "cost", "12345", "TBD"):
         assert pricing.normalize_type(text) is None, text
-        assert pricing.classify(text)[1] == "unrecognized", text
+        assert pricing.classify(text)[1] == "unsupported", text
 
 
 def test_vehicles_are_not_pricing_types():
@@ -194,7 +191,28 @@ def test_absent_text_is_its_own_reason():
     # Punctuation-only text is a *failed* read, not a missing one — different
     # problem, different fix, so it must not report as absent.
     for text in ("???", "--", "()", "n/a"):
-        assert pricing.classify(text) == (None, "unrecognized"), text
+        assert pricing.classify(text) == (None, "unsupported"), text
+
+
+def test_ambiguous_cost_reimbursement_is_refused_instead_of_guessed_as_cpff():
+    for text in (
+        "CR",
+        "Cost Reimbursement",
+        "Cost-Reimbursement, No-Fee",
+        "COST",
+        "Cost-No-Fee",
+        "Cost Plus per Section H",
+    ):
+        code, reason = pricing.classify(text)
+        assert code is None, text
+        assert reason == "unsupported", text
+
+        policy = pricing.policy_for({"type": text}, {})
+        assert policy.code == "unknown", text
+        assert policy.status == "unsupported", text
+        assert policy.payload()["notice"] == (
+            f"Contract policy '{text}' is currently unsupported."
+        )
 
 
 # --- resolution -------------------------------------------------------------------
@@ -248,10 +266,12 @@ def test_unknown_reports_which_kind_of_unknown_it_is():
         "vehicle",
         "IDIQ",
     )
+    assert vehicle.status == "unknown"
+    assert vehicle.notice is None
     garbage = pricing.policy_for({"clin": "0001", "type": "???"}, {})
     assert (garbage.code, garbage.unknown_reason, garbage.raw) == (
         "unknown",
-        "unrecognized",
+        "unsupported",
         "???",
     )
     # The more specific field's reason wins: a CLIN printing a vehicle name on an
@@ -278,6 +298,8 @@ def test_the_payload_is_json_serialisable_and_complete():
         "revenue_basis",
         "funding_clauses",
         "funding_tripwire",
+        "status",
+        "notice",
     }
 
 
@@ -377,6 +399,18 @@ def test_pricing_unknown_counts_the_clins_that_could_not_be_typed():
     p = burn.compute(_contract(clin_types=("FFP", None, "CPFF")), _rows())
     assert p["contract"]["pricing_unknown"] == 1
     assert _clin(p, "0002")["pricing_policy"]["unknown_reason"] == "absent"
+
+
+def test_unsupported_policy_withholds_profitability_but_keeps_burn():
+    card = burn.compute(_contract(header_type="COST"), _rows())[
+        "clins"
+    ][0]
+    assert card["status"] != "unsupported"
+    assert card["status_label"] != "Unsupported"
+    assert card["pricing_policy"]["status"] == "unsupported"
+    assert card["fee_known"] is False
+    assert card["margin_pct"] is None
+    assert card["runway_days"] is not None
 
 
 def _type_blind(payload):

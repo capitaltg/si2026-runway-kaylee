@@ -420,6 +420,25 @@ def test_no_fee_terms_withholds_rather_than_reporting_zero_fee():
     assert "no fee figures" in cell.comment.text
 
 
+def test_unsupported_policy_is_named_and_withholds_profitability():
+    burn = _burn()
+    notice = "Contract policy 'Cost-No-Fee' is currently unsupported."
+    burn["clins"][0]["pricing_policy"] = {
+        "label": "Unknown contract type",
+        "known": False,
+        "status": "unsupported",
+        "notice": notice,
+    }
+    burn["clins"][0]["fee_known"] = False
+    burn["clins"][0]["margin_pct"] = None
+    ws = _wb(burn)["By CLIN"]
+    policy = ws.cell(2, _col(ws, "Pricing policy"))
+    assert policy.value == "Unsupported"
+    assert policy.comment.text == notice
+    assert ws.cell(2, _col(ws, "Fee earned")).comment.text == notice
+    assert ws.cell(2, _col(ws, "Margin %")).comment.text == notice
+
+
 def test_a_pending_award_fee_period_has_no_amount():
     burn = _burn()
     fp = burn["clins"][0]["fee_position"]

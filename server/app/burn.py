@@ -664,6 +664,8 @@ def _pill(
             "paused": "Paused",
             "unpriced": "Unpriced",
         }.get(status, "—")
+    if status == "unsupported":
+        return "Unsupported"
     if status == "over":
         if funds_exceeded:
             return "Funds exceeded"
@@ -929,6 +931,7 @@ def _compute_clin(
     identical to what it was before that ticket — the series is an extra key, never
     a replacement (see `_absence_projection`)."""
     policy = policy or pricing.policy_for(clin, None)
+    unsupported = policy.status == "unsupported"
     # The cost side (#77). Defaults to an empty model, which is Level 1: cost falls
     # back to the billing rate and is flagged as such — so at Level 1 `cost` and
     # `billings` are equal by construction and the policy branch below cannot move
@@ -1230,6 +1233,9 @@ def _compute_clin(
     # fabricated 0%. `fee` itself stays a number so the rollups still reconcile; the
     # percentage — the figure a user would actually read as profitability — is None.
     margin_pct = (fee / revenue) if (fee_known and revenue) else None
+    if unsupported:
+        fee_known = False
+        margin_pct = None
 
     if weekly <= 0:
         weeks_left = _PAUSED_WEEKS_LEFT
@@ -1260,7 +1266,12 @@ def _compute_clin(
     projection = None
     # `weekly > 0` is the same test that produces `paused` / `unpriced` below, said
     # here because the status has not been resolved yet at this point.
-    projects = weekly > 0 and not margin_managed and not past_pop and remaining > 0
+    projects = (
+        weekly > 0
+        and not margin_managed
+        and not past_pop
+        and remaining > 0
+    )
     if projects and pop_start and absence:
         projection = _absence_projection(
             spent=spent,

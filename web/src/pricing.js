@@ -60,16 +60,6 @@ const SYNONYMS = {
     "cpff",
     "cost plus fixed fee",
     "costplusfixedfee",
-    // "CR" and bare "cost reimbursable" are what awards print when they mean a cost
-    // contract without naming its fee arrangement; CPFF is by far the most common of
-    // those. Same policy, per #76.
-    "cr",
-    "cost reimbursable",
-    "costreimbursable",
-    "cost reimbursement",
-    "costreimbursement",
-    "cost plus",
-    "costplus",
   ],
   CPIF: ["cpif", "cost plus incentive fee", "costplusincentivefee"],
   CPAF: ["cpaf", "cost plus award fee", "costplusawardfee"],
@@ -117,34 +107,23 @@ const VEHICLE_KEYS = new Set(VEHICLES.map(key));
 const COST_OR_INCENTIVE = new Set(["CPFF", "CPIF", "CPAF", "FPI"]);
 
 // `{ code, unknown }` — exactly one is set. `unknown` is "absent" for empty text,
-// "vehicle" for an ordering vehicle, "unrecognized" for text we read but can't map.
+// "vehicle" for an ordering vehicle, "unsupported" for text we cannot safely map.
 export function classifyContractType(text) {
   if (!String(text ?? "").trim()) return { code: null, unknown: "absent" };
   const k = key(text);
   // Text carrying no alphanumerics at all ("???", "--") is still text we read and
   // failed to map; calling that "absent" would report a missing extraction where there
   // was a failed one.
-  if (!k) return { code: null, unknown: "unrecognized" };
+  if (!k) return { code: null, unknown: "unsupported" };
   if (BY_KEY.has(k)) return { code: BY_KEY.get(k), unknown: null };
   if (VEHICLE_KEYS.has(k)) return { code: null, unknown: "vehicle" };
-  return { code: null, unknown: "unrecognized" };
+  return { code: null, unknown: "unsupported" };
 }
-
-// Text the canonical table declined to map, but which still opens with a cost-type or
-// incentive abbreviation — "CPFF/T&M", "Cost-Plus per Section H". This is the reveal
-// heuristic the ingest screen shipped with, kept as a fallback so widening the
-// recognised spellings cannot narrow what the screen offers.
-//
-// Loose matching is safe *here* and nowhere else: the answer decides whether to offer
-// optional inputs, not which policy governs the money. A mixed-type line still gets no
-// policy code from `classifyContractType`, which is the server's rule and stays.
-const LOOSE_PREFIX = /^(cp|cr|cost|fpi)/i;
 
 // Should the review screen offer the cost/fee fields on a CLIN of this type?
 export function offersCostFeeFields(text) {
-  const { code, unknown } = classifyContractType(text);
+  const { code } = classifyContractType(text);
   if (code) return COST_OR_INCENTIVE.has(code);
-  // A vehicle prices nothing, and absent text says nothing either way.
-  if (unknown !== "unrecognized") return false;
-  return LOOSE_PREFIX.test(String(text ?? "").trim());
+  // A vehicle, absent text, or unsupported text prices nothing safely.
+  return false;
 }

@@ -40,9 +40,15 @@ test("case, punctuation and a trailing qualifier do not change the answer", () =
 test("unknowns are told apart", () => {
   assert.deepEqual(classifyContractType(""), { code: null, unknown: "absent" });
   assert.deepEqual(classifyContractType(null), { code: null, unknown: "absent" });
-  assert.deepEqual(classifyContractType("???"), { code: null, unknown: "unrecognized" });
+  assert.deepEqual(classifyContractType("???"), { code: null, unknown: "unsupported" });
   assert.deepEqual(classifyContractType("IDIQ"), { code: null, unknown: "vehicle" });
-  assert.deepEqual(classifyContractType("FFP/T&M"), { code: null, unknown: "unrecognized" });
+  assert.deepEqual(classifyContractType("FFP/T&M"), { code: null, unknown: "unsupported" });
+});
+
+test("ambiguous cost reimbursement is refused instead of guessed as CPFF", () => {
+  for (const text of ["CR", "Cost Reimbursement", "Cost-Reimbursement, No-Fee", "COST"]) {
+    assert.deepEqual(classifyContractType(text), { code: null, unknown: "unsupported" });
+  }
 });
 
 test("full-name FPI reveals the cost/fee fields, which is the bug", () => {
@@ -58,9 +64,6 @@ test("every cost and incentive spelling offers the fields", () => {
   for (const text of [
     "CPFF",
     "Cost Plus Fixed Fee",
-    "CR",
-    "Cost Reimbursable",
-    "Cost Plus",
     "CPAF",
     "Cost Plus Award Fee",
     "CPIF",
@@ -82,12 +85,9 @@ test("a vehicle prices nothing", () => {
   assert.equal(offersCostFeeFields("BPA"), false);
 });
 
-test("unrecognised text opening with a cost-type abbreviation still offers the fields", () => {
-  // The behaviour the screen shipped with. A mixed line gets no policy code — that is
-  // the server's rule — but the reviewer typing its cost and fee still needs somewhere
-  // to type them.
-  assert.equal(offersCostFeeFields("CPFF/T&M"), true);
-  assert.equal(offersCostFeeFields("Cost-plus per Section H"), true);
+test("unsupported text does not offer cost or fee fields", () => {
+  assert.equal(offersCostFeeFields("CPFF/T&M"), false);
+  assert.equal(offersCostFeeFields("Cost-plus per Section H"), false);
   assert.equal(offersCostFeeFields("Section B pricing"), false);
 });
 
