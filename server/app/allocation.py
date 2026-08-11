@@ -210,6 +210,12 @@ def compute_allocation(
                 "rate_table_state": card.get(
                     "rate_table_state", lcat_match.TABLE_ABSENT
                 ),
+                # …and whether that gap reaches the spend this card reports (#144).
+                # False on a cost-measured CLIN priced entirely from declared direct
+                # rates: the mapping is still missing and the picker still has no rate
+                # to offer, but "all N categories bill at the blended rate" is not
+                # what the money on this card did.
+                "blended_priced_spend": card.get("blended_priced_spend", True),
                 "lcat_issues": card.get("lcat_issues", []),
                 "aliased_lcats": card.get("aliased_lcats", []),
             }

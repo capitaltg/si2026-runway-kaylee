@@ -1153,6 +1153,12 @@ export default function FlightDeck({
         // indirects listed apart from them — so the banner must not claim the
         // document is missing, and must not offer to import it again.
         const unburdened = g.rate_table_state === "unburdened";
+        // …and since #79 the gap need not touch the money at all (#144): a
+        // cost-measured CLIN resolves `spent` from stored direct rates burdened
+        // through the indirect pools, not from `blended`. When it did, this banner
+        // only reaches here because a rate schedule is genuinely missing — so it
+        // says that, and stops describing a burn that isn't blended.
+        const costPriced = g.blended_priced_spend === false;
         return (
         <div
           key={g.code}
@@ -1171,11 +1177,20 @@ export default function FlightDeck({
             <span style={{ fontSize: 11.5, color: "var(--dim)" }}>{g.name}</span>
           </div>
           <div style={{ fontSize: 13, color: "var(--text)", marginTop: 6, lineHeight: 1.5 }}>
-            Every labor category on this CLIN prices at the blended{" "}
-            <b>{g.blended_rate ? money(g.blended_rate) : "—"}/hr</b> (its ceiling ÷ estimated hours), because{" "}
-            {unburdened
-              ? "the award prices each category at an unburdened direct rate and states the indirect factors separately, so no line carries an hourly rate we can bill from."
-              : "the award we ingested carries a CLIN summary but no rate schedule."}{" "}
+            {costPriced ? (
+              <>
+                The award we ingested carries a CLIN summary but no rate schedule, so this CLIN has
+                no per-category <b>billing</b> rate.{" "}
+              </>
+            ) : (
+              <>
+                Every labor category on this CLIN prices at the blended{" "}
+                <b>{g.blended_rate ? money(g.blended_rate) : "—"}/hr</b> (its ceiling ÷ estimated hours), because{" "}
+                {unburdened
+                  ? "the award prices each category at an unburdened direct rate and states the indirect factors separately, so no line carries an hourly rate we can bill from."
+                  : "the award we ingested carries a CLIN summary but no rate schedule."}{" "}
+              </>
+            )}
             {g.lcats.length > 0 && (
               <>
                 {g.lcats.length} categor{g.lcats.length === 1 ? "y" : "ies"} affected:{" "}
@@ -1183,9 +1198,11 @@ export default function FlightDeck({
                 {g.lcats.length > 4 ? ` +${g.lcats.length - 4} more` : ""}.{" "}
               </>
             )}
-            {unburdened
-              ? "The burn figures are real, and the schedule is already imported — what a direct rate bills at on a cost-plus line is a pricing decision still to be made, not a document to go find."
-              : "The burn figures are real, but nothing on this CLIN is per-person until the schedule lands."}
+            {costPriced
+              ? "The burn figures are per-category already — this CLIN is measured on cost, and every hour priced off your stored direct rates. Importing the schedule is what makes the allocation matrix mappable."
+              : unburdened
+                ? "The burn figures are real, and the schedule is already imported — what a direct rate bills at on a cost-plus line is a pricing decision still to be made, not a document to go find."
+                : "The burn figures are real, but nothing on this CLIN is per-person until the schedule lands."}
           </div>
           {!unburdened && (
             <div style={{ marginTop: 10 }}>

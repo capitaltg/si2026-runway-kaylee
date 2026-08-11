@@ -1008,6 +1008,24 @@ def _compute_clin(
     # `cost_known` is the #77 flag, hoisted here because the fee read depends on it.
     cost_known = bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours
 
+    # Whether the rate-table gap actually reaches the number this card reports.
+    #
+    # `rate_table_missing` is a fact about the BILLING table alone: no line carries a
+    # `loaded_rate`, so `resolve` falls to `blended`. That was the whole story before
+    # #79 — but since #79 a cost-reimbursement CLIN is measured on `cost`, and cost is
+    # resolved down an entirely different ladder (`CostModel.cost_for`): the award's
+    # per-LCAT direct rates, burdened through the indirect pools. When that ladder
+    # priced every hour, `cost_known` is true and not one dollar of `spent` came from
+    # the blended rate — so telling the user "every category on this CLIN prices at
+    # the blended rate" describes a quantity the card isn't showing them.
+    #
+    # The gap on the billing side is unchanged and still reported: `rate_table_missing`
+    # and `rate_table_state` keep their meaning, the allocation matrix still has no
+    # rate line to map an LCAT onto, and `billings` still rides the blended rate. What
+    # a direct-rate line *bills* at stays the open pricing decision it was (#134) —
+    # nothing here burdens a direct rate into a billing rate.
+    blended_priced_spend = source != "rate_table" and not (on_cost and cost_known)
+
     # The fee position (#80): what this CLIN's fee terms have earned at the cost it has
     # actually incurred, under its own type's rule. Pure arithmetic in `pricing`, called
     # again below on projected cost for the forecast.
@@ -1468,6 +1486,12 @@ def _compute_clin(
         # document fixes it). Both leave `rate_table_missing` true; only the first
         # may be answered with "import the rate schedule".
         "rate_table_state": lcat_match.rate_table_state(clin),
+        # Whether that gap priced the quantity this card measures. False on a
+        # cost-measured CLIN whose every hour resolved to a declared direct rate —
+        # the burn is per-category and the blended rate touched only `billings`.
+        # The UI phrases the rate-coverage banner off this, so a CPFF award that
+        # printed its own cost buildup stops being told its burn is blended (#144).
+        "blended_priced_spend": blended_priced_spend,
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
         # count the engine found but could not value — the "N rows, $0 priced" story.
         "charged_rows": len(clin_rows),
@@ -2187,6 +2211,23 @@ def compute(
     # Deliberately does NOT gate `all_clear`: a blended-priced CLIN is measured and
     # honest, and turning every award ingested without its continuation sheet into a
     # not-clear contract would be a new alarm, not a fix for an old one.
+    #
+    # A cost-measured CLIN that priced every hour from a declared direct rate keeps
+    # its entry only while it still has something to offer (#144). This list is an
+    # alert group, and the alert is "the figures you are looking at are blended" —
+    # on those CLINs they are not: `spent` is `cost`, resolved per LCAT from the
+    # award's own buildup, and the blended rate touched only `billings`.
+    #
+    # So the split is by remedy, not by severity:
+    #   * `absent` — the continuation sheet really never landed, and importing one
+    #     is a real fix (it is what makes the allocation matrix mappable). The entry
+    #     stays and carries `blended_priced_spend` so the banner can drop the false
+    #     claim about the money while keeping the import.
+    #   * `unburdened` — the schedule is already in, there is no document to fetch,
+    #     and the money is right. Nothing is left to say, so nothing is said. This is
+    #     the state a CPFF award whose cost buildup #138 stored lands in.
+    # Either way the gap survives on the CLIN card (`rate_table_missing`,
+    # `rate_table_state`), where the mapping story belongs.
     rate_gaps = [
         {
             "id": c["id"],
@@ -2200,9 +2241,19 @@ def compute(
             # `absent` or `unburdened` (#139) — the banner phrases itself off this
             # and only offers an import on the half a document can answer.
             "rate_table_state": c["rate_table_state"],
+            # Whether the blended rate priced what this CLIN reports (#144). False
+            # means the burn is per-category and only the billing side is missing,
+            # so the banner states the document gap without misdescribing the money.
+            "blended_priced_spend": c["blended_priced_spend"],
         }
         for c in computed
-        if c["rate_table_missing"] and c["charged_rows"] and c["status"] != "unpriced"
+        if c["rate_table_missing"]
+        and c["charged_rows"]
+        and c["status"] != "unpriced"
+        and (
+            c["blended_priced_spend"]
+            or c["rate_table_state"] == lcat_match.TABLE_ABSENT
+        )
     ]
 
     # Causes B and C, contract-wide (#64): unmatched LCATs on CLINs that *do* have a
