@@ -417,3 +417,33 @@ export const orderedClins = (burn) => [
   ...(burn?.clins || []).filter((c) => c.is_labor),
   ...(burn?.clins || []).filter((c) => !c.is_labor),
 ];
+
+// ---- What the view knows right now (#164) --------------------------------------
+// Which contract is on screen is part of the truth this surface tells, so the load
+// state is a reducer here rather than loose setState calls in the view. Two of the
+// transitions are the bug: selecting a contract has to discard the previous one's
+// figures *and* its failure, or the screen prints one contract's money under another
+// contract's name; and a success has to clear a prior failure, or a stale error sits
+// beside good data. `empty` is its own state because "no contracts exist" is a fact
+// about the workspace, not a load that never finished.
+export const loadIdle = { burn: null, error: null, empty: false };
+
+export function loadReducer(state, event) {
+  switch (event.type) {
+    case "select":
+      return loadIdle;
+    case "loaded":
+      return { burn: event.burn, error: null, empty: false };
+    case "failed":
+      return { burn: null, error: event.message, empty: false };
+    case "none":
+      return { burn: null, error: null, empty: true };
+    default:
+      return state;
+  }
+}
+
+// Which of the four screens to draw, in precedence order. A failure outranks an empty
+// workspace because a failed contract list is why we don't know it's empty.
+export const loadPhase = (state) =>
+  state?.error ? "error" : state?.empty ? "empty" : state?.burn ? "ready" : "loading";
