@@ -20,6 +20,8 @@ import {
   orderedClins,
   projection,
   projectionReason,
+  pricingApplicability,
+  profitabilityLabels,
   summary,
 } from "./profitability.js";
 
@@ -300,6 +302,156 @@ test("the measured quantity is named per CLIN, so two denominators are never sil
   assert.equal(measuredIn({ measured_against: "price" }), "price");
   // Unknown-type awards keep the legacy billings read rather than rendering blank.
   assert.equal(measuredIn({}), "billings");
+});
+
+// ---- pricing applicability (#162) ----------------------------------------------
+// These are the semantic fields the backend publishes. The view must not rebuild
+// contract-type classification from labels or raw type text.
+const policyClin = (pricing_policy) => ({
+  is_labor: true,
+  pricing_policy: { known: true, ...pricing_policy },
+});
+
+test("pricing policy metadata names the applicable concepts for every fee family", () => {
+  const cases = [
+    [
+      policyClin({ family: "fixed_price", ceiling_meaning: "firm_price", revenue_basis: "price_milestones" }),
+      ["Firm price", "Profit", "Margin"],
+    ],
+    [
+      policyClin({ family: "time_and_materials", ceiling_meaning: "ceiling_price", revenue_basis: "hours_times_rate" }),
+      ["Ceiling price", "Gross profit", "Margin"],
+    ],
+    [
+      policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_fixed_fee", revenue_basis: "cost_plus_fixed_fee" }),
+      ["Cost + fixed fee", "Fixed fee earned", "Fee margin"],
+    ],
+    [
+      policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_base_and_award_pool", revenue_basis: "cost_plus_earned_fee" }),
+      ["Cost + fee pool", "Award fee earned", "Fee margin"],
+    ],
+    [
+      policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_target_fee", revenue_basis: "cost_plus_earned_fee" }),
+      ["Target cost + fee", "Incentive fee earned", "Fee margin"],
+    ],
+    [
+      policyClin({ family: "fixed_price", ceiling_meaning: "ceiling_price", revenue_basis: "cost_plus_earned_profit" }),
+      ["Ceiling price", "Incentive profit", "Profit margin"],
+    ],
+  ];
+
+  for (const [clin, expected] of cases) {
+    const got = pricingApplicability(clin);
+    assert.deepEqual(
+      [got.ceilingLabel, got.earningsLabel, got.returnLabel],
+      expected,
+    );
+    assert.equal(got.earningsApplicable, true);
+    assert.equal(got.returnApplicable, true);
+  }
+});
+
+test("a no-fee cost policy marks earnings and return as not applicable", () => {
+  const clin = {
+    ...policyClin({
+      family: "cost_reimbursement",
+      ceiling_meaning: "estimated_cost",
+      revenue_basis: "cost_only",
+    }),
+    revenue_known: true,
+    cost_known: true,
+    revenue: 80,
+    cost: 80,
+    fee_earned: 0,
+    fee_known: true,
+    margin_pct: 0,
+  };
+  const applicability = pricingApplicability(clin);
+  assert.equal(applicability.ceilingLabel, "Estimated cost");
+  assert.equal(applicability.earningsLabel, "Not applicable");
+  assert.equal(applicability.returnLabel, "Not applicable");
+  assert.equal(applicability.earningsApplicable, false);
+  assert.equal(applicability.returnApplicable, false);
+
+  const figures = clinFigures(clin, true);
+  assert.equal(figures.fee.value, null);
+  assert.equal(figures.fee.notApplicable, true);
+  assert.equal(figures.margin.value, null);
+  assert.equal(figures.margin.notApplicable, true);
+});
+
+test("mixed policies use neutral summary labels while homogeneous policies stay specific", () => {
+  const cpff = policyClin({
+    family: "cost_reimbursement",
+    ceiling_meaning: "cost_plus_fixed_fee",
+    revenue_basis: "cost_plus_fixed_fee",
+  });
+  const ffpClin = policyClin({
+    family: "fixed_price",
+    ceiling_meaning: "firm_price",
+    revenue_basis: "price_milestones",
+  });
+  const passThrough = {
+    ...policyClin({
+      family: "cost_reimbursement",
+      ceiling_meaning: "estimated_cost",
+      revenue_basis: "cost_only",
+    }),
+    is_labor: false,
+  };
+  assert.deepEqual(profitabilityLabels({ clins: [cpff, passThrough] }), {
+    ceiling: "Price / limit",
+    earnings: "Fixed fee earned",
+    return: "Fee margin",
+    earningsApplicable: true,
+    returnApplicable: true,
+    unknownCount: 0,
+  });
+  assert.deepEqual(profitabilityLabels({ clins: [cpff, ffpClin] }), {
+    ceiling: "Price / limit",
+    earnings: "Earnings",
+    return: "Return",
+    earningsApplicable: true,
+    returnApplicable: true,
+    unknownCount: 0,
+  });
+});
+
+test("unknown pricing stays distinct from not applicable and surfaces the backend count", () => {
+  const unknown = policyClin({
+    known: false,
+    family: "unknown",
+    ceiling_meaning: "ceiling_price",
+    revenue_basis: "hours_times_rate",
+  });
+  const row = pricingApplicability(unknown);
+  assert.equal(row.known, false);
+  assert.equal(row.ceilingLabel, "Limit · policy unknown");
+  assert.equal(row.earningsLabel, "Earnings · policy unknown");
+  assert.equal(row.returnLabel, "Return · policy unknown");
+  assert.equal(row.earningsApplicable, null);
+  assert.equal(row.returnApplicable, null);
+
+  const labels = profitabilityLabels({
+    contract: { pricing_unknown: 3 },
+    clins: [unknown],
+  });
+  assert.equal(labels.unknownCount, 3);
+  assert.equal(labels.earningsApplicable, null);
+  assert.equal(labels.returnApplicable, null);
+});
+
+test("a non-labor line stays not applicable even when its pricing policy is unknown", () => {
+  const row = pricingApplicability({
+    is_labor: false,
+    pricing_policy: { known: false, family: "unknown" },
+  });
+  assert.equal(row.known, false);
+  assert.equal(row.ceilingLabel, "Limit · policy unknown");
+  assert.equal(row.earningsLabel, "Not applicable");
+  assert.equal(row.returnLabel, "Not applicable");
+  assert.equal(row.earningsApplicable, false);
+  assert.equal(row.returnApplicable, false);
 });
 
 test("labor CLINs list before non-labor ones, and every CLIN is listed", () => {
