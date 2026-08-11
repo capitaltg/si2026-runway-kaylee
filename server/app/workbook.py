@@ -83,13 +83,31 @@ NO_FEE_TERMS_CLIN = (
     "This CLIN's award printed no fee figures for the engine to earn against."
 )
 COST_IS_STANDIN = "Cost is a billing-rate stand-in on this CLIN."
+FEE_IS_STANDIN_CLIN = (
+    "This CLIN's hours are priced at the billing rate, so its fee reconciles with cost "
+    "and revenue but says nothing about profit."
+)
+PARTIAL_COST = (
+    "Part of this contract's hours are priced at the billing rate, so total cost is not "
+    "known — every labor category needs a direct rate before a contract margin means "
+    "anything."
+)
+PARTIAL_FEE = (
+    "Total fee is revenue less cost, and part of this contract's cost is a billing-rate "
+    "stand-in."
+)
+NO_REVENUE_CLIN = "No revenue recognised on this CLIN yet."
 PASS_THROUGH = (
     "A non-labor CLIN is a cost-reimbursable pass-through: its logged travel, ODC and "
     "materials dollars consume funding and earn no fee."
 )
 FEE_NEEDS_COST = (
-    "Earned fee is a function of cost, and at cost-model level 1 cost is the billing "
-    "rate — supply direct rates to read this."
+    "Earned fee is a function of cost, and where cost is the billing rate standing in "
+    "there is no fee to read — supply direct rates for this CLIN's categories."
+)
+FEE_NEEDS_TERMS = (
+    "This award's fee terms are incomplete, so everything earned against them is "
+    "withheld rather than computed to zero."
 )
 NO_REVENUE = "No revenue recognised yet."
 
@@ -106,8 +124,15 @@ def withheld(why: str):
 
 
 def margin_available(burn: dict) -> bool:
-    """`rates.CostModel.margin_available` (rates.py:320) — the single flag the
-    profitability surfaces gate on, and now the workbook too."""
+    """`rates.CostModel.margin_available` (rates.py:320) — which tier the contract's
+    rate ladder is configured at, and *not* the gate (#152).
+
+    It goes true on the first indirect pool plus the first direct rate, so a contract
+    whose ladder covers one of six labor categories reads true while five are still
+    billing-rate stand-ins. What a figure may claim is gated on the engine's own cost
+    truth instead — `totals.cost_known` and each CLIN's `cost_known` — and this flag
+    only chooses which sentence explains a refusal.
+    """
     return bool(
         ((burn or {}).get("contract") or {})
         .get("cost_model", {})
@@ -119,14 +144,18 @@ def summary_figures(burn: dict) -> dict:
     """The four contract-level figures, under profitability.js's `summary` rules."""
     t = (burn or {}).get("totals") or {}
     margin = margin_available(burn)
+    # A total cost that is part buildup and part billing stand-in is not a contract
+    # cost, and a margin taken off it is arithmetic wearing a fact's clothes (#152).
+    cost_known = t.get("cost_known") is True
+    cost_why = PARTIAL_COST if margin else LEVEL_1_COST
     revenue = t.get("revenue") or 0
     cost = t.get("cost") or 0
     return {
         "revenue": fact(revenue),
-        "cost": fact(cost) if margin else withheld(LEVEL_1_COST),
+        "cost": fact(cost) if cost_known else withheld(cost_why),
         "fee": (
-            withheld(LEVEL_1_FEE)
-            if not margin
+            withheld(PARTIAL_FEE if margin else LEVEL_1_FEE)
+            if not cost_known
             else (
                 fact(t.get("fee") or 0)
                 if t.get("fee_known")
@@ -135,8 +164,8 @@ def summary_figures(burn: dict) -> dict:
         ),
         "margin": (
             fact((revenue - cost) / revenue)
-            if margin and revenue
-            else withheld(NO_REVENUE if margin else LEVEL_1_COST)
+            if cost_known and revenue
+            else withheld(cost_why if not cost_known else NO_REVENUE)
         ),
     }
 
@@ -147,6 +176,11 @@ def clin_figures(clin: dict, margin: bool) -> dict:
     Non-labor CLINs carry no `cost` / `revenue` / `fee_earned` keys at all; defaulting
     them to 0 prints "$0" on a line holding real spend. Verified against a live payload,
     not read off the comments.
+
+    A labor CLIN gates on its own `cost_known` and never on the contract's tier (#152):
+    a mixed award prices one line from category rates and leaves another on the billing
+    fallback, and a contract-wide unlock would print the fallback line's billings under
+    a cost heading.
     """
     if not clin.get("is_labor"):
         spent = clin.get("spent") or 0
@@ -156,25 +190,33 @@ def clin_figures(clin: dict, margin: bool) -> dict:
             "fee": withheld(PASS_THROUGH),
             "margin": withheld(PASS_THROUGH),
         }
+    cost_known = clin.get("cost_known") is True
+    cost_why = COST_IS_STANDIN if margin else LEVEL_1_COST
+    margin_pct = clin.get("margin_pct")
     return {
         "revenue": fact(clin.get("revenue") or 0),
-        "cost": fact(clin.get("cost") or 0) if margin else withheld(LEVEL_1_COST),
+        "cost": fact(clin.get("cost") or 0) if cost_known else withheld(cost_why),
         "fee": (
-            withheld(LEVEL_1_FEE)
-            if not margin
+            withheld(FEE_IS_STANDIN_CLIN if margin else LEVEL_1_FEE)
+            if not cost_known
             else (
                 fact(clin.get("fee_earned") or 0)
                 if clin.get("fee_known")
                 else withheld(NO_FEE_TERMS_CLIN)
             )
         ),
+        # With cost known, a null `margin_pct` is one of the two remaining refusals,
+        # and they take different fixes: unstated fee terms are fixed by importing a
+        # document, no revenue yet by waiting.
         "margin": (
-            withheld(LEVEL_1_COST)
-            if not margin
+            withheld(cost_why)
+            if not cost_known
             else (
-                withheld(COST_IS_STANDIN)
-                if clin.get("margin_pct") is None
-                else fact(clin.get("margin_pct"))
+                fact(margin_pct)
+                if margin_pct is not None
+                else withheld(
+                    NO_REVENUE_CLIN if clin.get("fee_known") else NO_FEE_TERMS_CLIN
+                )
             )
         ),
     }
@@ -186,11 +228,18 @@ def fee_figures(fp: dict) -> dict:
     Award-stated facts survive level 1, computed ones don't: `target` and the clause are
     printed on the award and true before an hour is charged, while everything below is a
     function of `cost_frac` and so of the billing rate at level 1.
+
+    Both truth flags default closed (#153). A payload that omits one has not said the
+    figure is trustworthy, and unknown *terms* matter as much as unknown cost: fee
+    earned against a structure the award never printed computes a clean $0, which is a
+    claim that the work has earned nothing.
     """
-    cost_ok = fp.get("cost_known") is not False
-    gated = (
-        (lambda v: fact(v or 0)) if cost_ok else (lambda v: withheld(FEE_NEEDS_COST))
+    why = (
+        FEE_NEEDS_TERMS
+        if fp.get("terms_known") is not True
+        else (None if fp.get("cost_known") is True else FEE_NEEDS_COST)
     )
+    gated = (lambda v: withheld(why)) if why else (lambda v: fact(v or 0))
     return {
         "target": (
             withheld("The award printed no fee target.")
@@ -572,15 +621,25 @@ def _summary_sheet(
 
     _section(ws, row, "PROVENANCE")
     row += 1
-    if not margin:
+    # Why the money block above carries dashes. Two states reach it and they take
+    # different fixes (#152): no rate ladder at all, or one that doesn't reach every
+    # labor category — and the second is the easier to mistake for a broken export,
+    # because the contract *is* at level 2 and most of the workbook is populated.
+    if figs["cost"].get("withheld"):
+        level = ((burn or {}).get("contract") or {}).get("cost_model") or {}
         _cell(ws, row, 1, "Cost model", font=LABEL_FONT)
-        _cell(ws, row, 2, "Level 1")
+        _cell(ws, row, 2, f"Level {level.get('level', 1)}")
         _note(
             ws,
             row,
             3,
-            LEVEL_1_COST + " Level 1 is a supported, complete state; one "
-            "report is withheld, not the app.",
+            (
+                PARTIAL_COST + " The CLINs that are fully priced keep their own cost "
+                "and margin on By CLIN."
+                if margin
+                else LEVEL_1_COST + " Level 1 is a supported, complete state; one "
+                "report is withheld, not the app."
+            ),
         )
         row += 1
     stamp = [

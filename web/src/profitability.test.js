@@ -20,9 +20,12 @@ import {
   summary,
 } from "./profitability.js";
 
-const level = (n, marginOk) => ({
+// `costOk` defaults to the tier but is separable, because the two coming apart is the
+// whole of #152: a contract can carry indirect pools and a direct rate (level 2) and
+// still price part of its hours at the billing rate.
+const level = (n, marginOk, costOk = marginOk) => ({
   contract: { cost_model: { level: n, margin_available: marginOk } },
-  totals: { cost: 800000, revenue: 1000000, fee: 200000, fee_known: true, cost_known: marginOk },
+  totals: { cost: 800000, revenue: 1000000, fee: 200000, fee_known: true, cost_known: costOk },
   clins: [],
 });
 
@@ -63,8 +66,8 @@ test("a known cost model with unstated fee terms withholds the fee but keeps the
 });
 
 test("a CLIN whose own fee terms are unstated withholds only its fee, not the contract's", () => {
-  const priced = { is_labor: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
-  const unpriced = { is_labor: true, revenue: 500000, cost: 450000, fee_earned: 50000, fee_known: false, margin_pct: 0.1 };
+  const priced = { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
+  const unpriced = { is_labor: true, cost_known: true, revenue: 500000, cost: 450000, fee_earned: 50000, fee_known: false, margin_pct: 0.1 };
   assert.equal(clinFigures(priced, true).fee.value, 100000);
   assert.equal(clinFigures(unpriced, true).fee.value, null);
   // The priced line keeps its margin — a mixed award must not lose a known figure
@@ -74,11 +77,56 @@ test("a CLIN whose own fee terms are unstated withholds only its fee, not the co
 
 test("a null margin_pct is a refusal, not an absent key", () => {
   const f = clinFigures(
-    { is_labor: true, revenue: 1, cost: 1, fee_earned: 0, fee_known: true, margin_pct: null },
+    { is_labor: true, cost_known: false, revenue: 1, cost: 1, fee_earned: 0, fee_known: true, margin_pct: null },
     true,
   );
   assert.equal(f.margin.value, null);
   assert.match(f.margin.withheld, /stand-in/);
+});
+
+// ---- partial cost coverage (#152) -----------------------------------------------
+// `margin_available` goes true on the first indirect pool plus the first direct rate,
+// so it says the ladder exists and not that it reaches every hour. Gating on it printed
+// a factual cost and margin off a total that was part buildup and part billing rate.
+
+test("a level-2 contract whose total cost is not known withholds cost, fee and margin", () => {
+  const s = summary(level(2, true, false));
+  for (const key of ["cost", "fee", "margin"]) {
+    assert.equal(s[key].value, null, `${key} must not be claimed on a partial cost model`);
+  }
+  // Not the level-1 sentence: this user already supplied rates, and telling them to
+  // supply a first one sends them somewhere they have already been.
+  assert.match(s.cost.withheld, /Part of this contract's hours/);
+  assert.doesNotMatch(s.cost.withheld, /level 1/);
+  // Revenue still stands — it comes off the CLIN policies, not the cost ladder.
+  assert.equal(s.revenue.value, 1000000);
+});
+
+test("a contract-level unlock cannot vouch for a CLIN that priced its hours at the billing rate", () => {
+  const covered = { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
+  const fallback = { is_labor: true, cost_known: false, revenue: 500000, cost: 500000, fee_earned: 0, fee_known: false, margin_pct: null };
+  // Same contract, same `margin` argument: the mixed award is the point.
+  assert.equal(clinFigures(covered, true).cost.value, 400000);
+  assert.equal(clinFigures(covered, true).margin.value, 0.2);
+  assert.equal(clinFigures(fallback, true).cost.value, null);
+  assert.match(clinFigures(fallback, true).cost.withheld, /stand-in/);
+  assert.equal(clinFigures(fallback, true).fee.value, null);
+  assert.equal(clinFigures(fallback, true).margin.value, null);
+});
+
+test("a payload that omits cost_known has not said cost is known", () => {
+  const f = clinFigures({ is_labor: true, revenue: 500000, cost: 400000, fee_known: true }, true);
+  assert.equal(f.cost.value, null, "a truth gate that defaults open is not a gate");
+  assert.equal(summary({ contract: { cost_model: { margin_available: true } }, totals: { cost: 1, revenue: 2 } }).cost.value, null);
+});
+
+test("a fully covered CLIN with no fee terms is sent to the document, not back to the rates view", () => {
+  const f = clinFigures(
+    { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: false, margin_pct: null },
+    true,
+  );
+  assert.equal(f.cost.value, 400000, "cost is known here; only the fee terms are not");
+  assert.match(f.margin.withheld, /no fee figures/);
 });
 
 // The engine sends non-labor cards with no cost/revenue/fee keys at all — verified
@@ -245,9 +293,44 @@ test("award-stated fee terms survive level 1, but earned fee does not", () => {
   assert.equal(f.target.value, 176075.26, "the award printed this before any hour was charged");
   for (const key of ["earned", "atCompletion", "atRisk", "absorbed", "withhold", "collectable"]) {
     assert.equal(f[key].value, null, `${key} depends on cost`);
-    assert.match(f[key].withheld, /level 1/);
+    assert.match(f[key].withheld, /billing rate standing in/);
   }
   assert.equal(feeGap(level1).fix, "cost");
+});
+
+// ---- projected fee (#153) --------------------------------------------------------
+// The projection is the same fee terms applied to projected cost, so it is exactly as
+// trustworthy as the current position — but it used to ship without its truth flags,
+// and `cost_known !== false` read that silence as a fact.
+
+test("a projected position with no truth flags is withheld, not trusted", () => {
+  const bare = { at_completion: 131995.26, target_delta: -44080, at_risk: 44080, absorbed: 44080 };
+  const f = feeFigures(bare);
+  for (const key of ["atCompletion", "delta", "atRisk", "absorbed"]) {
+    assert.equal(f[key].value, null, `${key} was published without a truth state`);
+  }
+});
+
+test("unknown fee terms withhold the figures rather than computing them to zero", () => {
+  // `earned_fee` against a structure the award never printed returns a clean $0, and a
+  // $0 at-completion fee is a claim: that the work will earn nothing.
+  const noTerms = { ...cpff.projected, terms_known: false, earned: 0, at_completion: 0, at_risk: 0, absorbed: 0 };
+  const f = feeFigures(noTerms);
+  for (const key of ["earned", "atCompletion", "atRisk", "absorbed"]) {
+    assert.equal(f[key].value, null, `${key} must not be a computed zero`);
+    assert.match(f[key].withheld, /terms are incomplete/);
+  }
+});
+
+test("a projection whose cost is a stand-in withholds every figure the current position does", () => {
+  const now = feeFigures({ ...cpff, cost_known: false });
+  const proj = feeFigures({ ...cpff.projected, cost_known: false });
+  // The pair must agree: the view prefers the projected figure where one exists, so a
+  // projection that claims more than the position beside it is the defect.
+  for (const key of ["earned", "atCompletion", "atRisk", "absorbed"]) {
+    assert.equal(now[key].value, null, key);
+    assert.equal(proj[key].value, null, key);
+  }
 });
 
 test("missing award terms and missing cost are different problems with different fixes", () => {

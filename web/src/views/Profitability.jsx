@@ -232,9 +232,11 @@ export default function Profitability({ contractId, setActiveId }) {
             <Figure figure={tiles.cost} format={money} />
           </div>
           <div style={tileSub}>
-            {margin
+            {!tiles.cost.withheld
               ? "Hours burdened through the indirect pools"
-              : "Add direct rates to separate cost from billings"}
+              : margin
+                ? "Some categories still price at the billing rate"
+                : "Add direct rates to separate cost from billings"}
           </div>
         </div>
         <div style={panelStyle}>
@@ -261,7 +263,11 @@ export default function Profitability({ contractId, setActiveId }) {
         </div>
       </div>
 
-      {!margin && (
+      {/* Why the tiles above are dashes. Two different states land here and they take
+          different fixes: no rate ladder at all, or a ladder that doesn't reach every
+          category (#152). The second one is the easier to mistake for a bug, because
+          the contract *is* at level 2 and most of the view is populated. */}
+      {tiles.cost.withheld && (
         <div
           style={{
             ...panelStyle,
@@ -274,12 +280,26 @@ export default function Profitability({ contractId, setActiveId }) {
           <strong style={{ color: "var(--text)" }}>
             Margin is withheld on this contract, not missing.
           </strong>{" "}
-          At cost-model level 1 Runway knows one number per labor hour — the burdened
-          billing rate off the rate schedule — so cost and billings are equal by
-          construction, and any margin read off them would be 0% by arithmetic rather
-          than by fact. Enter direct rates and indirect pools under{" "}
-          <em>Indirect Rates</em> to reach level 2 and this view fills in. Revenue and
-          the funding read below are correct at every level.
+          {margin ? (
+            <>
+              This contract has an indirect buildup and some direct rates, but not every
+              labor category is priced from one — the CLINs below name which. Where a
+              category falls back, Runway prices the hour at its burdened billing rate,
+              so a contract total mixing the two is part cost and part billings and a
+              margin off it is arithmetic rather than a fact. The CLINs that <em>are</em>{" "}
+              fully priced keep their own cost and margin; add the missing direct rates
+              under <em>Indirect Rates</em> and the contract totals fill in.
+            </>
+          ) : (
+            <>
+              At cost-model level 1 Runway knows one number per labor hour — the burdened
+              billing rate off the rate schedule — so cost and billings are equal by
+              construction, and any margin read off them would be 0% by arithmetic rather
+              than by fact. Enter direct rates and indirect pools under{" "}
+              <em>Indirect Rates</em> to reach level 2 and this view fills in. Revenue and
+              the funding read below are correct at every level.
+            </>
+          )}
         </div>
       )}
 
@@ -572,7 +592,13 @@ export default function Profitability({ contractId, setActiveId }) {
             const proj = fp.projected ? feeFigures(fp.projected) : null;
             const award = awardPeriods(fp);
             const share = shareRatio(fp);
-            const losing = fp.projected?.absorbed > 0 || fp.projected?.exhausted;
+            // A warning colour is a claim as much as a number is. The projected
+            // absorption is computed off cost, so tone it only where the projection's
+            // own truth flags say those figures are real (#153) — an amber "at risk"
+            // over an em dash reads as a loss nobody can check.
+            const projTrusted = proj != null && proj.atCompletion.withheld == null;
+            const losing =
+              projTrusted && (fp.projected.absorbed > 0 || fp.projected.exhausted);
             return (
               <div key={c.code} style={{ ...panelStyle, marginTop: 14 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>

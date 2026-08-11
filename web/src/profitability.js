@@ -2,21 +2,35 @@
 // it. Every function here answers the same question in a different place: is this
 // figure a fact, or is it arithmetic that only looks like one?
 //
-// The engine already withholds deliberately — `cost_known`, `fee_known`,
-// `margin_pct: null`, and `contract.cost_model.margin_available` as the single gate
-// named for this view in rates.py. A surface that renders those as 0 turns a refusal
-// into a claim, and the claim it invents ("0% margin") is exactly the number an
-// accountant would act on. So withholding travels as a *reason*, not as a null the
-// caller has to remember to check.
+// The engine already withholds deliberately — `cost_known`, `fee_known` and
+// `margin_pct: null`. A surface that renders those as 0 turns a refusal into a claim,
+// and the claim it invents ("0% margin") is exactly the number an accountant would act
+// on. So withholding travels as a *reason*, not as a null the caller has to remember
+// to check.
 
 import { money } from "./format.js";
 
-// The gate. False means nobody supplied direct rates, so `cost` is the burdened
-// billing rate and equals `billings` by construction — margin off those two is 0 by
-// arithmetic, not by fact. Level 1 is a supported, complete state (the app is fully
-// functional there); it just has one report withheld.
+// Which tier the contract's rate ladder is configured at, and *not* the gate (#152).
+// False means nobody supplied direct rates at all, so every hour costs its burdened
+// billing rate and margin is 0 by arithmetic rather than by fact. True only means the
+// ladder exists: `margin_available` goes true on the first indirect pool plus the first
+// direct rate, so a contract with six LCATs and one direct rate reads true while five
+// of its categories are still billing-rate stand-ins. What a figure may claim is
+// therefore gated on the engine's own cost truth — `totals.cost_known` for the
+// contract, `clin.cost_known` per CLIN — and this flag only chooses which sentence
+// explains the refusal.
 export const marginAvailable = (burn) =>
   Boolean(burn?.contract?.cost_model?.margin_available);
+
+// Whether every labor CLIN priced its hours from a direct rate. False on a contract
+// with no labor CLINs at all, which the engine reports the same way — nothing to know
+// reads as not known, and inventing the difference here would be a fourth number.
+const totalCostKnown = (burn) => burn?.totals?.cost_known === true;
+
+// Per CLIN, the same question. `=== true` rather than `!== false`: a payload that
+// omits the flag has not told us cost is known, and a truth gate that defaults open
+// is not a gate.
+const clinCostKnown = (clin) => clin?.cost_known === true;
 
 // A figure the view can print, or the reason it can't. `value` is null exactly when
 // `withheld` is set, so a caller cannot accidentally format a withheld number.
@@ -31,6 +45,16 @@ const NO_FEE_TERMS = "This award printed no fee figures for the engine to earn a
 const NO_FEE_TERMS_CLIN =
   "This CLIN's award printed no fee figures for the engine to earn against.";
 const COST_IS_STANDIN = "Cost is a billing-rate stand-in on this CLIN.";
+const FEE_IS_STANDIN_CLIN =
+  "This CLIN's hours are priced at the billing rate, so its fee reconciles with cost and revenue but says nothing about profit.";
+// Partial coverage (#152). A contract can have pools and some direct rates and still
+// leave categories priced at the billing rate — the ladder is configured, the cost is
+// not known, and the fix is more rates rather than a first rate.
+const PARTIAL_COST =
+  "Part of this contract's hours are priced at the billing rate, so total cost is not known — every labor category needs a direct rate before a contract margin means anything.";
+const PARTIAL_FEE =
+  "Total fee is revenue less cost, and part of this contract's cost is a billing-rate stand-in.";
+const NO_REVENUE_CLIN = "No revenue recognised on this CLIN yet.";
 const PASS_THROUGH =
   "A non-labor CLIN is a cost-reimbursable pass-through: its logged travel, ODC and materials dollars consume funding and earn no fee.";
 
@@ -40,11 +64,17 @@ const PASS_THROUGH =
 export function summary(burn) {
   const t = burn?.totals || {};
   const margin = marginAvailable(burn);
+  // The gate is the engine's cost truth, not the rate ladder's tier (#152): a total
+  // cost that is part buildup and part billing stand-in is not a contract cost, and a
+  // margin taken off it is arithmetic wearing a fact's clothes. `margin` only decides
+  // which of the two refusals a reader is looking at — no rates at all, or not enough.
+  const costKnown = totalCostKnown(burn);
+  const costWhy = margin ? PARTIAL_COST : LEVEL_1_COST;
   return {
     revenue: fact(t.revenue ?? 0),
-    cost: margin ? fact(t.cost ?? 0) : withheld(LEVEL_1_COST),
-    fee: !margin
-      ? withheld(LEVEL_1_FEE)
+    cost: costKnown ? fact(t.cost ?? 0) : withheld(costWhy),
+    fee: !costKnown
+      ? withheld(margin ? PARTIAL_FEE : LEVEL_1_FEE)
       : t.fee_known
         ? fact(t.fee ?? 0)
         : withheld(NO_FEE_TERMS),
@@ -52,9 +82,10 @@ export function summary(burn) {
     // margin per CLIN, not per contract. Same definition as `margin_pct` — fee over
     // revenue — so the two reconcile; guarded on revenue so a contract with no
     // recognised revenue yet reports nothing instead of dividing by zero.
-    margin:
-      !margin || !t.revenue
-        ? withheld(margin ? "No revenue recognised yet." : LEVEL_1_COST)
+    margin: !costKnown
+      ? withheld(costWhy)
+      : !t.revenue
+        ? withheld("No revenue recognised yet.")
         : fact(((t.revenue || 0) - (t.cost || 0)) / t.revenue),
   };
 }
@@ -81,19 +112,30 @@ export function clinFigures(clin, margin) {
       margin: withheld(PASS_THROUGH),
     };
   }
+  // This CLIN's own cost truth, never the contract's (#152). A mixed award prices one
+  // line from category rates and leaves another on the billing fallback, and inheriting
+  // a contract-wide unlock would print the fallback line's billings under a cost
+  // heading. The reason splits the same way: at level 1 nobody has supplied rates, and
+  // above it this CLIN's categories in particular are still standing in.
+  const costKnown = clinCostKnown(clin);
+  const costWhy = margin ? COST_IS_STANDIN : LEVEL_1_COST;
   return {
     revenue: fact(clin.revenue ?? 0),
-    cost: margin ? fact(clin.cost ?? 0) : withheld(LEVEL_1_COST),
-    fee: !margin
-      ? withheld(LEVEL_1_FEE)
+    cost: costKnown ? fact(clin.cost ?? 0) : withheld(costWhy),
+    fee: !costKnown
+      ? withheld(margin ? FEE_IS_STANDIN_CLIN : LEVEL_1_FEE)
       : clin.fee_known
         ? fact(clin.fee_earned ?? 0)
         : withheld(NO_FEE_TERMS_CLIN),
-    margin: !margin
-      ? withheld(LEVEL_1_COST)
-      : clin.margin_pct == null
-        ? withheld(COST_IS_STANDIN)
-        : fact(clin.margin_pct),
+    // With cost known, a null `margin_pct` is one of the two remaining refusals, and
+    // they take different fixes: unstated fee terms are fixed by importing a document,
+    // no revenue yet by waiting. Naming the cost stand-in here would send a user who
+    // already supplied rates back to enter more.
+    margin: !costKnown
+      ? withheld(costWhy)
+      : clin.margin_pct != null
+        ? fact(clin.margin_pct)
+        : withheld(clin.fee_known ? NO_REVENUE_CLIN : NO_FEE_TERMS_CLIN),
   };
 }
 
@@ -178,11 +220,23 @@ export const awardPoolShareLabel = (poolShare) =>
 // split is why `_fee_payload` carries `terms_known` and `cost_known` beside `known`
 // instead of only their conjunction.
 const FEE_NEEDS_COST =
-  "Earned fee is a function of cost, and at cost-model level 1 cost is the billing rate — supply direct rates to read this.";
+  "Earned fee is a function of cost, and where cost is the billing rate standing in there is no fee to read — supply direct rates for this CLIN's categories.";
+const FEE_NEEDS_TERMS =
+  "This award's fee terms are incomplete, so everything earned against them is withheld rather than computed to zero.";
 
+// Both halves of the answer, and both default closed (#153). The projected position is
+// the same fee terms applied to projected cost, so it carries the same two flags — a
+// payload that omits them has not said the figure is trustworthy, and the old
+// `!== false` read turned that silence into a fact. Unknown *terms* matter as much as
+// unknown cost: `earned_fee` against a fee structure the award never printed computes
+// a clean $0, which is a claim that the work has earned no fee.
 export function feeFigures(fp) {
-  const costOk = fp.cost_known !== false;
-  const gated = (value) => (costOk ? fact(value ?? 0) : withheld(FEE_NEEDS_COST));
+  const why = !(fp.terms_known === true)
+    ? FEE_NEEDS_TERMS
+    : fp.cost_known === true
+      ? null
+      : FEE_NEEDS_COST;
+  const gated = (value) => (why ? withheld(why) : fact(value ?? 0));
   return {
     // Stated by the award, so never gated on cost. Null only when the award itself
     // didn't print a target — CPAF before any determination, most often.
