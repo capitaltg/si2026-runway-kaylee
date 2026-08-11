@@ -28,6 +28,7 @@ from . import (
     rates,
     sources,
     suggest,
+    workbook,
 )
 from .schemas import Extraction, ExpenseIn
 
@@ -1437,6 +1438,82 @@ def contract_burn(contract_id: int):
         db.list_expenses(contract_id),
         _cost_model(contract_id),
     )
+
+
+XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _xlsx(wb, filename: str) -> Response:
+    """A workbook as a download. Built in memory and returned whole rather than
+    streamed from a temp file — the largest sheet here is a few thousand timesheet
+    rows, and a half-written file on a failed generation is worse than a slow one."""
+    return Response(
+        content=workbook.to_bytes(wb),
+        media_type=XLSX_MEDIA,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _slug(value: Optional[str], fallback: str) -> str:
+    """A filename fragment. PIIDs carry slashes and spaces often enough that an
+    unsanitised one produces a download nobody can open."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "")).strip("-")
+    return cleaned or fallback
+
+
+@app.get("/api/contracts/{contract_id}/workbook.xlsx")
+def contract_workbook(contract_id: int):
+    """The contract's multi-sheet Excel workbook (#86).
+
+    Server-side because the figures already live here and because the sheets carry
+    live formulas and cross-sheet references that a browser-side CSV writer cannot.
+    The per-view CSV export is untouched: this adds an artifact, it does not replace
+    one (see the ticket's "Keep CSV").
+    """
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    payload = burn.compute(
+        contract,
+        db.get_timesheets(contract_id),
+        db.list_expenses(contract_id),
+        _cost_model(contract_id),
+    )
+    wb = workbook.build_contract_workbook(
+        payload,
+        contract_allocation(contract_id),
+        db.get_timesheets(contract_id),
+        contract_funding(contract_id),
+        contract,
+    )
+    header = contract.get("contract") or {}
+    name = _slug(
+        contract.get("nickname") or contract.get("piid") or header.get("contractor"),
+        f"contract-{contract_id}",
+    )
+    return _xlsx(wb, f"runway-{name}.xlsx")
+
+
+@app.get("/api/portfolio/workbook.xlsx")
+def portfolio_workbook():
+    """One row per contract, with the margin and fee columns from #82."""
+    entries = []
+    for row in db.list_contracts():
+        contract = db.get_contract(row["id"])
+        if contract is None:
+            continue
+        entries.append(
+            (
+                contract,
+                burn.compute(
+                    contract,
+                    db.get_timesheets(row["id"]),
+                    db.list_expenses(row["id"]),
+                    _cost_model(row["id"]),
+                ),
+            )
+        )
+    return _xlsx(workbook.build_portfolio_workbook(entries), "runway-portfolio.xlsx")
 
 
 class RenameIn(BaseModel):

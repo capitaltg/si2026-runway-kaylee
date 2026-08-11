@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 // Global top bar, built to match docs/design/Runway.dc.html (issue #3):
 // view title/subtitle, active-contract meta (vehicle + period-of-performance
@@ -40,10 +40,69 @@ const iconBtn = {
   cursor: "pointer",
 };
 
-export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, toggleAi, onExport, onAskRunway }) {
+// One row of the export menu. Disabled items stay visible rather than disappearing —
+// "CSV needs a contract open" is more useful than a menu that changes length.
+function ExportItem({ label, note, disabled, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        padding: "9px 12px",
+        border: "none",
+        background: "transparent",
+        color: disabled ? "var(--dim)" : "var(--text)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = "var(--panel2)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 2 }}>{note}</div>
+    </button>
+  );
+}
+
+export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, toggleAi, onExport, onExportCsv, onAskRunway }) {
   const h = HEADERS[view] || { main: view, sub: "", meta: false };
   const showMeta = h.meta && !!contract;
   const main = h.main || contract?.name || "Runway";
+
+  // The export menu (#86). Two artifacts, one button: the workbook is the one an
+  // accountant reconciles in, the CSV is still the fastest "give me this grid", and
+  // neither earns a second permanent button in the chrome.
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+  useEffect(() => {
+    if (!exportOpen) return undefined;
+    const onDown = (e) => {
+      if (!exportRef.current?.contains(e.target)) setExportOpen(false);
+    };
+    // Escape closes it, and focus is never trapped inside — the same rule the rest of
+    // the chrome follows.
+    const onKey = (e) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [exportOpen]);
+
+  const runExport = (fn) => () => {
+    setExportOpen(false);
+    fn?.();
+  };
 
   const tw = contract?.total_weeks || 0;
   const cw = contract?.current_week || 0;
@@ -142,26 +201,84 @@ export default function TopBar({ view, contract, theme, toggleTheme, aiEnabled, 
           </div>
         )}
 
-        <button
-          onClick={onExport}
-          disabled={!contract}
-          title={contract ? "Download the loaded burn data as a spreadsheet (CSV)" : "Open a contract first"}
-          style={{
-            ...iconBtn,
-            border: "1px solid var(--good)",
-            background: "var(--goodBg)",
-            color: "var(--good)",
-            opacity: contract ? 1 : 0.45,
-            cursor: contract ? "pointer" : "not-allowed",
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
-            <path d="M14 3v5h5" strokeLinejoin="round" />
-            <path d="M9 13l2 2M11 15l-2 2M15 13l-2 2M13 15l2 2" strokeLinecap="round" />
-          </svg>
-          Export to Excel
-        </button>
+        {/* One button, two artifacts (#86). The workbook is what an accountant
+            reconciles in — seven sheets, live formulas, and figures the engine
+            withheld still withheld. The CSV stays because "give me this grid" is a
+            real use case with a faster path, but it doesn't earn its own slot in the
+            chrome, so it lives under the caret. The workbook needs no loaded contract:
+            with none open it is the portfolio one, which is why only the CSV row
+            disables. */}
+        <div ref={exportRef} style={{ position: "relative" }}>
+          <button
+            onClick={() => setExportOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            title="Download this data as a spreadsheet"
+            style={{
+              ...iconBtn,
+              border: "1px solid var(--good)",
+              background: "var(--goodBg)",
+              color: "var(--good)",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
+              <path d="M14 3v5h5" strokeLinejoin="round" />
+              <path d="M9 13l2 2M11 15l-2 2M15 13l-2 2M13 15l2 2" strokeLinecap="round" />
+            </svg>
+            Export to Excel
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              style={{
+                marginLeft: 1,
+                transform: exportOpen ? "rotate(180deg)" : "none",
+                transition: "transform 120ms ease",
+              }}
+            >
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {exportOpen && (
+            <div
+              role="menu"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                right: 0,
+                zIndex: 40,
+                width: 268,
+                padding: "4px 0",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--panel)",
+                boxShadow: "0 12px 28px rgba(0,0,0,0.28)",
+                overflow: "hidden",
+              }}
+            >
+              <ExportItem
+                label={contract ? "Excel workbook (.xlsx)" : "Portfolio workbook (.xlsx)"}
+                note={
+                  contract
+                    ? "Seven sheets, live formulas — CLINs, people, rate buildup, fee, timesheets, funding"
+                    : "One row per contract, with cost, fee and margin"
+                }
+                onClick={runExport(onExport)}
+              />
+              <ExportItem
+                label="CSV — this contract's CLIN grid"
+                note={contract ? "One flat file of what's on screen" : "Open a contract first"}
+                disabled={!contract}
+                onClick={runExport(onExportCsv)}
+              />
+            </div>
+          )}
+        </div>
 
         <button
           onClick={onAskRunway}

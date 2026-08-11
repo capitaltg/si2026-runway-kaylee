@@ -532,3 +532,14 @@ export async function deletePerson(employeeId) {
   if (!r.ok) throw new Error(body.detail || `Delete failed (${r.status})`);
   return body;
 }
+
+// The multi-sheet Excel workbook (#86). URLs rather than fetches: the server sets the
+// filename in Content-Disposition and the file can run to a few MB, so the browser's
+// own downloader is a better client than a blob we build in memory and revoke.
+export function workbookUrl(contractId) {
+  return `${BASE}/api/contracts/${contractId}/workbook.xlsx`;
+}
+
+export function portfolioWorkbookUrl() {
+  return `${BASE}/api/portfolio/workbook.xlsx`;
+}

@@ -13,7 +13,12 @@ import AllocationMatrix from "./views/AllocationMatrix.jsx";
 import Drafts from "./views/Drafts.jsx";
 import People from "./views/People.jsx";
 import { applyTheme } from "./theme.js";
-import { getBurn, renameContract } from "./api.js";
+import {
+  getBurn,
+  portfolioWorkbookUrl,
+  renameContract,
+  workbookUrl,
+} from "./api.js";
 import { createHistoryAdapter, parseLocation, pathFor } from "./navigation.js";
 
 function Placeholder({ name, note }) {
@@ -27,8 +32,20 @@ function Placeholder({ name, note }) {
   );
 }
 
+// The real export (#86): a multi-sheet workbook built on the server, where the figures
+// live and where live formulas and cross-sheet references can be written. The browser
+// downloads it directly, so the filename and content type come off the response instead
+// of a blob assembled here. With no contract loaded this is the portfolio workbook.
+function downloadWorkbook(contractId) {
+  window.location.assign(
+    contractId == null ? portfolioWorkbookUrl() : workbookUrl(contractId),
+  );
+}
+
 // Download the loaded contract's burn data as a spreadsheet. CSV (opens in
 // Excel) — honest export of exactly what's on screen, no server round-trip.
+// Kept beside the workbook rather than replaced by it: "give me this grid" is a real
+// use case, and one flat file is still the fastest path to it.
 function exportCsv(burn) {
   if (!burn) return;
   const c = burn.contract || {};
@@ -225,7 +242,8 @@ export default function App() {
           toggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           aiEnabled={aiEnabled}
           toggleAi={() => setAiEnabled((v) => !v)}
-          onExport={() => exportCsv(chrome)}
+          onExport={() => downloadWorkbook(activeId)}
+          onExportCsv={() => exportCsv(chrome)}
           onAskRunway={() => setAskOpen(true)}
         />
         <div style={{ flex: 1, overflow: "auto" }}>
