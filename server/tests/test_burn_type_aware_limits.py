@@ -366,6 +366,27 @@ def test_level_1_cost_cannot_erode_a_fee():
     assert c["status"] != "fee_eroding"
 
 
+def test_the_projected_position_carries_its_own_truth_flags():
+    # #153. The projection is the same fee terms applied to projected cost, so it is
+    # exactly as trustworthy as the current position — but it used to ship without
+    # saying so, and a surface reading a missing flag as "known" printed at-completion
+    # fee, the delta against target and the absorbed fee as facts off a billing-rate
+    # stand-in. Level 1 is where that shows, because everything else about the position
+    # looks ordinary.
+    c = burn.compute(
+        _fee_contract(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE), _weeks()
+    )["clins"][0]
+    projected = c["fee_position"]["projected"]
+    assert projected["cost_known"] is False
+    assert projected["terms_known"] is True, "the award printed the fee figures"
+    assert projected["known"] is False
+    # A priced contract says the opposite on the same three keys, so a consumer can
+    # never read one state as the other's absence.
+    priced = _fee_card(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE)["fee_position"]
+    assert priced["projected"]["known"] is True
+    assert priced["projected"]["cost_known"] is True
+
+
 def test_a_red_is_never_downgraded_to_fee_eroding():
     # Precedence, and the reason the refinement is scoped to `ok`/`watch`. Where the
     # ceiling is exactly estimated cost + fee, exhausting the fee *is* a ceiling breach
