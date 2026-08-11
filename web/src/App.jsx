@@ -7,6 +7,7 @@ import FlightDeck from "./views/FlightDeck.jsx";
 import Expenses from "./views/Expenses.jsx";
 import FundingHistory from "./views/FundingHistory.jsx";
 import IndirectRates from "./views/IndirectRates.jsx";
+import Profitability from "./views/Profitability.jsx";
 import AskRunway from "./views/AskRunway.jsx";
 import AllocationMatrix from "./views/AllocationMatrix.jsx";
 import Drafts from "./views/Drafts.jsx";
@@ -254,6 +255,8 @@ export default function App() {
             <FundingHistory contractId={activeId} />
           ) : view === "rates" ? (
             <IndirectRates contractId={activeId} setActiveId={setActiveId} />
+          ) : view === "profitability" ? (
+            <Profitability contractId={activeId} setActiveId={setActiveId} />
           ) : view === "allocate" ? (
             <AllocationMatrix
               contractId={activeId}

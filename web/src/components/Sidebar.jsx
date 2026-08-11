@@ -82,6 +82,10 @@ const CONTRACT_NAV = [
   { key: "expenses", label: "Expenses", sub: "Non-labor CLINs" },
   { key: "funding", label: "Funding History", sub: "Award + SF-30 mods" },
   { key: "rates", label: "Indirect Rates", sub: "Cost vs. billing (optional)" },
+  // Sits directly after Indirect Rates because that is where its inputs come from:
+  // a Level-1 contract sees this view withhold every margin figure and point back
+  // up one row (#82).
+  { key: "profitability", label: "Profitability", sub: "Cost · revenue · fee" },
   { key: "drafts", label: "Drafts", sub: "Memos · invoices · check-ins" },
 ];
 

@@ -10,6 +10,7 @@ const CONTRACT_SEGMENTS = {
   expenses: "expenses",
   funding: "funding",
   rates: "rates",
+  profitability: "profitability",
   drafts: "drafts",
 };
 
