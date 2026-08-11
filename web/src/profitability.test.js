@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  awardPoolShareLabel,
   pricedBy,
   rateChain,
   rateVariance,
@@ -266,6 +267,11 @@ test("a position with no fee target withholds the target and the delta, not the 
   assert.equal(f.earned.value, 116058.26);
 });
 
+test("an award-fee pool share is displayed as dollars, not as a ratio", () => {
+  assert.equal(awardPoolShareLabel(45000), "$45,000 of pool");
+  assert.equal(awardPoolShareLabel(null), "");
+});
+
 test("an undetermined award-fee period is provisional; a zero determination is a fact", () => {
   const cpaf = {
     basis: "base_plus_award",
@@ -276,9 +282,9 @@ test("an undetermined award-fee period is provisional; a zero determination is a
     periods_determined: 2,
     periods_total: 3,
     periods: [
-      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 0.33 },
-      { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 0.33 },
-      { name: "Period 3", status: "pending", determined_amount: null, pool_share: 0.34 },
+      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 45000 },
+      { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 45000 },
+      { name: "Period 3", status: "pending", determined_amount: null, pool_share: 45000 },
     ],
   };
   const a = awardPeriods(cpaf);

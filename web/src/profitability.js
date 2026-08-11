@@ -9,6 +9,8 @@
 // accountant would act on. So withholding travels as a *reason*, not as a null the
 // caller has to remember to check.
 
+import { money } from "./format.js";
+
 // The gate. False means nobody supplied direct rates, so `cost` is the burdened
 // billing rate and equals `billings` by construction — margin off those two is 0 by
 // arithmetic, not by fact. Level 1 is a supported, complete state (the app is fully
@@ -163,6 +165,9 @@ const FEE_BASIS = {
 };
 
 export const feeBasisLabel = (fp) => FEE_BASIS[fp?.basis] || "Fee";
+
+export const awardPoolShareLabel = (poolShare) =>
+  poolShare == null ? "" : `${money(poolShare)} of pool`;
 
 // Award-stated facts survive level 1; anything computed from cost does not.
 //
