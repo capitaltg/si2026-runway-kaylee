@@ -146,6 +146,124 @@ export function projectionReason(clin) {
   return "This CLIN's policy states no at-completion projection: its read is when the funding runs out, not what the work earns.";
 }
 
+// ---- fee at risk (#82 section 5) ------------------------------------------------
+//
+// The one section with no equivalent anywhere else in the app: what the award promised
+// in fee, what the work has earned of it, and what the current overrun is costing.
+//
+// Everything comes off `clin.fee_position`, which already carries its own `periods` —
+// the PUT /fee-periods endpoint exists to *record* determinations, and reading them
+// from a second place would let the section disagree with the engine that priced them.
+
+const FEE_BASIS = {
+  fixed_fee: "Fixed fee",
+  base_plus_award: "Base fee + award fee",
+  incentive_fee: "Incentive fee",
+  incentive_profit: "Incentive profit",
+};
+
+export const feeBasisLabel = (fp) => FEE_BASIS[fp?.basis] || "Fee";
+
+// Award-stated facts survive level 1; anything computed from cost does not.
+//
+// `target`, `clause`, `award_pool`, the share ratio and the PTA are printed on the
+// award — they are true before a single hour is charged. `earned`, `at_completion`,
+// `at_risk`, `absorbed`, `withhold` and `collectable` are all functions of `cost_frac`,
+// so at level 1 they are functions of the billing rate and say nothing about fee. This
+// split is why `_fee_payload` carries `terms_known` and `cost_known` beside `known`
+// instead of only their conjunction.
+const FEE_NEEDS_COST =
+  "Earned fee is a function of cost, and at cost-model level 1 cost is the billing rate — supply direct rates to read this.";
+
+export function feeFigures(fp) {
+  const costOk = fp.cost_known !== false;
+  const gated = (value) => (costOk ? fact(value ?? 0) : withheld(FEE_NEEDS_COST));
+  return {
+    // Stated by the award, so never gated on cost. Null only when the award itself
+    // didn't print a target — CPAF before any determination, most often.
+    target: fp.target == null ? withheld("The award printed no fee target.") : fact(fp.target),
+    earned: gated(fp.earned),
+    atCompletion: gated(fp.at_completion),
+    // The number worth alarming on (`target_delta`): fee gained or lost against what
+    // the award promised.
+    delta:
+      fp.target_delta == null
+        ? withheld("No fee target to measure against.")
+        : gated(fp.target_delta),
+    atRisk: gated(fp.at_risk),
+    absorbed: gated(fp.absorbed),
+    // The 52.216-8 withhold: earned but not yet payable. Kept beside `collectable`
+    // because the difference between the two is the whole point of the clause.
+    withhold: gated(fp.withhold),
+    collectable: gated(fp.collectable),
+  };
+}
+
+// Why a fee card can't be trusted, or null when it can. Split rather than collapsed:
+// missing award terms are fixed by importing a document, missing cost by entering
+// rates, and telling a user to do the wrong one wastes the trip.
+export function feeGap(fp) {
+  if (!fp.terms_known) {
+    const missing = (fp.missing || []).join(", ");
+    return {
+      fix: "terms",
+      message: missing
+        ? `This award's fee terms are incomplete — missing ${missing}. Import the fee structure to price it.`
+        : "This award printed no fee structure for the engine to earn against.",
+    };
+  }
+  if (fp.cost_known === false) {
+    return {
+      fix: "cost",
+      message:
+        "The fee terms are known, but earned fee needs a real cost buildup — every figure below that depends on cost is withheld.",
+    };
+  }
+  return null;
+}
+
+// CPAF only. An undetermined period is money the government has not awarded, so it is
+// `provisional` in exactly the sense BurnChart's diagonal hatch already means — the
+// view hatches it rather than inventing a second visual language for "not yet real".
+export function awardPeriods(fp) {
+  if (fp.basis !== "base_plus_award") return null;
+  return {
+    pool: fp.award_pool,
+    earned: fp.award_earned,
+    available: fp.award_available,
+    baseEarned: fp.base_earned,
+    determined: fp.periods_determined,
+    total: fp.periods_total,
+    periods: (fp.periods || []).map((p) => ({
+      ...p,
+      // A pending period is provisional; a determined one is a fact, even when the
+      // determination was zero. `validate_fee_period` exists to keep those apart, and
+      // rendering them the same here would undo it.
+      provisional: p.status !== "determined",
+    })),
+  };
+}
+
+// CPIF / FPI only. `share_contractor` is the contractor's share of an underrun or
+// overrun; `share_raw` is how the award printed it, kept so the number can be checked
+// against the document rather than trusted.
+export function shareRatio(fp) {
+  if (fp.basis !== "incentive_fee" && fp.basis !== "incentive_profit") return null;
+  return {
+    contractor: fp.share_contractor,
+    raw: fp.share_raw,
+    // Point of total assumption: above this cost the contractor absorbs every
+    // additional dollar. Null without a price ceiling to compute it from.
+    pta: fp.pta,
+  };
+}
+
+// The CLINs with a fee mechanic at all. Fixed-price lines carry a margin position
+// instead, T&M keeps its fee inside the billing rate, and an unlabelled award has
+// neither — so an empty list is the normal state on most contracts, not a failure.
+export const feeClins = (burn) =>
+  orderedClins(burn).filter((c) => c.fee_position);
+
 // What `spent` and every figure derived from it is denominated in (`measured_against`,
 // #79). Printed beside each CLIN because a cost-measured line and a billings-measured
 // line put different quantities in the same column.

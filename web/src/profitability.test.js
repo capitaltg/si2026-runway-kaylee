@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  awardPeriods,
   clinFigures,
+  feeBasisLabel,
+  feeClins,
+  feeFigures,
+  feeGap,
+  shareRatio,
   marginAvailable,
   measuredIn,
   orderedClins,
@@ -169,4 +175,146 @@ test("the gate reads the contract's cost model, defaulting closed on a payload w
   assert.equal(marginAvailable(level(1, false)), false);
   assert.equal(marginAvailable({ contract: {} }), false);
   assert.equal(marginAvailable(null), false);
+});
+
+// ---- fee at risk (#82 section 5) ------------------------------------------------
+// Shapes taken from a live CPFF payload (contract 39), which is why the numbers are
+// the odd ones they are: fee target 176,075 with 44,080 absorbed by the projected
+// overrun.
+const cpff = {
+  basis: "fixed_fee",
+  known: true,
+  terms_known: true,
+  cost_known: true,
+  missing: [],
+  target: 176075.26,
+  earned: 116058.26,
+  at_completion: 176075.26,
+  target_delta: 0,
+  withhold: 26411.29,
+  collectable: 89646.97,
+  at_risk: 0,
+  absorbed: 0,
+  overrun: 0,
+  exhausted: false,
+  provisional: false,
+  clause: "52.216-8",
+  periods: [],
+  projected: {
+    basis: "fixed_fee",
+    terms_known: true,
+    cost_known: true,
+    target: 176075.26,
+    earned: 176075.26,
+    at_completion: 131995.26,
+    target_delta: -44080,
+    withhold: 26411.29,
+    collectable: 149663.97,
+    at_risk: 44080,
+    absorbed: 44080,
+    overrun: 44080,
+    exhausted: false,
+  },
+};
+
+test("a priced fixed-fee position reports every figure as a fact", () => {
+  const f = feeFigures(cpff);
+  assert.equal(f.target.value, 176075.26);
+  assert.equal(f.earned.value, 116058.26);
+  assert.equal(f.withhold.value, 26411.29);
+  assert.equal(f.collectable.value, 89646.97);
+  assert.equal(feeGap(cpff), null);
+});
+
+test("the projection carries the loss the current position does not yet show", () => {
+  const p = feeFigures(cpff.projected);
+  assert.equal(p.delta.value, -44080, "fee lost against what the award promised");
+  assert.equal(p.absorbed.value, 44080);
+  assert.equal(p.atRisk.value, 44080);
+  // The whole point of the section: to date the position looks whole.
+  assert.equal(feeFigures(cpff).absorbed.value, 0);
+});
+
+test("award-stated fee terms survive level 1, but earned fee does not", () => {
+  const level1 = { ...cpff, known: false, cost_known: false };
+  const f = feeFigures(level1);
+  assert.equal(f.target.value, 176075.26, "the award printed this before any hour was charged");
+  for (const key of ["earned", "atCompletion", "atRisk", "absorbed", "withhold", "collectable"]) {
+    assert.equal(f[key].value, null, `${key} depends on cost`);
+    assert.match(f[key].withheld, /level 1/);
+  }
+  assert.equal(feeGap(level1).fix, "cost");
+});
+
+test("missing award terms and missing cost are different problems with different fixes", () => {
+  const noTerms = { ...cpff, terms_known: false, missing: ["fee target", "fee type"] };
+  const gap = feeGap(noTerms);
+  assert.equal(gap.fix, "terms");
+  assert.match(gap.message, /fee target, fee type/);
+  assert.match(gap.message, /Import/);
+  // Cost is the other fix, and telling the user to import a document would waste it.
+  assert.equal(feeGap({ ...cpff, cost_known: false }).fix, "cost");
+});
+
+test("a position with no fee target withholds the target and the delta, not the earned fee", () => {
+  const f = feeFigures({ ...cpff, target: null, target_delta: null });
+  assert.equal(f.target.value, null);
+  assert.equal(f.delta.value, null);
+  assert.equal(f.earned.value, 116058.26);
+});
+
+test("an undetermined award-fee period is provisional; a zero determination is a fact", () => {
+  const cpaf = {
+    basis: "base_plus_award",
+    award_pool: 200000,
+    award_earned: 60000,
+    award_available: 140000,
+    base_earned: 90000,
+    periods_determined: 2,
+    periods_total: 3,
+    periods: [
+      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 0.33 },
+      { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 0.33 },
+      { name: "Period 3", status: "pending", determined_amount: null, pool_share: 0.34 },
+    ],
+  };
+  const a = awardPeriods(cpaf);
+  assert.equal(a.pool, 200000);
+  assert.deepEqual(
+    a.periods.map((p) => p.provisional),
+    [false, false, true],
+    "a determination of zero is an outcome, not a pending evaluation",
+  );
+});
+
+test("only CPAF gets award periods, and only incentive types get a share ratio", () => {
+  assert.equal(awardPeriods(cpff), null);
+  assert.equal(shareRatio(cpff), null);
+  const cpif = { basis: "incentive_fee", share_contractor: 0.2, share_raw: "80/20", pta: 2400000 };
+  assert.equal(shareRatio(cpif).raw, "80/20");
+  assert.equal(shareRatio(cpif).pta, 2400000);
+  assert.equal(awardPeriods(cpif), null);
+});
+
+test("fee basis reads as prose, and an unknown basis still renders a label", () => {
+  assert.equal(feeBasisLabel(cpff), "Fixed fee");
+  assert.equal(feeBasisLabel({ basis: "base_plus_award" }), "Base fee + award fee");
+  assert.equal(feeBasisLabel({ basis: "something_new" }), "Fee");
+  assert.equal(feeBasisLabel(null), "Fee");
+});
+
+test("only CLINs with a fee mechanic get a card — fixed-price and T&M lines carry none", () => {
+  const burn = {
+    clins: [
+      { code: "CLIN 0001", is_labor: true, fee_position: cpff },
+      { code: "CLIN 0002", is_labor: true, margin_position: { known: true } },
+      { code: "CLIN 0003", is_labor: true 
+      },
+      { code: "CLIN 0004", is_labor: false, spent: 100 },
+    ],
+  };
+  assert.deepEqual(
+    feeClins(burn).map((c) => c.code),
+    ["CLIN 0001"],
+  );
 });

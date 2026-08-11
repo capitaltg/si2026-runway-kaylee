@@ -48,6 +48,23 @@ export const CLAUSE_NAME = {
   "52.232-7": "Payments under Time-and-Materials and Labor-Hour Contracts",
 };
 
+// The fee clauses (#80, `fee_position.clause`), deliberately a *separate* map rather
+// than more entries in the one above. `clauseRisk` derives from `CLAUSE_NAME`, and a
+// fee clause is not a funding-limit risk — 52.216-8 governs when fee gets paid, not
+// whether the money runs out. Folding the two together makes `clauseRisk("52.216-8")`
+// produce "a risk under FAR 52.216-8", which is the exact wrong-clause-to-a-CO error
+// #81 fixed; format.test.js pins that refusal.
+export const FEE_CLAUSE_NAME = {
+  "52.216-8": "Fixed Fee",
+  "52.216-10": "Incentive Fee",
+};
+
+// A clause number spelled out for display, from whichever vocabulary owns it. Display
+// only — anything asserting a *risk* must go through `clauseRisk`, which answers for
+// funding limits alone.
+export const clauseTitle = (clause) =>
+  CLAUSE_NAME[clause] || FEE_CLAUSE_NAME[clause] || null;
+
 // A clause citation for prose that warns about a funding limit — "a risk under FAR
 // 52.232-22 (Limitation of Funds)". Null when the CLIN's policy carries no funding
 // clause at all (fixed price, which has no limitation-of-funds mechanic), so the

@@ -2,14 +2,21 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getBurn, listContracts } from "../api.js";
 import { money, pct, panelStyle, pill, statusColor } from "../format.js";
 import {
+  awardPeriods,
   clinFigures,
+  feeBasisLabel,
+  feeClins,
+  feeFigures,
+  feeGap,
   marginAvailable,
   measuredIn,
   orderedClins,
   projection,
   projectionReason,
+  shareRatio,
   summary,
 } from "../profitability.js";
+import { clauseTitle } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -56,6 +63,20 @@ const tdLeft = { ...td, textAlign: "left", fontFamily: "inherit" };
 // A withheld figure renders as a dash that carries its reason, never as 0. The
 // `title` is the whole point: the reason is a fact about the contract's data, and a
 // bare dash would read as a rendering bug rather than as a refusal.
+// The chart's "provisional / not yet real" mark (`#rwUnfunded` in BurnChart), as a
+// background layer: 45° hatch in `var(--warn)` at .3. Kept as a sibling layer rather
+// than an element opacity so the text on top stays crisp. Undetermined award fee is
+// provisional in exactly the sense the chart already uses it for, so it gets the same
+// mark rather than a second visual language for the same idea.
+const hatchLayer = {
+  position: "absolute",
+  inset: 0,
+  opacity: 0.3,
+  backgroundImage:
+    "repeating-linear-gradient(45deg, transparent 0 8px, var(--warn) 8px 9px)",
+  pointerEvents: "none",
+};
+
 const Figure = ({ figure, format }) =>
   figure.withheld ? (
     <span style={{ color: "var(--faint)", fontFamily: mono }} title={figure.withheld}>
@@ -64,6 +85,69 @@ const Figure = ({ figure, format }) =>
   ) : (
     format(figure.value)
   );
+
+// One labelled figure inside a fee card.
+const FeeStat = ({ label, figure, format = money, tone }) => (
+  <div style={{ minWidth: 120 }}>
+    <div style={{ fontSize: 10.5, color: "var(--faint)", fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase" }}>
+      {label}
+    </div>
+    <div style={{ fontFamily: mono, fontSize: 15, marginTop: 3, color: tone || "var(--text)" }}>
+      <Figure figure={figure} format={format} />
+    </div>
+  </div>
+);
+
+// The award-fee period table (CPAF). A pending period is money the government has not
+// awarded yet, hatched to say so; a determined period is a fact even when the
+// determination was zero, which is a real and very different outcome.
+function AwardPeriods({ award }) {
+  if (!award?.periods?.length) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+        Award-fee periods
+        {award.determined != null && award.total != null
+          ? ` · ${award.determined} of ${award.total} determined`
+          : ""}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {award.periods.map((p, i) => (
+          <div
+            key={`${p.name}-${i}`}
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "baseline",
+              gap: 12,
+              padding: "9px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "var(--panel2)",
+              fontSize: 12.5,
+            }}
+          >
+            {p.provisional && <div style={hatchLayer} />}
+            <div style={{ fontWeight: 600, minWidth: 96 }}>{p.name}</div>
+            <div style={{ color: "var(--dim)", flex: 1, minWidth: 0 }}>
+              {p.start && p.end ? `${p.start} → ${p.end}` : "Window not stated"}
+              {p.pool_share != null ? ` · ${pct(p.pool_share)} of pool` : ""}
+              {p.score != null ? ` · score ${p.score}` : ""}
+            </div>
+            <div style={{ fontFamily: mono }}>
+              {p.status === "determined" ? (
+                money(p.determined_amount || 0)
+              ) : (
+                <span style={{ color: "var(--warn)" }}>Pending</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Profitability({ contractId, setActiveId }) {
   const [burn, setBurn] = useState(null);
@@ -92,6 +176,7 @@ export default function Profitability({ contractId, setActiveId }) {
   const margin = marginAvailable(burn);
   const tiles = useMemo(() => summary(burn), [burn]);
   const clins = useMemo(() => orderedClins(burn), [burn]);
+  const fee = useMemo(() => feeClins(burn), [burn]);
 
   if (error) {
     return <div style={{ padding: 40, color: "var(--bad)", fontSize: 14 }}>{error}</div>;
@@ -312,6 +397,164 @@ export default function Profitability({ contractId, setActiveId }) {
           </table>
         </div>
       </div>
+
+      {/* ---- Fee at risk --------------------------------------------------- */}
+      {fee.length > 0 && (
+        <div style={{ marginTop: 26 }}>
+          <div style={{ fontFamily: grotesk, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+            Fee at risk
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 3, maxWidth: 760 }}>
+            What the award promised in fee, what the work has earned of it, and what the
+            current overrun is costing. On a cost-type CLIN the overrun eats fee before
+            it reaches the government's money, so this is the loss that otherwise stays
+            invisible until year end.
+          </div>
+
+          {fee.map((c) => {
+            const fp = c.fee_position;
+            const gap = feeGap(fp);
+            const now = feeFigures(fp);
+            const proj = fp.projected ? feeFigures(fp.projected) : null;
+            const award = awardPeriods(fp);
+            const share = shareRatio(fp);
+            const losing = fp.projected?.absorbed > 0 || fp.projected?.exhausted;
+            return (
+              <div key={c.code} style={{ ...panelStyle, marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.code}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
+                    {feeBasisLabel(fp)}
+                    {fp.clause
+                      ? ` · FAR ${fp.clause}${clauseTitle(fp.clause) ? ` (${clauseTitle(fp.clause)})` : ""}`
+                      : ""}
+                  </div>
+                  {fp.exhausted && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--bad)" }}>
+                      Fee exhausted
+                    </span>
+                  )}
+                </div>
+
+                {gap && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 12.5,
+                      color: "var(--dim)",
+                      lineHeight: 1.5,
+                      background: "var(--panel2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      padding: "9px 12px",
+                    }}
+                  >
+                    {gap.message}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginTop: 14 }}>
+                  <FeeStat label="Fee target" figure={now.target} />
+                  <FeeStat label="Earned to date" figure={now.earned} />
+                  <FeeStat
+                    label="At completion"
+                    figure={proj ? proj.atCompletion : now.atCompletion}
+                    tone={losing ? "var(--warn)" : undefined}
+                  />
+                  <FeeStat
+                    label="vs. target"
+                    figure={proj ? proj.delta : now.delta}
+                    tone={
+                      (proj ? proj.delta.value : now.delta.value) < 0 ? "var(--bad)" : undefined
+                    }
+                  />
+                  <FeeStat
+                    label="At risk"
+                    figure={proj ? proj.atRisk : now.atRisk}
+                    tone={losing ? "var(--warn)" : undefined}
+                  />
+                  <FeeStat
+                    label="Absorbed by overrun"
+                    figure={proj ? proj.absorbed : now.absorbed}
+                    tone={losing ? "var(--bad)" : undefined}
+                  />
+                </div>
+
+                {/* The 52.216-8 pair. Earned is not the same as payable, and the gap
+                    between them is the clause working as intended rather than a
+                    problem — kept out of the row above so it doesn't read as a loss. */}
+                {(now.withhold.value != null || now.collectable.value != null) && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 22,
+                      marginTop: 16,
+                      paddingTop: 14,
+                      borderTop: "1px solid var(--border)",
+                    }}
+                  >
+                    <FeeStat label="Withheld" figure={now.withhold} />
+                    <FeeStat label="Collectable now" figure={now.collectable} />
+                    {fp.provisional && (
+                      <div style={{ fontSize: 11.5, color: "var(--dim)", alignSelf: "center", maxWidth: 320 }}>
+                        Billed provisionally at the target rate and adjusted at
+                        completion.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {share && (
+                  <div style={{ marginTop: 16, fontSize: 12.5, color: "var(--dim)", lineHeight: 1.55 }}>
+                    Share ratio{" "}
+                    <strong style={{ color: "var(--text)", fontFamily: mono }}>
+                      {share.raw || (share.contractor != null ? pct(share.contractor) : "—")}
+                    </strong>
+                    {share.contractor != null
+                      ? ` — the contractor absorbs ${pct(share.contractor)} of every overrun dollar.`
+                      : ""}
+                    {share.pta != null && (
+                      <>
+                        {" "}
+                        Point of total assumption{" "}
+                        <strong style={{ color: "var(--text)", fontFamily: mono }}>
+                          {money(share.pta)}
+                        </strong>
+                        — above that cost the contractor absorbs every additional dollar.
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {award && (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginTop: 16 }}>
+                      {award.pool != null && (
+                        <FeeStat label="Award pool" figure={{ value: award.pool, withheld: null }} />
+                      )}
+                      {award.baseEarned != null && (
+                        <FeeStat label="Base fee earned" figure={{ value: award.baseEarned, withheld: null }} />
+                      )}
+                      {award.earned != null && (
+                        <FeeStat label="Award fee earned" figure={{ value: award.earned, withheld: null }} />
+                      )}
+                      {award.available != null && (
+                        <FeeStat
+                          label="Still available"
+                          figure={{ value: award.available, withheld: null }}
+                          tone="var(--warn)"
+                        />
+                      )}
+                    </div>
+                    <AwardPeriods award={award} />
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

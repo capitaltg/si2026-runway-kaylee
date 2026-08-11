@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shortDate, stopPhrase, asOfLabel, clauseRisk } from "./format.js";
+import { shortDate, stopPhrase, asOfLabel, clauseRisk, clauseTitle } from "./format.js";
 
 test("shortDate renders an ISO date without shifting it", () => {
   // The reason this is regex-parsed and not `new Date(s)`: that parses a bare ISO
@@ -156,4 +156,17 @@ test("a funding-limit warning cites the clause the CLIN is actually under", () =
   // the caller is expected to drop the sentence rather than print a bare number.
   assert.equal(clauseRisk(null), null);
   assert.equal(clauseRisk("52.216-8"), null);
+});
+
+test("a fee clause is spelled out for display but never becomes a funding risk", () => {
+  // Kept in a separate vocabulary from CLAUSE_NAME on purpose: 52.216-8 governs when
+  // fee is paid, not whether the money runs out. Folding the two together turned
+  // clauseRisk("52.216-8") into "a risk under FAR 52.216-8", which is the
+  // wrong-clause-to-a-CO error #81 fixed.
+  assert.equal(clauseTitle("52.216-8"), "Fixed Fee");
+  assert.equal(clauseTitle("52.216-10"), "Incentive Fee");
+  assert.equal(clauseRisk("52.216-8"), null);
+  // The funding vocabulary still resolves through the same display helper.
+  assert.equal(clauseTitle("52.232-22"), "Limitation of Funds");
+  assert.equal(clauseTitle("52.999-1"), null);
 });
