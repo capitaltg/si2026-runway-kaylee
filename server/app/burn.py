@@ -793,6 +793,14 @@ def _fee_payload(position, projected, in_revenue: bool, cost_known: bool):
     to be true for the answer to be yes. `terms_known` and `cost_known` are carried
     beside it so the UI can say which half is missing, which is the same split
     `margin_position.known` makes for the identical reason.
+
+    The nested `projected` position carries the same three flags (#153). It is the same
+    fee terms applied to projected cost, so it is exactly as trustworthy as the current
+    position and no more — but it used to ship without saying so, and a surface that
+    read a missing flag as "known" printed at-completion fee, the delta against target,
+    fee at risk and absorbed fee as facts off a billing-rate stand-in. The flags are
+    stamped rather than left to be inherited by convention, because every consumer reads
+    `projected` as an object in its own right.
     """
     if position is None:
         return None
@@ -804,7 +812,14 @@ def _fee_payload(position, projected, in_revenue: bool, cost_known: bool):
     # line (its revenue is the price) and at Level 1 (the billing rate already
     # contains the fee), so nobody can double-count by adding it themselves.
     out["in_revenue"] = in_revenue
-    out["projected"] = projected.payload() if projected is not None else None
+    if projected is None:
+        out["projected"] = None
+    else:
+        forecast = projected.payload()
+        forecast["known"] = bool(projected.known and cost_known)
+        forecast["terms_known"] = projected.known
+        forecast["cost_known"] = cost_known
+        out["projected"] = forecast
     return out
 
 

@@ -26,10 +26,17 @@ So these tests are written as promises about what the file may say:
 from app import workbook as W
 
 
-def _burn(level_2=True, fee_known=True):
+def _burn(level_2=True, fee_known=True, cost_known=None):
     """A minimal burn payload in the shape the engine publishes: one labor CLIN, one
     non-labor CLIN carrying spend and *no* cost/revenue/fee keys at all — the live-payload
-    shape that caught three defects in #82."""
+    shape that caught three defects in #82.
+
+    `cost_known` defaults to the tier but is separable, because the two coming apart is
+    the whole of #152: a contract can carry indirect pools and a direct rate (level 2)
+    and still price part of its hours at the billing rate.
+    """
+    if cost_known is None:
+        cost_known = level_2
     return {
         "contract": {
             "name": "TEST",
@@ -76,7 +83,7 @@ def _burn(level_2=True, fee_known=True):
             "ceiling": 1_000_000.0,
             "spent": 600_000.0,
             "cost": 620_000.0,
-            "cost_known": level_2,
+            "cost_known": cost_known,
             "revenue": 680_000.0,
             "fee": 60_000.0,
             "fee_known": fee_known,
@@ -106,6 +113,7 @@ def _burn(level_2=True, fee_known=True):
                 "funded": 980_000.0,
                 "spent": 580_000.0,
                 "cost": 600_000.0,
+                "cost_known": cost_known,
                 "revenue": 660_000.0,
                 "fee_earned": 60_000.0,
                 "fee_known": fee_known,
@@ -115,9 +123,9 @@ def _burn(level_2=True, fee_known=True):
                 "status_label": "On plan",
                 "fee_position": {
                     "basis": "fixed_fee",
-                    "known": level_2,
+                    "known": cost_known,
                     "terms_known": True,
-                    "cost_known": level_2,
+                    "cost_known": cost_known,
                     "clause": "52.216-8",
                     "target": 80_000.0,
                     "earned": 60_000.0,
@@ -248,6 +256,60 @@ def test_level_1_withholds_cost_as_a_dash_with_its_reason_not_a_zero():
     assert "level 1" in labor.comment.text
     # And the total under it refuses too, rather than summing a column of dashes to $0.
     assert ws.cell(ws.max_row, cost).value == W.DASH
+
+
+def test_partial_cost_coverage_withholds_the_workbook_totals_too():
+    """#152 in the medium that gets emailed to a contracting officer. Level 2 with
+    `cost_known: false` is a real state — pools and one direct rate, other categories
+    still on the billing fallback — and the tier flag alone used to unlock it."""
+    ws = _wb(_burn(level_2=True, cost_known=False))["By CLIN"]
+    cost = _col(ws, "Cost")
+    labor = ws.cell(2, cost)
+    assert labor.value == W.DASH
+    # The reason names the fix a level-2 user actually needs: more direct rates, not a
+    # first one. Sending them to "supply direct rates" they already supplied is the
+    # wasted trip the split reasons exist to prevent.
+    assert "billing-rate stand-in" in labor.comment.text
+    assert "level 1" not in labor.comment.text
+    total = ws.max_row
+    assert ws.cell(total, cost).value == W.DASH
+    assert ws.cell(total, _col(ws, "Margin %")).value == W.DASH
+    # Revenue survives: it comes off the CLIN policies, not the cost ladder.
+    assert ws.cell(2, _col(ws, "Revenue")).value == 660_000.0
+
+
+def test_partial_cost_coverage_withholds_the_fee_position_sheet():
+    """The other half of the same refusal (#153): fee is a function of cost, so a
+    position priced against a billing stand-in reports dashes rather than figures."""
+    ws = _wb(_burn(level_2=True, cost_known=False))["Fee position"]
+    rows = {ws.cell(r, 1).value: ws.cell(r, 2).value for r in range(1, ws.max_row + 1)}
+    for label in (
+        "Earned to date",
+        "Projected at completion",
+        "At risk",
+        "Absorbed (overrun eating fee)",
+    ):
+        assert rows.get(label) == W.DASH, label
+    # The award-stated target survives: it was printed on the document before an hour
+    # was charged, and it is what the withheld figures would have been measured against.
+    assert rows["Fee target (award-stated)"] == 80_000.0
+
+
+def test_unknown_fee_terms_never_compute_to_zero():
+    """#153: `earned_fee` against a fee structure the award never printed returns a
+    clean $0, and a $0 fee earned is a claim — that the work has earned nothing."""
+    figs = W.fee_figures({"terms_known": False, "cost_known": True, "earned": 0.0})
+    for key in ("earned", "at_completion", "at_risk", "absorbed"):
+        assert figs[key]["value"] is None, key
+        assert "terms are incomplete" in figs[key]["withheld"]
+
+
+def test_a_projection_missing_its_truth_flags_is_withheld_not_trusted():
+    """The old gate read a missing `cost_known` as "known" and printed the projection
+    as fact (#153). Silence is not a claim of trustworthiness."""
+    figs = W.fee_figures({"at_completion": 131_995.26, "target_delta": -44_080.0})
+    assert figs["at_completion"]["value"] is None
+    assert figs["delta"]["value"] is None
 
 
 def test_a_non_labor_clin_reports_its_spend_as_cost_and_revenue_and_withholds_fee():
