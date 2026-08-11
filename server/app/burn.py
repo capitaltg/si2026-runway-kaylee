@@ -1173,6 +1173,12 @@ def _compute_clin(
         and fee_position.known
         and cost_known
     )
+    # Whether `revenue` is revenue *recognised*, or a price sitting where recognised
+    # revenue would go (#154). Cost-reimbursement and T&M recognise against events this
+    # engine actually observes — an hour charged is cost incurred and billable — so
+    # their revenue is a fact the week the timesheet lands. Fixed-price recognises on
+    # delivery, and Runway is told about no deliveries.
+    revenue_known = True
     if policy.is_cost_reimbursement:
         # Cost incurred plus the fee earned on it (FAR 16.306 et seq). Where the award
         # printed no fee figures, or cost is a billing stand-in, the fee is zero and
@@ -1185,11 +1191,26 @@ def _compute_clin(
         revenue = cost + (round(fee_position.earned, 2) if fee_in_revenue else 0.0)
         fee_known = fee_in_revenue
     elif policy.is_fixed_price:
-        # The price is owed on delivery, not on hours (FAR 16.202) — so revenue is the
-        # firm price and the fee is whatever the price did not have to spend. This is
-        # the margin-at-completion position the FFP card reports instead of a runway.
+        # The price is owed on delivery, not on hours (FAR 16.202) — and delivery is an
+        # input Runway does not have (#154). `revenue` still carries the price so the
+        # three quantities reconcile per CLIN and in the rollup, but `revenue_known:
+        # False` says it is a contract price and not revenue earned to date. Without
+        # that flag a fixed-price award recognised its entire price in week one: a
+        # day-old FFP CLIN reported the full ceiling as revenue, the whole unspent
+        # budget as fee earned, and a margin approaching 100% that shrank as the work
+        # got done.
+        #
+        # Withheld rather than approximated. Percent-of-completion would need a
+        # negotiated total estimated cost, and cost-to-cost off the *price* recognises
+        # revenue faster the more we overrun — the one direction that must never read
+        # as earning. The honest fixed-price read is `margin_position`, which states
+        # price against cost-at-completion and labels itself a projection.
         revenue = ceiling
-        fee_known = cost_known
+        revenue_known = False
+        # Nothing is earned until revenue is, so the fee follows it down however well
+        # cost is known: `fee_earned` here is the price minus cost to date, which on an
+        # incomplete CLIN is unspent budget, not profit.
+        fee_known = False
     else:
         # T&M and unknown: we may bill hours x the loaded rate, and the spread over
         # cost is the fee inside that rate.
@@ -1609,6 +1630,12 @@ def _compute_clin(
         "cost_known": cost_known,
         "billings": round(billings, 2),
         "revenue": round(revenue, 2),
+        # False on a fixed-price line, where this number is the contract price and no
+        # delivery or milestone input exists to recognise any of it against (#154). The
+        # figure stays so `cost + fee_earned == revenue` still holds; what it may be
+        # called does not — a surface that prints it under a revenue heading is
+        # reporting an unstarted award as fully earned.
+        "revenue_known": revenue_known,
         "fee_earned": round(fee, 2),
         # False on a cost-type CLIN whose award printed no fee figures for #80's engine
         # to earn against, and false anywhere cost is a billing-rate stand-in. When
@@ -2616,6 +2643,14 @@ def compute(
             # structural figure — either cost is a billing stand-in, or a
             # cost-type CLIN's award printed no fee figures for #80 to earn against.
             "revenue": round(total_revenue, 2),
+            # False when any labor CLIN's revenue is a contract price rather than
+            # revenue recognised (#154). Rolled up with `all` for the same reason cost
+            # is: one fixed-price line inside a mixed award makes the *contract* total
+            # part-recognised-part-price, and a total that mixes the two is not a
+            # revenue figure even though most of its dollars are.
+            "revenue_known": (
+                all(c["revenue_known"] for c in computed) if computed else False
+            ),
             "fee": round(total_fee, 2),
             "fee_known": all(c["fee_known"] for c in computed) if computed else False,
         },

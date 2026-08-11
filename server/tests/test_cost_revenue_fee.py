@@ -202,6 +202,79 @@ def test_the_three_quantities_reconcile_at_the_contract_level():
     assert t["fee"] == round(sum(c["fee_earned"] for c in p["clins"]), 2)
 
 
+# --------------------------------------------------- fixed-price recognition (#154)
+#
+# The price is earned on delivery (FAR 16.202) and Runway is told about no deliveries,
+# so `revenue = ceiling` recognised the whole award the day it landed: a brand-new FFP
+# CLIN reported its full price as revenue, its entire unspent budget as fee earned, and
+# a margin near 100% that *fell* as the work got done. The price stays in the payload —
+# the three quantities have to reconcile — and `revenue_known` says what it is.
+
+
+def test_a_fixed_price_clin_recognises_no_revenue_until_it_delivers():
+    card, _ = _card("FFP", _model())
+    assert card["revenue"] == _CEILING  # the price, still reported
+    assert card["revenue_known"] is False
+    # Nothing is earned until revenue is, however well cost is known — and here cost is
+    # a real Level-2 buildup, so nothing but the recognition basis is doing this.
+    assert card["cost_known"] is True
+    assert card["fee_known"] is False
+    assert card["margin_pct"] is None
+
+
+def test_the_withheld_price_still_reconciles_with_cost_and_fee():
+    # #79's promise survives the withholding: the figures are gated, not removed, so a
+    # reader cannot arrive at a fourth number and the rollups still add up.
+    card, p = _card("FFP", _model())
+    assert card["cost"] + card["fee_earned"] == card["revenue"]
+    t = p["totals"]
+    assert round(t["revenue"] - t["cost"], 2) == t["fee"]
+    assert t["revenue"] == sum(c["revenue"] for c in p["clins"])
+
+
+def test_fpi_recognises_no_revenue_either():
+    # Fixed-price incentive is fixed-price family (FAR 16.4): its profit adjusts by
+    # formula, but the price is still owed on delivery.
+    card, _ = _card("FPI", _model())
+    assert card["revenue_known"] is False
+    assert card["fee_known"] is False
+
+
+def test_cost_type_and_tm_lines_recognise_revenue_every_week():
+    # The types whose recognition basis is an event Runway actually observes: an hour
+    # charged is cost incurred and billable. Nothing here may move.
+    for t in ("CPFF", "T&M", None):
+        card, _ = _card(t, _model())
+        assert card["revenue_known"] is True, t
+    tm, _ = _card("T&M", _model())
+    assert tm["margin_pct"] > 0
+
+
+def test_one_fixed_price_line_withholds_the_contract_total_but_not_its_siblings():
+    # A total that is part recognised revenue and part contract price is not a revenue
+    # figure, even though most of its dollars are. Rolled up like cost: `all`.
+    c = _contract("T&M")
+    c["clins"].append(
+        {
+            "clin": "0002",
+            "period": "Base",
+            "title": "Fixed deliverable",
+            "is_labor": True,
+            "ceiling": 100_000,
+            "est_hours": 1_000,
+            "type": "FFP",
+        }
+    )
+    p = burn.compute(c, _rows(), cost_model=_model())
+    tm, ffp = p["clins"][0], p["clins"][1]
+    assert tm["revenue_known"] is True
+    assert ffp["revenue_known"] is False
+    assert p["totals"]["revenue_known"] is False
+    # The T&M line keeps its own margin — a mixed award must not lose a known figure
+    # because a sibling CLIN has no recognition basis.
+    assert tm["margin_pct"] > 0
+
+
 # ------------------------------------------------------------------- the FFP problem
 
 

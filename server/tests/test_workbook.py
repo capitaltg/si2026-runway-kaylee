@@ -26,7 +26,7 @@ So these tests are written as promises about what the file may say:
 from app import workbook as W
 
 
-def _burn(level_2=True, fee_known=True, cost_known=None):
+def _burn(level_2=True, fee_known=True, cost_known=None, revenue_known=True):
     """A minimal burn payload in the shape the engine publishes: one labor CLIN, one
     non-labor CLIN carrying spend and *no* cost/revenue/fee keys at all — the live-payload
     shape that caught three defects in #82.
@@ -34,6 +34,9 @@ def _burn(level_2=True, fee_known=True, cost_known=None):
     `cost_known` defaults to the tier but is separable, because the two coming apart is
     the whole of #152: a contract can carry indirect pools and a direct rate (level 2)
     and still price part of its hours at the billing rate.
+
+    `revenue_known` is the cost-plus default; False is the fixed-price state (#154),
+    where the figure in the revenue slot is the contract price.
     """
     if cost_known is None:
         cost_known = level_2
@@ -85,6 +88,7 @@ def _burn(level_2=True, fee_known=True, cost_known=None):
             "cost": 620_000.0,
             "cost_known": cost_known,
             "revenue": 680_000.0,
+            "revenue_known": revenue_known,
             "fee": 60_000.0,
             "fee_known": fee_known,
         },
@@ -115,6 +119,7 @@ def _burn(level_2=True, fee_known=True, cost_known=None):
                 "cost": 600_000.0,
                 "cost_known": cost_known,
                 "revenue": 660_000.0,
+                "revenue_known": revenue_known,
                 "fee_earned": 60_000.0,
                 "fee_known": fee_known,
                 "margin_pct": 0.0909,
@@ -276,6 +281,30 @@ def test_partial_cost_coverage_withholds_the_workbook_totals_too():
     assert ws.cell(total, _col(ws, "Margin %")).value == W.DASH
     # Revenue survives: it comes off the CLIN policies, not the cost ladder.
     assert ws.cell(2, _col(ws, "Revenue")).value == 660_000.0
+
+
+def test_fixed_price_revenue_is_a_dash_in_the_emailed_copy_too():
+    """#154 in the medium a contracting officer reads. A price in a revenue cell is a
+    claim that the work is earned, and a spreadsheet reads as more authoritative than
+    the view it came from — including its `=SUM()`, which would otherwise total a
+    contract price and a recognised revenue into one number."""
+    ws = _wb(_burn(revenue_known=False))["By CLIN"]
+    revenue, fee = _col(ws, "Revenue"), _col(ws, "Fee earned")
+    labor = ws.cell(2, revenue)
+    assert labor.value == W.DASH
+    # The reason names delivery, not the rates form — this refusal is not one a user
+    # can fix by entering anything, and cost here is fully known.
+    assert "delivery" in labor.comment.text
+    assert "direct rate" not in labor.comment.text
+    assert ws.cell(2, fee).value == W.DASH
+    assert ws.cell(2, _col(ws, "Margin %")).value == W.DASH
+    total = ws.max_row
+    assert ws.cell(total, revenue).value == W.DASH
+    assert ws.cell(total, fee).value == W.DASH
+    # Cost is untouched: the hours cost what they cost regardless of what earns them,
+    # and its total is still the live formula.
+    assert ws.cell(2, _col(ws, "Cost")).value == 600_000.0
+    assert ws.cell(total, _col(ws, "Cost")).value.startswith("=SUM(")
 
 
 def test_partial_cost_coverage_withholds_the_fee_position_sheet():

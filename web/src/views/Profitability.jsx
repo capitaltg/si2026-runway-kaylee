@@ -224,7 +224,11 @@ export default function Profitability({ contractId, setActiveId }) {
           <div style={tileNum}>
             <Figure figure={tiles.revenue} format={money} />
           </div>
-          <div style={tileSub}>What the work earns under each CLIN's policy</div>
+          <div style={tileSub}>
+            {tiles.revenue.withheld
+              ? "Fixed-price work is recognised on delivery"
+              : "What the work earns under each CLIN's policy"}
+          </div>
         </div>
         <div style={panelStyle}>
           <div style={tileLabel}>Total cost</div>
@@ -296,10 +300,40 @@ export default function Profitability({ contractId, setActiveId }) {
               billing rate off the rate schedule — so cost and billings are equal by
               construction, and any margin read off them would be 0% by arithmetic rather
               than by fact. Enter direct rates and indirect pools under{" "}
-              <em>Indirect Rates</em> to reach level 2 and this view fills in. Revenue and
-              the funding read below are correct at every level.
+              <em>Indirect Rates</em> to reach level 2 and this view fills in.
+              {tiles.revenue.withheld
+                ? " The funding read below is correct at every level."
+                : " Revenue and the funding read below are correct at every level."}
             </>
           )}
+        </div>
+      )}
+
+      {/* The refusal a user cannot fix by entering anything (#154), so it gets its own
+          box rather than a line inside the rates explanation — the fix is a feature
+          Runway does not have yet, and pointing at the rates form would be a wrong
+          instruction rather than an incomplete one. */}
+      {tiles.revenue.withheld && (
+        <div
+          style={{
+            ...panelStyle,
+            marginTop: 14,
+            fontSize: 13,
+            color: "var(--dim)",
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ color: "var(--text)" }}>
+            Fixed-price revenue is withheld until there is a delivery to recognise it
+            against.
+          </strong>{" "}
+          A firm price is earned on delivery (FAR 16.202) — hours charged do not earn
+          it — and Runway records no milestones, deliverables or acceptances. So it
+          recognises none of the price rather than all of it: a contract price sitting
+          in a revenue tile reports an award as fully earned on the day it lands, and
+          the margin under it shrinks as the work actually gets done. The price, the
+          cost against it and where that cost lands at PoP end are in each fixed-price
+          CLIN's at-completion position below, and the funding read is unaffected.
         </div>
       )}
 
