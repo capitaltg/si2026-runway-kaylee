@@ -28,7 +28,7 @@ import {
 // still price part of its hours at the billing rate.
 const level = (n, marginOk, costOk = marginOk) => ({
   contract: { cost_model: { level: n, margin_available: marginOk } },
-  totals: { cost: 800000, revenue: 1000000, fee: 200000, fee_known: true, cost_known: costOk },
+  totals: { cost: 800000, revenue: 1000000, revenue_known: true, fee: 200000, fee_known: true, cost_known: costOk },
   clins: [],
 });
 
@@ -69,8 +69,8 @@ test("a known cost model with unstated fee terms withholds the fee but keeps the
 });
 
 test("a CLIN whose own fee terms are unstated withholds only its fee, not the contract's", () => {
-  const priced = { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
-  const unpriced = { is_labor: true, cost_known: true, revenue: 500000, cost: 450000, fee_earned: 50000, fee_known: false, margin_pct: 0.1 };
+  const priced = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
+  const unpriced = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 450000, fee_earned: 50000, fee_known: false, margin_pct: 0.1 };
   assert.equal(clinFigures(priced, true).fee.value, 100000);
   assert.equal(clinFigures(unpriced, true).fee.value, null);
   // The priced line keeps its margin — a mixed award must not lose a known figure
@@ -80,7 +80,7 @@ test("a CLIN whose own fee terms are unstated withholds only its fee, not the co
 
 test("a null margin_pct is a refusal, not an absent key", () => {
   const f = clinFigures(
-    { is_labor: true, cost_known: false, revenue: 1, cost: 1, fee_earned: 0, fee_known: true, margin_pct: null },
+    { is_labor: true, revenue_known: true, cost_known: false, revenue: 1, cost: 1, fee_earned: 0, fee_known: true, margin_pct: null },
     true,
   );
   assert.equal(f.margin.value, null);
@@ -106,8 +106,8 @@ test("a level-2 contract whose total cost is not known withholds cost, fee and m
 });
 
 test("a contract-level unlock cannot vouch for a CLIN that priced its hours at the billing rate", () => {
-  const covered = { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
-  const fallback = { is_labor: true, cost_known: false, revenue: 500000, cost: 500000, fee_earned: 0, fee_known: false, margin_pct: null };
+  const covered = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
+  const fallback = { is_labor: true, revenue_known: true, cost_known: false, revenue: 500000, cost: 500000, fee_earned: 0, fee_known: false, margin_pct: null };
   // Same contract, same `margin` argument: the mixed award is the point.
   assert.equal(clinFigures(covered, true).cost.value, 400000);
   assert.equal(clinFigures(covered, true).margin.value, 0.2);
@@ -118,18 +118,88 @@ test("a contract-level unlock cannot vouch for a CLIN that priced its hours at t
 });
 
 test("a payload that omits cost_known has not said cost is known", () => {
-  const f = clinFigures({ is_labor: true, revenue: 500000, cost: 400000, fee_known: true }, true);
+  const f = clinFigures({ is_labor: true, revenue_known: true, revenue: 500000, cost: 400000, fee_known: true }, true);
   assert.equal(f.cost.value, null, "a truth gate that defaults open is not a gate");
-  assert.equal(summary({ contract: { cost_model: { margin_available: true } }, totals: { cost: 1, revenue: 2 } }).cost.value, null);
+  assert.equal(summary({ contract: { cost_model: { margin_available: true } }, totals: { cost: 1, revenue: 2, revenue_known: true } }).cost.value, null);
+});
+
+test("a payload that omits revenue_known has not said revenue is recognised", () => {
+  // Same rule as cost, for the same reason (#154): the flag is the claim, and silence
+  // is not it. A CLIN carrying `revenue` with no flag is the pre-#154 payload shape,
+  // where every fixed-price price was already sitting in that key.
+  const f = clinFigures({ is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 }, true);
+  assert.equal(f.revenue.value, null);
+  assert.equal(f.fee.value, null);
+  assert.equal(f.margin.value, null);
+  assert.equal(summary({ contract: { cost_model: { margin_available: true } }, totals: { cost: 1, revenue: 2, cost_known: true, fee_known: true } }).revenue.value, null);
 });
 
 test("a fully covered CLIN with no fee terms is sent to the document, not back to the rates view", () => {
   const f = clinFigures(
-    { is_labor: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: false, margin_pct: null },
+    { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: false, margin_pct: null },
     true,
   );
   assert.equal(f.cost.value, 400000, "cost is known here; only the fee terms are not");
   assert.match(f.margin.withheld, /no fee figures/);
+});
+
+// ---- fixed-price recognition (#154) ---------------------------------------------
+// A firm price is earned on delivery, and Runway has no delivery input. The engine puts
+// the price in the `revenue` key so its three quantities keep reconciling; what this
+// module may *call* it is the question here.
+
+const ffp = {
+  is_labor: true,
+  revenue_known: false,
+  cost_known: true,
+  revenue: 1000000,
+  cost: 200000,
+  fee_earned: 800000,
+  fee_known: false,
+  margin_pct: null,
+};
+
+test("a fixed-price CLIN reports no recognised revenue, fee or margin", () => {
+  const f = clinFigures(ffp, true);
+  for (const key of ["revenue", "fee", "margin"]) {
+    assert.equal(f[key].value, null, `${key} must not be claimed off an unearned price`);
+  }
+  // The figure withheld is the one that was wrong: $800k of "fee" on a CLIN that has
+  // delivered nothing, which is unspent budget.
+  assert.match(f.fee.withheld, /unspent budget, not profit/);
+  // Cost is a real buildup and stays — the price is what isn't earned, not the hours.
+  assert.equal(f.cost.value, 200000);
+});
+
+test("the fixed-price refusal names delivery, never the rates form", () => {
+  // The one refusal a user cannot fix by entering something. Sending them to Indirect
+  // Rates would be a wrong instruction rather than an incomplete one.
+  const f = clinFigures({ ...ffp, cost_known: false }, false);
+  assert.match(f.revenue.withheld, /delivery/);
+  assert.doesNotMatch(f.revenue.withheld, /direct rate/);
+  // Cost keeps its own level-1 reason: that one *is* fixable, and both are true here.
+  assert.match(f.cost.withheld, /level 1/);
+  // Fee asks revenue first — more rates will not unlock a fee with no revenue under it.
+  assert.match(f.fee.withheld, /no recognised revenue/);
+});
+
+test("a T&M line beside a fixed-price one keeps its own revenue", () => {
+  const tm = { is_labor: true, revenue_known: true, cost_known: true, revenue: 500000, cost: 400000, fee_earned: 100000, fee_known: true, margin_pct: 0.2 };
+  assert.equal(clinFigures(tm, true).revenue.value, 500000);
+  assert.equal(clinFigures(tm, true).margin.value, 0.2);
+  assert.equal(clinFigures(ffp, true).revenue.value, null);
+});
+
+test("one fixed-price CLIN withholds the contract totals, which mix price with revenue", () => {
+  const burn = level(2, true);
+  burn.totals.revenue_known = false;
+  const s = summary(burn);
+  assert.equal(s.revenue.value, null);
+  assert.equal(s.fee.value, null);
+  assert.equal(s.margin.value, null);
+  assert.match(s.revenue.withheld, /unstarted work as earned/);
+  // Cost is untouched: the hours cost what they cost regardless of what earns them.
+  assert.equal(s.cost.value, 800000);
 });
 
 // The engine sends non-labor cards with no cost/revenue/fee keys at all — verified

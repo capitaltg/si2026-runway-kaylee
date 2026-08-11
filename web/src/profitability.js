@@ -32,6 +32,15 @@ const totalCostKnown = (burn) => burn?.totals?.cost_known === true;
 // is not a gate.
 const clinCostKnown = (clin) => clin?.cost_known === true;
 
+// Whether the revenue figure is revenue at all (#154). False on a fixed-price line,
+// where the engine puts the contract price in that slot so the three quantities keep
+// reconciling — the price is earned on delivery, and nothing tells Runway a delivery
+// happened. The contract flag goes false if a single labor CLIN is fixed-price: a
+// total that is part recognised revenue and part price is not a revenue figure. Both
+// default closed, like cost.
+const totalRevenueKnown = (burn) => burn?.totals?.revenue_known === true;
+const clinRevenueKnown = (clin) => clin?.revenue_known === true;
+
 // A figure the view can print, or the reason it can't. `value` is null exactly when
 // `withheld` is set, so a caller cannot accidentally format a withheld number.
 const fact = (value) => ({ value, withheld: null });
@@ -55,12 +64,25 @@ const PARTIAL_COST =
 const PARTIAL_FEE =
   "Total fee is revenue less cost, and part of this contract's cost is a billing-rate stand-in.";
 const NO_REVENUE_CLIN = "No revenue recognised on this CLIN yet.";
+// Fixed-price recognition (#154). The refusal a user cannot fix by entering anything:
+// it takes a milestone or delivery record Runway does not yet accept, so the sentences
+// say what the figure would have meant rather than pointing at a form.
+const PRICE_NOT_REVENUE =
+  "Fixed-price work earns its price on delivery, and Runway has no milestone or delivery input — so a contract total counting that price as revenue would report unstarted work as earned. Each fixed-price CLIN's price and the cost against it are in its at-completion position below.";
+const PRICE_NOT_REVENUE_CLIN =
+  "This CLIN earns its price on delivery (FAR 16.202) and Runway is told about no deliveries, so none of it is recognised yet. The price is in the ceiling column and the cost against it in the at-completion position.";
+const PRICE_NOT_REVENUE_FEE =
+  "Fee is revenue less cost, and this contract's fixed-price work has no recognised revenue to take it from — a price not yet earned less the cost so far is unspent budget, not profit.";
+const PRICE_NOT_REVENUE_FEE_CLIN =
+  "Fee is revenue less cost, and this CLIN has no recognised revenue to take it from — its price less the cost so far is unspent budget, not profit, until it delivers.";
 const PASS_THROUGH =
   "A non-labor CLIN is a cost-reimbursable pass-through: its logged travel, ODC and materials dollars consume funding and earn no fee.";
 
-// The four contract-level tiles. Revenue is never withheld — it comes from the CLIN
-// policies rather than from the cost ladder, so it is knowable at every level, and it
-// is the reason a Level-1 user still has a reason to open this view.
+// The four contract-level tiles. Revenue survives the cost ladder — it comes from the
+// CLIN policies, not from rates, and is knowable at every level — but it does not
+// survive a missing recognition basis (#154): on fixed-price work the engine reports
+// the price in that slot, and printing a price under a revenue heading is the whole
+// bug. Cost keeps its own gate, so a level-1 T&M contract reads exactly as it did.
 export function summary(burn) {
   const t = burn?.totals || {};
   const margin = marginAvailable(burn);
@@ -69,24 +91,33 @@ export function summary(burn) {
   // margin taken off it is arithmetic wearing a fact's clothes. `margin` only decides
   // which of the two refusals a reader is looking at — no rates at all, or not enough.
   const costKnown = totalCostKnown(burn);
+  const revenueKnown = totalRevenueKnown(burn);
   const costWhy = margin ? PARTIAL_COST : LEVEL_1_COST;
   return {
-    revenue: fact(t.revenue ?? 0),
+    revenue: revenueKnown ? fact(t.revenue ?? 0) : withheld(PRICE_NOT_REVENUE),
     cost: costKnown ? fact(t.cost ?? 0) : withheld(costWhy),
-    fee: !costKnown
-      ? withheld(margin ? PARTIAL_FEE : LEVEL_1_FEE)
-      : t.fee_known
-        ? fact(t.fee ?? 0)
-        : withheld(NO_FEE_TERMS),
+    // Revenue is asked first, ahead of cost, because the two refusals take different
+    // fixes and only one of them is a fix at all: supplying direct rates will not
+    // unlock a fee that has no recognised revenue underneath it, so sending a user to
+    // the rates form on a fixed-price contract wastes the trip twice over.
+    fee: !revenueKnown
+      ? withheld(PRICE_NOT_REVENUE_FEE)
+      : !costKnown
+        ? withheld(margin ? PARTIAL_FEE : LEVEL_1_FEE)
+        : t.fee_known
+          ? fact(t.fee ?? 0)
+          : withheld(NO_FEE_TERMS),
     // Derived here rather than read off the payload because the engine reports
     // margin per CLIN, not per contract. Same definition as `margin_pct` — fee over
     // revenue — so the two reconcile; guarded on revenue so a contract with no
     // recognised revenue yet reports nothing instead of dividing by zero.
-    margin: !costKnown
-      ? withheld(costWhy)
-      : !t.revenue
-        ? withheld("No revenue recognised yet.")
-        : fact(((t.revenue || 0) - (t.cost || 0)) / t.revenue),
+    margin: !revenueKnown
+      ? withheld(PRICE_NOT_REVENUE)
+      : !costKnown
+        ? withheld(costWhy)
+        : !t.revenue
+          ? withheld("No revenue recognised yet.")
+          : fact(((t.revenue || 0) - (t.cost || 0)) / t.revenue),
   };
 }
 
@@ -118,24 +149,32 @@ export function clinFigures(clin, margin) {
   // heading. The reason splits the same way: at level 1 nobody has supplied rates, and
   // above it this CLIN's categories in particular are still standing in.
   const costKnown = clinCostKnown(clin);
+  // A fixed-price line's `revenue` is its price (#154). Asked per CLIN and not off the
+  // contract flag, because the mixed award is the case that matters: the T&M line next
+  // to it recognises revenue every week and must keep printing it.
+  const revenueKnown = clinRevenueKnown(clin);
   const costWhy = margin ? COST_IS_STANDIN : LEVEL_1_COST;
   return {
-    revenue: fact(clin.revenue ?? 0),
+    revenue: revenueKnown ? fact(clin.revenue ?? 0) : withheld(PRICE_NOT_REVENUE_CLIN),
     cost: costKnown ? fact(clin.cost ?? 0) : withheld(costWhy),
-    fee: !costKnown
-      ? withheld(margin ? FEE_IS_STANDIN_CLIN : LEVEL_1_FEE)
-      : clin.fee_known
-        ? fact(clin.fee_earned ?? 0)
-        : withheld(NO_FEE_TERMS_CLIN),
+    fee: !revenueKnown
+      ? withheld(PRICE_NOT_REVENUE_FEE_CLIN)
+      : !costKnown
+        ? withheld(margin ? FEE_IS_STANDIN_CLIN : LEVEL_1_FEE)
+        : clin.fee_known
+          ? fact(clin.fee_earned ?? 0)
+          : withheld(NO_FEE_TERMS_CLIN),
     // With cost known, a null `margin_pct` is one of the two remaining refusals, and
     // they take different fixes: unstated fee terms are fixed by importing a document,
     // no revenue yet by waiting. Naming the cost stand-in here would send a user who
     // already supplied rates back to enter more.
-    margin: !costKnown
-      ? withheld(costWhy)
-      : clin.margin_pct != null
-        ? fact(clin.margin_pct)
-        : withheld(clin.fee_known ? NO_REVENUE_CLIN : NO_FEE_TERMS_CLIN),
+    margin: !revenueKnown
+      ? withheld(PRICE_NOT_REVENUE_CLIN)
+      : !costKnown
+        ? withheld(costWhy)
+        : clin.margin_pct != null
+          ? fact(clin.margin_pct)
+          : withheld(clin.fee_known ? NO_REVENUE_CLIN : NO_FEE_TERMS_CLIN),
   };
 }
 

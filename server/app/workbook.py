@@ -97,6 +97,27 @@ PARTIAL_FEE = (
     "stand-in."
 )
 NO_REVENUE_CLIN = "No revenue recognised on this CLIN yet."
+PRICE_NOT_REVENUE = (
+    "Fixed-price work earns its price on delivery, and Runway has no milestone or "
+    "delivery input — so a contract total counting that price as revenue would report "
+    "unstarted work as earned. Each fixed-price CLIN's price and the cost against it "
+    "are in its at-completion position below."
+)
+PRICE_NOT_REVENUE_CLIN = (
+    "This CLIN earns its price on delivery (FAR 16.202) and Runway is told about no "
+    "deliveries, so none of it is recognised yet. The price is in the ceiling column "
+    "and the cost against it in the at-completion position."
+)
+PRICE_NOT_REVENUE_FEE = (
+    "Fee is revenue less cost, and this contract's fixed-price work has no recognised "
+    "revenue to take it from — a price not yet earned less the cost so far is unspent "
+    "budget, not profit."
+)
+PRICE_NOT_REVENUE_FEE_CLIN = (
+    "Fee is revenue less cost, and this CLIN has no recognised revenue to take it "
+    "from — its price less the cost so far is unspent budget, not profit, until it "
+    "delivers."
+)
 PASS_THROUGH = (
     "A non-labor CLIN is a cost-reimbursable pass-through: its logged travel, ODC and "
     "materials dollars consume funding and earn no fee."
@@ -147,25 +168,38 @@ def summary_figures(burn: dict) -> dict:
     # A total cost that is part buildup and part billing stand-in is not a contract
     # cost, and a margin taken off it is arithmetic wearing a fact's clothes (#152).
     cost_known = t.get("cost_known") is True
+    # Whether that revenue is revenue at all (#154): on fixed-price work the engine
+    # reports the contract price in the slot, because the price is earned on delivery
+    # and no delivery input exists. Revenue is asked before cost on the fee and margin
+    # rows — more rates will not unlock a fee with no recognised revenue under it.
+    revenue_known = t.get("revenue_known") is True
     cost_why = PARTIAL_COST if margin else LEVEL_1_COST
     revenue = t.get("revenue") or 0
     cost = t.get("cost") or 0
     return {
-        "revenue": fact(revenue),
+        "revenue": fact(revenue) if revenue_known else withheld(PRICE_NOT_REVENUE),
         "cost": fact(cost) if cost_known else withheld(cost_why),
         "fee": (
-            withheld(PARTIAL_FEE if margin else LEVEL_1_FEE)
-            if not cost_known
+            withheld(PRICE_NOT_REVENUE_FEE)
+            if not revenue_known
             else (
-                fact(t.get("fee") or 0)
-                if t.get("fee_known")
-                else withheld(NO_FEE_TERMS)
+                withheld(PARTIAL_FEE if margin else LEVEL_1_FEE)
+                if not cost_known
+                else (
+                    fact(t.get("fee") or 0)
+                    if t.get("fee_known")
+                    else withheld(NO_FEE_TERMS)
+                )
             )
         ),
         "margin": (
-            fact((revenue - cost) / revenue)
-            if cost_known and revenue
-            else withheld(cost_why if not cost_known else NO_REVENUE)
+            withheld(PRICE_NOT_REVENUE)
+            if not revenue_known
+            else (
+                fact((revenue - cost) / revenue)
+                if cost_known and revenue
+                else withheld(cost_why if not cost_known else NO_REVENUE)
+            )
         ),
     }
 
@@ -191,31 +225,46 @@ def clin_figures(clin: dict, margin: bool) -> dict:
             "margin": withheld(PASS_THROUGH),
         }
     cost_known = clin.get("cost_known") is True
+    # Per CLIN, never off the contract flag: on a mixed award the T&M line beside a
+    # fixed-price one recognises revenue every week and keeps printing it (#154).
+    revenue_known = clin.get("revenue_known") is True
     cost_why = COST_IS_STANDIN if margin else LEVEL_1_COST
     margin_pct = clin.get("margin_pct")
     return {
-        "revenue": fact(clin.get("revenue") or 0),
+        "revenue": (
+            fact(clin.get("revenue") or 0)
+            if revenue_known
+            else withheld(PRICE_NOT_REVENUE_CLIN)
+        ),
         "cost": fact(clin.get("cost") or 0) if cost_known else withheld(cost_why),
         "fee": (
-            withheld(FEE_IS_STANDIN_CLIN if margin else LEVEL_1_FEE)
-            if not cost_known
+            withheld(PRICE_NOT_REVENUE_FEE_CLIN)
+            if not revenue_known
             else (
-                fact(clin.get("fee_earned") or 0)
-                if clin.get("fee_known")
-                else withheld(NO_FEE_TERMS_CLIN)
+                withheld(FEE_IS_STANDIN_CLIN if margin else LEVEL_1_FEE)
+                if not cost_known
+                else (
+                    fact(clin.get("fee_earned") or 0)
+                    if clin.get("fee_known")
+                    else withheld(NO_FEE_TERMS_CLIN)
+                )
             )
         ),
         # With cost known, a null `margin_pct` is one of the two remaining refusals,
         # and they take different fixes: unstated fee terms are fixed by importing a
         # document, no revenue yet by waiting.
         "margin": (
-            withheld(cost_why)
-            if not cost_known
+            withheld(PRICE_NOT_REVENUE_CLIN)
+            if not revenue_known
             else (
-                fact(margin_pct)
-                if margin_pct is not None
-                else withheld(
-                    NO_REVENUE_CLIN if clin.get("fee_known") else NO_FEE_TERMS_CLIN
+                withheld(cost_why)
+                if not cost_known
+                else (
+                    fact(margin_pct)
+                    if margin_pct is not None
+                    else withheld(
+                        NO_REVENUE_CLIN if clin.get("fee_known") else NO_FEE_TERMS_CLIN
+                    )
                 )
             )
         ),
