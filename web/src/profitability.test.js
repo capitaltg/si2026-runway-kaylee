@@ -11,6 +11,9 @@ import {
   feeClins,
   feeFigures,
   feeGap,
+  loadIdle,
+  loadPhase,
+  loadReducer,
   shareRatio,
   marginAvailable,
   measuredIn,
@@ -511,4 +514,46 @@ test("a CPAF with recorded periods reports them", () => {
     periods: [{ name: "Period 1", status: "pending" }],
   });
   assert.equal(a.periodsRecorded, true);
+});
+
+// ---- Load state (#164) ---------------------------------------------------------
+
+test("switching contracts drops the previous contract's figures before the new ones land", () => {
+  const shown = loadReducer(loadIdle, { type: "loaded", burn: { contract: { id: 7 } } });
+  const switched = loadReducer(shown, { type: "select" });
+  assert.equal(switched.burn, null);
+  assert.equal(loadPhase(switched), "loading");
+});
+
+test("switching contracts drops the previous contract's failure too", () => {
+  const failed = loadReducer(loadIdle, { type: "failed", message: "contract 7 not found" });
+  const switched = loadReducer(failed, { type: "select" });
+  assert.equal(switched.error, null);
+  assert.equal(loadPhase(switched), "loading");
+});
+
+test("a success clears the previous failure instead of showing both", () => {
+  const failed = loadReducer(loadIdle, { type: "failed", message: "500 from /burn" });
+  const recovered = loadReducer(failed, { type: "loaded", burn: { contract: { id: 7 } } });
+  assert.equal(recovered.error, null);
+  assert.equal(loadPhase(recovered), "ready");
+});
+
+test("a failure after a success replaces the figures rather than sitting beside them", () => {
+  const shown = loadReducer(loadIdle, { type: "loaded", burn: { contract: { id: 7 } } });
+  const failed = loadReducer(shown, { type: "failed", message: "500 from /burn" });
+  assert.equal(failed.burn, null);
+  assert.equal(loadPhase(failed), "error");
+});
+
+test("an empty workspace is an empty state, not a load that never finishes", () => {
+  const none = loadReducer(loadIdle, { type: "none" });
+  assert.equal(loadPhase(none), "empty");
+  assert.equal(loadPhase(loadIdle), "loading");
+});
+
+test("a failed contract list outranks the empty workspace it can no longer prove", () => {
+  const none = loadReducer(loadIdle, { type: "none" });
+  const failed = loadReducer(none, { type: "failed", message: "network error" });
+  assert.equal(loadPhase(failed), "error");
 });

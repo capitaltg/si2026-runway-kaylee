@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useReducer } from "react";
 import { getBurn, listContracts } from "../api.js";
 import { money, pct, panelStyle, pill, statusColor } from "../format.js";
 import {
@@ -9,6 +9,9 @@ import {
   feeClins,
   feeFigures,
   feeGap,
+  loadIdle,
+  loadPhase,
+  loadReducer,
   marginAvailable,
   measuredIn,
   orderedClins,
@@ -154,29 +157,43 @@ function AwardPeriods({ award }) {
 }
 
 export default function Profitability({ contractId, setActiveId }) {
-  const [burn, setBurn] = useState(null);
-  const [error, setError] = useState(null);
+  const [load, dispatch] = useReducer(loadReducer, loadIdle);
 
   // Same fallback the Flight Deck and Expenses use: navigating straight here with no
-  // contract selected lands on the newest ingested one rather than on nothing.
+  // contract selected lands on the newest ingested one rather than on nothing. An
+  // empty list is the one case that never resolves into a contract, so it says so
+  // instead of leaving the spinner up forever.
   useEffect(() => {
     if (contractId || !setActiveId) return;
+    let live = true;
     listContracts()
-      .then((cs) => cs.length && setActiveId(cs[0].id))
-      .catch((e) => setError(e.message));
+      .then((cs) => {
+        if (!live) return;
+        if (cs.length) setActiveId(cs[0].id);
+        else dispatch({ type: "none" });
+      })
+      .catch((e) => live && dispatch({ type: "failed", message: e.message }));
+    return () => {
+      live = false;
+    };
   }, [contractId, setActiveId]);
 
   useEffect(() => {
     if (!contractId) return;
     let live = true;
+    // Discard the previous contract's figures and error before the new request goes
+    // out; `live` keeps a slow response from a deselected contract from landing.
+    dispatch({ type: "select" });
     getBurn(contractId)
-      .then((b) => live && setBurn(b))
-      .catch((e) => live && setError(e.message));
+      .then((b) => live && dispatch({ type: "loaded", burn: b }))
+      .catch((e) => live && dispatch({ type: "failed", message: e.message }));
     return () => {
       live = false;
     };
   }, [contractId]);
 
+  const { burn, error } = load;
+  const phase = loadPhase(load);
   const margin = marginAvailable(burn);
   const tiles = useMemo(() => summary(burn), [burn]);
   const clins = useMemo(() => orderedClins(burn), [burn]);
@@ -184,10 +201,22 @@ export default function Profitability({ contractId, setActiveId }) {
   const chain = useMemo(() => rateChain(burn), [burn]);
   const variance = useMemo(() => rateVariance(burn), [burn]);
 
-  if (error) {
+  if (phase === "error") {
     return <div style={{ padding: 40, color: "var(--bad)", fontSize: 14 }}>{error}</div>;
   }
-  if (!burn) {
+  if (phase === "empty") {
+    return (
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "28px 32px" }}>
+        <div
+          style={{ ...panelStyle, textAlign: "center", color: "var(--dim)", fontSize: 13.5 }}
+        >
+          No contracts ingested yet — add one from{" "}
+          <b style={{ color: "var(--text)" }}>Ingest</b> to see what its work earns.
+        </div>
+      </div>
+    );
+  }
+  if (phase === "loading") {
     return (
       <div style={{ padding: 40, color: "var(--dim)", fontSize: 14 }}>
         Loading profitability…
