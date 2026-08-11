@@ -386,7 +386,44 @@ def _rows_for_clin(clin: dict, rows: List[dict], window=(None, None)) -> List[di
     return [r for r in scoped if slot and _slot(code(r)) == slot]
 
 
-def _rate_resolver(clin: dict, index=None, aliases=None):
+def burden_fn(cost_model, header=None):
+    """`lcat.line_rate`'s burdening function for a contract, or None (#144).
+
+    A cost-reimbursement award prints an unburdened direct rate per category and its
+    indirect factors separately (FAR 15.408 Table 15-2), because on a cost-type line
+    the government reimburses allowable cost — there is no hourly price to print. So
+    every one of its rate lines was skipped as unpriced and every hour fell to
+    `ceiling / est_hours`, while `cost` beside it resolved the very same categories
+    correctly through `CostModel`. One award, two ladders, two answers.
+
+    This closes that: the rate is the category's direct rate carried through the
+    contract's own pools, which is arithmetic the award fully determines.
+
+    Two gates, both narrow on purpose:
+      * `rate_set.usable` — no indirect pools, no buildup. A direct rate alone is
+        not a billable rate and guessing a burden would invent the number this
+        function exists to avoid inventing.
+      * cost-reimbursement only — on FFP or T&M the printed loaded rate IS the
+        price, and substituting our cost for a price the award states would report
+        what we spend as what we may invoice. Those types simply never get here.
+
+    Fee is deliberately NOT in it. `spent` on a cost-type CLIN is cost (#79) and the
+    earned fee is reported beside it by #80's engine, so folding a fee share into
+    the hourly rate would count it twice and pre-empt #134's open question about
+    whether fee draws down funded availability. This rate is cost, and says so.
+    """
+    if not cost_model or not cost_model.rate_set.usable:
+        return None
+
+    def fn(clin, direct):
+        if not pricing.policy_for(clin, header).is_cost_reimbursement:
+            return None
+        return rates.burden(direct, cost_model.rate_set).total_cost
+
+    return fn
+
+
+def _rate_resolver(clin: dict, index=None, aliases=None, burden=None):
     """Return (resolve, blended, source_label). `resolve(lcat)` yields an
     `lcat.Resolution`: the $/hr the hour bills at, whether a real rate line backed
     it, and when it didn't, which of the three causes applies (#64).
@@ -398,7 +435,7 @@ def _rate_resolver(clin: dict, index=None, aliases=None):
     without them resolution still works, it just can't distinguish
     "priced on another CLIN" from "not priced anywhere".
     """
-    return lcat_match.resolver(clin, index=index, aliases=aliases)
+    return lcat_match.resolver(clin, index=index, aliases=aliases, burden=burden)
 
 
 def _forward_band(exhaust: Optional[float], total_weeks: int) -> str:
@@ -779,6 +816,7 @@ def _compute_clin(
     rate_index=None,
     aliases=None,
     cost_model: Optional[rates.CostModel] = None,
+    burden=None,
     pop_start: Optional[date] = None,
     absence: Optional[dict] = None,
     fee_periods: Optional[List[dict]] = None,
@@ -838,19 +876,27 @@ def _compute_clin(
     identical to what it was before that ticket — the series is an extra key, never
     a replacement (see `_absence_projection`)."""
     policy = policy or pricing.policy_for(clin, None)
-    resolve, blended, source = _rate_resolver(clin, rate_index, aliases)
-    clin_rows = _rows_for_clin(clin, rows, window)
     # The cost side (#77). Defaults to an empty model, which is Level 1: cost falls
     # back to the billing rate and is flagged as such — so at Level 1 `cost` and
     # `billings` are equal by construction and the policy branch below cannot move
     # any number, whichever quantity it selects.
     cost_model = cost_model or rates.CostModel()
+    # `compute` builds this once and hands it down, for the same reason it hands
+    # down `rate_index`: it is contract-scoped, and a burden derived per CLIN could
+    # disagree with the one the index was built with (#144).
+    burden = burden if burden is not None else burden_fn(cost_model)
+    resolve, blended, source = _rate_resolver(clin, rate_index, aliases, burden)
+    clin_rows = _rows_for_clin(clin, rows, window)
 
     # Two accumulators, never mixed (#77), now both load-bearing (#79): `billings` is
     # hours x the loaded rate the award prices, `cost` is what those same hours
     # consumed once burdened. Which of them becomes `spent` is the policy's call.
     billings = 0.0
     cost = 0.0
+    # Hours priced by the blended fallback on each side, so #144 can say whether the
+    # measured quantity ever touched it.
+    blended_billed_hours = 0.0
+    blended_cost_hours = 0.0
     # Hours per cost-rate source, so a CLIN can report which tier actually priced it
     # rather than implying one uniform basis. `cost_known` is False the moment any
     # hour fell back to a billing rate.
@@ -902,6 +948,17 @@ def _compute_clin(
         # What the same hour cost us, down the fallback ladder (#77). Accumulated
         # alongside billings, never mixed into them.
         cr = cost_model.cost_for(label or None, res.rate, r.get("employee_id"))
+        # Hours the blended fallback actually priced, counted on each side (#144).
+        # Counted rather than inferred from `cost_known` or `source`: those are
+        # CLIN-level flags answering a near-enough question, and the one asked here
+        # — did the number this card reports come from `ceiling / est_hours`? — has
+        # to be answered in hours or not at all.
+        if res.via == lcat_match.VIA_BLENDED:
+            blended_billed_hours += hours
+            # On the cost side the blended rate only gets in as the Level-1 stand-in
+            # for a category we hold no direct rate for.
+            if cr.source == rates.SOURCE_NEGOTIATED:
+                blended_cost_hours += hours
         if cr.rate is not None:
             cost += hours * cr.rate
             weekly_cost[wk] = weekly_cost.get(wk, 0.0) + hours * cr.rate
@@ -1008,23 +1065,18 @@ def _compute_clin(
     # `cost_known` is the #77 flag, hoisted here because the fee read depends on it.
     cost_known = bool(cost_hours) and rates.SOURCE_NEGOTIATED not in cost_hours
 
-    # Whether the rate-table gap actually reaches the number this card reports.
+    # Whether the blended fallback priced any of the number this card reports (#144).
     #
-    # `rate_table_missing` is a fact about the BILLING table alone: no line carries a
-    # `loaded_rate`, so `resolve` falls to `blended`. That was the whole story before
-    # #79 — but since #79 a cost-reimbursement CLIN is measured on `cost`, and cost is
-    # resolved down an entirely different ladder (`CostModel.cost_for`): the award's
-    # per-LCAT direct rates, burdened through the indirect pools. When that ladder
-    # priced every hour, `cost_known` is true and not one dollar of `spent` came from
-    # the blended rate — so telling the user "every category on this CLIN prices at
-    # the blended rate" describes a quantity the card isn't showing them.
+    # `rate_table_missing` is a fact about the BILLING table alone, and until #79 that
+    # was the whole story — everything was measured in billings. Since #79 a
+    # cost-reimbursement CLIN is measured on `cost`, resolved down a different ladder
+    # entirely (`CostModel.cost_for`), so the two can disagree: a CLIN can have no
+    # billable rate line and still price every measured hour per category.
     #
-    # The gap on the billing side is unchanged and still reported: `rate_table_missing`
-    # and `rate_table_state` keep their meaning, the allocation matrix still has no
-    # rate line to map an LCAT onto, and `billings` still rides the blended rate. What
-    # a direct-rate line *bills* at stays the open pricing decision it was (#134) —
-    # nothing here burdens a direct rate into a billing rate.
-    blended_priced_spend = source != "rate_table" and not (on_cost and cost_known)
+    # Read off the hours each side actually charged at `blended`, so it stays true on
+    # a CLIN that is part-costed rather than reporting the whole card as blended for
+    # one category's worth of fallback.
+    blended_priced_spend = bool(blended_cost_hours if on_cost else blended_billed_hours)
 
     # The fee position (#80): what this CLIN's fee terms have earned at the cost it has
     # actually incurred, under its own type's rule. Pure arithmetic in `pricing`, called
@@ -1485,7 +1537,7 @@ def _compute_clin(
         # separate — the schedule is in, the burdening is what's missing, and no
         # document fixes it). Both leave `rate_table_missing` true; only the first
         # may be answered with "import the rate schedule".
-        "rate_table_state": lcat_match.rate_table_state(clin),
+        "rate_table_state": lcat_match.rate_table_state(clin, burden),
         # Whether that gap priced the quantity this card measures. False on a
         # cost-measured CLIN whose every hour resolved to a declared direct rate —
         # the burn is per-category and the blended rate touched only `billings`.
@@ -1814,7 +1866,11 @@ def compute(
     # Scoped to the period's CLINs on purpose: a rate line on an un-exercised
     # option year prices nothing today, so offering it as the fix would point the
     # user at a CLIN with no money on it.
-    rate_index = lcat_match.build_index(clins)
+    # Burdening, resolved once for the whole contract (#144) so the index, every
+    # CLIN's resolver and `rate_table_state` all price a direct-rate line the same
+    # way. None on a contract with no indirect pools, which is the pre-#144 world.
+    burden = burden_fn(cost_model, header)
+    rate_index = lcat_match.build_index(clins, burden)
     aliases = lcat_match.parse_aliases(contract.get("lcat_aliases"))
     # Award-fee determinations, per CLIN (#80). Resolved once here rather than per CLIN
     # because routing an unassigned period needs to see every CLIN on the award.
@@ -1837,6 +1893,7 @@ def compute(
             anchor=anchor,
             policy=policy_of(c),
             rate_index=rate_index,
+            burden=burden,
             aliases=aliases,
             cost_model=cost_model,
             pop_start=pop_start,
@@ -1866,6 +1923,7 @@ def compute(
                 anchor=anchor,
                 policy=policy_of(c),
                 rate_index=rate_index,
+                burden=burden,
                 aliases=aliases,
                 cost_model=cost_model,
                 pop_start=pop_start,

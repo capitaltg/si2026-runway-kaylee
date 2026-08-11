@@ -2415,6 +2415,8 @@ export default function AllocationMatrix({
                   {newPersonRateOptions.map((line) => (
                     <option key={line.lcat} value={line.lcat}>
                       {line.lcat} — {money(line.rate)}/hr
+                      {/* A built rate is never allowed to pass for a printed one (#144). */}
+                      {line.basis === "burdened" ? " (burdened)" : ""}
                     </option>
                   ))}
                   <option value="other">Other — not on the rate schedule…</option>
@@ -3595,6 +3597,7 @@ function MappingPanel({
                 {rateLines.map((l) => (
                   <option key={`${l.clin}|${l.lcat}`} value={`${l.clin}|${l.lcat}`}>
                     {l.lcat} — CLIN {l.clin} — {money(l.rate)}/hr
+                    {l.basis === "burdened" ? " (burdened)" : ""}
                     {l.clin !== mapping.clinId ? " (other CLIN)" : ""}
                   </option>
                 ))}

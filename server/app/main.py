@@ -1759,7 +1759,12 @@ def lcat_rate_lines(contract_id: int):
         raise HTTPException(status_code=404, detail="Contract not found.")
     rows = db.get_timesheets(contract_id)
     period = burn._active_period(contract, rows)
-    index = lcat.build_index(burn._period_clins(contract, period))
+    # Burdened the same way the burn is (#144), or the mapping picker would offer
+    # nothing on exactly the cost-type CLINs whose hours it is opened to fix.
+    index = lcat.build_index(
+        burn._period_clins(contract, period),
+        burn.burden_fn(_cost_model(contract_id), contract.get("contract") or {}),
+    )
     lines = sorted(
         (line.payload() for entries in index.values() for line in entries),
         key=lambda p: (p["clin"], p["lcat"]),
