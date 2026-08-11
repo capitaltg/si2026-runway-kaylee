@@ -1107,7 +1107,14 @@ def remove_contract(contract_id: int):
     return {"deleted": contract_id}
 
 
-def _provenance_message(check: dict, seed: int, pinned: bool, stored: bool) -> str:
+def _provenance_message(
+    check: dict,
+    seed: int,
+    opts: dict,
+    seed_source: str,
+    opts_source: str,
+    stored: bool,
+) -> str:
     """What a mismatched batch has to say for itself — as a 409 detail when the sync
     is refused, and as a `warning` when allow_mismatch waved it through.
 
@@ -1115,6 +1122,14 @@ def _provenance_message(check: dict, seed: int, pinned: bool, stored: bool) -> s
     than untidy, and point at the fix, because the symptom the user would otherwise
     chase (unpriced LCATs charged to unknown CLINs) sends them to the LCAT tooling
     instead of to the sync that caused it.
+
+    Which fix it points at depends on HOW the PIIDs disagree (#137). This message is
+    the entire UI for the failure, so naming the wrong dial costs the user the whole
+    debugging path — and the version that always blamed the seed did exactly that on
+    the one case that matters most: an opts-derived renumbering, where the seed is
+    correct, recorded, and no value of `?seed=` can help. It also reports both halves
+    of the pairing it actually used and where each came from, because a refusal is
+    only diagnosable if the user can see what was derived on their behalf.
     """
     foreign = check["foreign"]
     top = next(iter(foreign))
@@ -1124,27 +1139,66 @@ def _provenance_message(check: dict, seed: int, pinned: bool, stored: bool) -> s
         else ""
     )
     lede = "Stored a mismatched batch" if stored else "Timesheet sync refused"
-    remedy = (
-        f"This contract is pinned to seed {seed}, which no longer draws it — re-sync "
-        "with ?seed=<n> to re-pin."
-        if pinned
-        else "No Fixtura seed is recorded for this award, so the sync fell back to one "
-        f"derived from the PIID ({seed}), which draws a different contract. Enter the "
-        "batch's seed in the 'Data seed' field on the ingest review screen, or re-sync "
-        "with ?seed=<n>."
+    opts_text = sources.format_opts(opts)
+    tried = (
+        f"The batch was generated with seed {seed} ({seed_source}) and opts "
+        f"{opts_text} ({opts_source})."
     )
+    if sources.piid_relation(check["piid"], top) == "renumbered":
+        # Same office, type and serial, one fiscal year apart: the seed drew this
+        # contract, the opts numbered it as the wrong one of its two spellings. Which
+        # means the repair is knowable, not just describable — flip the one knob that
+        # moves the fiscal year and hand back a pairing the user can paste, rather
+        # than the pairing that just failed plus an instruction to edit it.
+        flipped = dict(opts)
+        flipped["pop_in_progress"] = not opts.get("pop_in_progress")
+        remedy = (
+            f"{top} and {check['piid']} differ only in the fiscal-year segment, which "
+            "Fixtura builds from the award's effective date — and `pop_in_progress` "
+            "moves that date back a year per preceding option period. So the seed is "
+            "drawing the right contract and the OPTS are numbering it as the wrong "
+            "one; changing ?seed= cannot reconcile this. Re-sync stating the opts this "
+            f"award was generated with — ?opts={sources.format_opts(flipped)} is the "
+            "same pairing with that knob flipped — or enter them in the 'Opts' field "
+            "beside 'Data seed' on the ingest review screen."
+        )
+    elif seed_source == "recorded at ingest":
+        remedy = (
+            f"Seed {seed} is the one recorded for this award at ingest, and the "
+            "serials differ, so the pairing that drew the batch is not this "
+            "contract's. Re-sync with ?seed=<n> and/or ?opts=<knobs> stating the "
+            "pairing the batch was generated with."
+        )
+    elif seed_source == "derived from the PIID":
+        remedy = (
+            "No Fixtura seed is recorded for this award, so the sync fell back to one "
+            f"derived from the PIID ({seed}), which draws a different contract. Enter "
+            "the batch's seed in the 'Data seed' field on the ingest review screen, or "
+            "re-sync with ?seed=<n>."
+        )
+    else:
+        remedy = (
+            f"Seed {seed} ({seed_source}) draws a different contract. Re-sync with "
+            "?seed=<n> and/or ?opts=<knobs> stating the pairing the batch was "
+            "generated with."
+        )
     tail = (
         "The burn, allocation and LCAT views are reading another contract's labor "
         "until this is re-synced."
         if stored
-        else "Pass ?allow_mismatch=true to store it anyway."
+        # Named, but not as an equivalent: it stores rows whose contract_no disagrees
+        # with the contract permanently, which is a decision to live with the
+        # mismatch rather than a repair of it.
+        else "?allow_mismatch=true stores the batch anyway, but it is not a fix — the "
+        "rows keep the PIID they were generated with, so this contract disagrees with "
+        "its own timesheets from then on."
     )
     return (
         f"{lede}: {check['foreign_rows']} of {check['total']} rows belong to "
         f"{top}{others}, not {check['piid']}. Fixtura draws the award, its CLINs and "
-        "the roster from one seed, so this batch is a different contract's labor — "
-        "stored against this one it reads as LCATs the award never priced, charged to "
-        f"CLINs it does not contain. {remedy} {tail}"
+        "the roster from one seed and one set of opts, so this batch is a different "
+        "contract's labor — stored against this one it reads as LCATs the award never "
+        f"priced, charged to CLINs it does not contain. {tried} {remedy} {tail}"
     )
 
 
@@ -1231,31 +1285,35 @@ def sync_timesheets(
     # replays the opts it was pinned with — unless the caller names a scenario or a
     # seed, either of which is a request for a new pairing.
     pinned_opts = contract.get("sync_opts") if seed is None else None
+    # Each half carries where it came from, because a refusal that cannot say whether
+    # a value was stated, recorded or guessed on the user's behalf is not diagnosable
+    # (#137) — and "derived" is exactly the case whose message used to be wrong.
     if stated_opts:
         # Stated beats every reconstruction, including a demo contract's own recorded
         # scenario. On a contract carrying `sync_scenario` this is a one-shot: the
         # scenario record still governs the next auto-sync, because a demo bundle is
         # defined by that record and one repair call is not a request to redefine it.
-        used_opts = stated_opts
+        used_opts, opts_source = stated_opts, "stated on this sync"
     elif picked:
-        used_opts = picked["opts"]
+        used_opts, opts_source = picked["opts"], f"from scenario '{name}'"
     elif pinned_opts:
-        used_opts = pinned_opts
+        used_opts, opts_source = pinned_opts, "pinned by an earlier clean sync"
     else:
-        used_opts = sources.derive_scenario_opts(contract)
-    effective_seed = (
-        seed
-        if seed is not None
-        else (
-            contract.get("sync_seed")
-            if contract.get("sync_seed") is not None
-            else (
-                picked["seed"]
-                if picked
-                else sources.seed_for_piid(contract.get("piid"))
-            )
+        used_opts, opts_source = (
+            sources.derive_scenario_opts(contract),
+            "derived from the award",
         )
-    )
+    if seed is not None:
+        effective_seed, seed_source = seed, "stated on this sync"
+    elif contract.get("sync_seed") is not None:
+        effective_seed, seed_source = contract["sync_seed"], "recorded at ingest"
+    elif picked:
+        effective_seed, seed_source = picked["seed"], f"from scenario '{name}'"
+    else:
+        effective_seed, seed_source = (
+            sources.seed_for_piid(contract.get("piid")),
+            "derived from the PIID",
+        )
     try:
         ts = sources.fetch_timesheets(rows=rows, seed=effective_seed, opts=used_opts)
     except Exception as e:
@@ -1271,7 +1329,9 @@ def sync_timesheets(
             detail=_provenance_message(
                 check,
                 effective_seed,
-                pinned=contract.get("sync_seed") is not None,
+                used_opts,
+                seed_source,
+                opts_source,
                 stored=False,
             ),
         )
@@ -1315,6 +1375,11 @@ def sync_timesheets(
         # refusal is only diagnosable if the caller can see BOTH halves that produced
         # the batch, and until now the opts were invisible from outside the route.
         "opts": used_opts,
+        # Where each half came from — "derived" vs "recorded" is the difference
+        # between a value the user chose and one Runway guessed for them, which is
+        # what makes a refusal actionable rather than mysterious (#137).
+        "seed_source": seed_source,
+        "opts_source": opts_source,
         # Reported on every sync, not just a refused one: "these rows are this
         # contract's" is the fact the burn numbers rest on, and it is cheap to say.
         "provenance": check,
@@ -1322,7 +1387,9 @@ def sync_timesheets(
             _provenance_message(
                 check,
                 effective_seed,
-                pinned=contract.get("sync_seed") is not None,
+                used_opts,
+                seed_source,
+                opts_source,
                 stored=True,
             )
             if check["foreign_rows"]
