@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shortDate, stopPhrase, asOfLabel } from "./format.js";
+import { shortDate, stopPhrase, asOfLabel, clauseRisk } from "./format.js";
 
 test("shortDate renders an ISO date without shifting it", () => {
   // The reason this is regex-parsed and not `new Date(s)`: that parses a bare ISO
@@ -144,4 +144,16 @@ test("a ceiling-price limit is named as a price, not as a ceiling", async () => 
   // running dry is the same event whatever kind of ceiling sits above it.
   assert.equal(pill("over", false, false, false, false, true).label, "Funds short");
   assert.equal(pill("over", true, true, false, false, true).label, "Funds exceeded");
+});
+
+test("a funding-limit warning cites the clause the CLIN is actually under", () => {
+  // -22 is only the incrementally funded cost-reimbursement case (#81). Every other
+  // type used to be warned under it, which named a clause its award doesn't contain.
+  assert.equal(clauseRisk("52.232-22"), "a risk under FAR 52.232-22 (Limitation of Funds)");
+  assert.equal(clauseRisk("52.232-20"), "a risk under FAR 52.232-20 (Limitation of Cost)");
+  assert.match(clauseRisk("52.232-7"), /FAR 52\.232-7 \(Payments under Time-and-Materials/);
+  // Fixed price has no limitation-of-funds mechanic, so there is nothing to cite and
+  // the caller is expected to drop the sentence rather than print a bare number.
+  assert.equal(clauseRisk(null), null);
+  assert.equal(clauseRisk("52.216-8"), null);
 });

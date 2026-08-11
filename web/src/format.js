@@ -38,6 +38,24 @@ export function stopPhrase(stopDate, reason, passed) {
   return `Charging stops ~${shortDate(stopDate)} at ceiling`;
 }
 
+// FAR clause number → its official title. The one home for that mapping, because a
+// clause number is a fact about the award and two copies of it drift. The engine
+// resolves *which* clause governs a given CLIN (#81, `funding_clause`); this only
+// spells out the one it named.
+export const CLAUSE_NAME = {
+  "52.232-22": "Limitation of Funds",
+  "52.232-20": "Limitation of Cost",
+  "52.232-7": "Payments under Time-and-Materials and Labor-Hour Contracts",
+};
+
+// A clause citation for prose that warns about a funding limit — "a risk under FAR
+// 52.232-22 (Limitation of Funds)". Null when the CLIN's policy carries no funding
+// clause at all (fixed price, which has no limitation-of-funds mechanic), so the
+// caller drops the sentence instead of citing a clause that doesn't apply. Never
+// assume -22: it is only the incrementally funded cost-reimbursement case.
+export const clauseRisk = (clause) =>
+  CLAUSE_NAME[clause] ? `a risk under FAR ${clause} (${CLAUSE_NAME[clause]})` : null;
+
 // How stale a sync has to be before the "as of" label also says how old it is.
 // Weekly timekeeping means a healthy contract is always a few days behind, and
 // printing "· 6 days ago" on every card would train people to ignore the one that

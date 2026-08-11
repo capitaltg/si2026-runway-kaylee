@@ -6,7 +6,7 @@ import {
   addExpense,
   deleteExpense,
 } from "../api.js";
-import { money, pct, panelStyle, hueFor, pill } from "../format.js";
+import { money, pct, panelStyle, hueFor, pill, clauseRisk } from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -311,8 +311,14 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                     {money(card.spent)} logged against{" "}
                     {money(card.funded != null ? card.funded : card.budget)} obligated
                     {card.ceiling ? ` of a ${money(card.ceiling)} ceiling` : ""}.{" "}
+                    {/* The clause comes off the card (#81), not from here: -22 is only
+                        the incrementally funded cost-reimbursement case, and this line
+                        cited it on every contract type. Null on fixed price, which has
+                        no limitation-of-funds mechanic to be at risk of. */}
                     {status === "over"
-                      ? "Charging past obligated funding is a Limitation of Funds risk (FAR 52.232-22)."
+                      ? clauseRisk(card.funding_clause)
+                        ? `Charging past obligated funding is ${clauseRisk(card.funding_clause)}.`
+                        : "Charging past the price is an overrun the contractor bears itself."
                       : card.mod_in_progress
                         ? "A funding modification is already outstanding."
                         : "Funding is keeping pace with the clock, so it needs its next funding mod — not a course correction."}
