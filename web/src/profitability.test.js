@@ -267,6 +267,11 @@ test("a position with no fee target withholds the target and the delta, not the 
   assert.equal(f.earned.value, 116058.26);
 });
 
+test("an award-fee pool share is displayed as dollars, not as a ratio", () => {
+  assert.equal(awardPoolShareLabel(45000), "$45,000 of pool");
+  assert.equal(awardPoolShareLabel(null), "");
+});
+
 test("an undetermined award-fee period is provisional; a zero determination is a fact", () => {
   const cpaf = {
     basis: "base_plus_award",
@@ -284,8 +289,6 @@ test("an undetermined award-fee period is provisional; a zero determination is a
   };
   const a = awardPeriods(cpaf);
   assert.equal(a.pool, 200000);
-  assert.equal(awardPoolShareLabel(a.periods[0].pool_share), "$45,000 of pool");
-  assert.equal(awardPoolShareLabel(null), "");
   assert.deepEqual(
     a.periods.map((p) => p.provisional),
     [false, false, true],
