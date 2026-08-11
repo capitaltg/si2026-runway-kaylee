@@ -16,6 +16,8 @@ import {
   measuredIn,
   orderedClins,
   pricedBy,
+  pricingApplicability,
+  profitabilityLabels,
   projection,
   projectionReason,
   rateChain,
@@ -85,7 +87,11 @@ const hatchLayer = {
 };
 
 const Figure = ({ figure, format }) =>
-  figure.withheld ? (
+  figure.notApplicable ? (
+    <span style={{ color: "var(--faint)", fontFamily: mono }} title={figure.withheld}>
+      N/A
+    </span>
+  ) : figure.withheld ? (
     <span style={{ color: "var(--faint)", fontFamily: mono }} title={figure.withheld}>
       —
     </span>
@@ -200,6 +206,7 @@ export default function Profitability({ contractId, setActiveId }) {
   const fee = useMemo(() => feeClins(burn), [burn]);
   const chain = useMemo(() => rateChain(burn), [burn]);
   const variance = useMemo(() => rateVariance(burn), [burn]);
+  const pricing = useMemo(() => profitabilityLabels(burn), [burn]);
 
   if (phase === "error") {
     return <div style={{ padding: 40, color: "var(--bad)", fontSize: 14 }}>{error}</div>;
@@ -239,6 +246,26 @@ export default function Profitability({ contractId, setActiveId }) {
         </div>
       </div>
 
+      {pricing.unknownCount > 0 && (
+        <div
+          style={{
+            ...panelStyle,
+            marginTop: 16,
+            borderColor: "var(--warn)",
+            color: "var(--dim)",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: "var(--warn)" }}>
+            {pricing.unknownCount} pricing polic{pricing.unknownCount === 1 ? "y is" : "ies are"} unknown.
+          </strong>{" "}
+          Runway keeps its legacy fallback wherever pricing affects the calculation.
+          Their price or limit labels are marked as policy-unknown; earnings and
+          return that are independently non-applicable remain N/A.
+        </div>
+      )}
+
       {/* ---- Contract summary --------------------------------------------- */}
       <div
         style={{
@@ -273,14 +300,18 @@ export default function Profitability({ contractId, setActiveId }) {
           </div>
         </div>
         <div style={panelStyle}>
-          <div style={tileLabel}>Fee earned</div>
+          <div style={tileLabel}>{pricing.earnings}</div>
           <div style={tileNum}>
             <Figure figure={tiles.fee} format={money} />
           </div>
-          <div style={tileSub}>Revenue less cost, at both levels</div>
+          <div style={tileSub}>
+            {pricing.earningsApplicable === false
+              ? "Not applicable under this contract's pricing policy"
+              : "Revenue less cost, under each CLIN's policy"}
+          </div>
         </div>
         <div style={panelStyle}>
-          <div style={tileLabel}>Margin</div>
+          <div style={tileLabel}>{pricing.return}</div>
           <div
             style={{
               ...tileNum,
@@ -292,7 +323,13 @@ export default function Profitability({ contractId, setActiveId }) {
           >
             <Figure figure={tiles.margin} format={pct} />
           </div>
-          <div style={tileSub}>Fee as a share of revenue</div>
+          <div style={tileSub}>
+            {pricing.returnApplicable === false
+              ? "Not applicable under this contract's pricing policy"
+              : pricing.return === "Fee margin"
+                ? "Earned fee as a share of revenue"
+                : "Earnings as a share of revenue"}
+          </div>
         </div>
       </div>
 
@@ -383,11 +420,11 @@ export default function Profitability({ contractId, setActiveId }) {
               <tr>
                 <th style={thLeft}>CLIN</th>
                 <th style={thLeft}>Policy</th>
-                <th style={th}>Ceiling</th>
+                <th style={th}>Price / limit</th>
                 <th style={th}>Revenue</th>
                 <th style={th}>Cost</th>
-                <th style={th}>Fee earned</th>
-                <th style={th}>Margin</th>
+                <th style={th}>Earnings</th>
+                <th style={th}>Return</th>
                 <th style={thLeft}>At completion</th>
                 <th style={thLeft}>Status</th>
               </tr>
@@ -395,6 +432,7 @@ export default function Profitability({ contractId, setActiveId }) {
             <tbody>
               {clins.map((c) => {
                 const f = clinFigures(c, margin);
+                const applicability = pricingApplicability(c);
                 const proj = projection(c);
                 const p = pill(
                   c.status,
@@ -416,7 +454,12 @@ export default function Profitability({ contractId, setActiveId }) {
                         measured in {measuredIn(c)}
                       </div>
                     </td>
-                    <td style={td}>{money(c.ceiling)}</td>
+                    <td style={td}>
+                      <div>{money(c.ceiling)}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--faint)", fontFamily: "inherit" }}>
+                        {applicability.ceilingLabel}
+                      </div>
+                    </td>
                     <td style={td}>
                       <Figure figure={f.revenue} format={money} />
                     </td>
@@ -425,6 +468,9 @@ export default function Profitability({ contractId, setActiveId }) {
                     </td>
                     <td style={td}>
                       <Figure figure={f.fee} format={money} />
+                      <div style={{ fontSize: 10.5, color: "var(--faint)", fontFamily: "inherit" }}>
+                        {applicability.earningsLabel}
+                      </div>
                     </td>
                     <td
                       style={{
@@ -436,6 +482,9 @@ export default function Profitability({ contractId, setActiveId }) {
                       }}
                     >
                       <Figure figure={f.margin} format={pct} />
+                      <div style={{ fontSize: 10.5, color: "var(--faint)", fontFamily: "inherit" }}>
+                        {applicability.returnLabel}
+                      </div>
                     </td>
                     <td style={{ ...tdLeft, fontSize: 12.5 }}>
                       {proj ? (

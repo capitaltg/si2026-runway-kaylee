@@ -45,6 +45,156 @@ const clinRevenueKnown = (clin) => clin?.revenue_known === true;
 // `withheld` is set, so a caller cannot accidentally format a withheld number.
 const fact = (value) => ({ value, withheld: null });
 const withheld = (why) => ({ value: null, withheld: why });
+const notApplicable = (why) => ({
+  value: null,
+  withheld: why,
+  notApplicable: true,
+});
+
+const CEILING_LABEL = {
+  firm_price: "Firm price",
+  ceiling_price: "Ceiling price",
+  estimated_cost: "Estimated cost",
+  cost_plus_fixed_fee: "Cost + fixed fee",
+  cost_plus_target_fee: "Target cost + fee",
+  cost_plus_base_and_award_pool: "Cost + fee pool",
+};
+
+const NO_EARNINGS_CONCEPT =
+  "This pricing policy reimburses cost without a fee or profit mechanic.";
+
+// The concepts a pricing-policy payload makes applicable on one CLIN. This consumes
+// semantic fields the backend already owns rather than reclassifying raw type text in
+// the browser. A future no-fee cost policy therefore works without adding another
+// type-code branch here: a cost-reimbursement revenue basis with no fee/profit term
+// simply has no earnings or return concept.
+export function pricingApplicability(clin) {
+  const policy = clin?.pricing_policy || {};
+  const known = policy.known === true;
+  const ceilingLabel = known
+    ? CEILING_LABEL[policy.ceiling_meaning] || "Price / limit"
+    : "Limit · policy unknown";
+  // Non-labor spend cannot earn fee or profit regardless of whether its printed
+  // pricing type was recognized. Keep the unknown count and limit caveat, while
+  // stating the applicability fact that is already certain.
+  if (!clin?.is_labor) {
+    return {
+      known,
+      ceilingLabel,
+      earningsLabel: "Not applicable",
+      returnLabel: "Not applicable",
+      earningsApplicable: false,
+      returnApplicable: false,
+    };
+  }
+  if (!known) {
+    return {
+      known: false,
+      ceilingLabel: "Limit · policy unknown",
+      earningsLabel: "Earnings · policy unknown",
+      returnLabel: "Return · policy unknown",
+      earningsApplicable: null,
+      returnApplicable: null,
+    };
+  }
+
+  if (policy.family === "fixed_price") {
+    const incentive = policy.revenue_basis === "cost_plus_earned_profit";
+    return {
+      known: true,
+      ceilingLabel,
+      earningsLabel: incentive ? "Incentive profit" : "Profit",
+      returnLabel: incentive ? "Profit margin" : "Margin",
+      earningsApplicable: true,
+      returnApplicable: true,
+    };
+  }
+  if (policy.family === "time_and_materials") {
+    return {
+      known: true,
+      ceilingLabel,
+      earningsLabel: "Gross profit",
+      returnLabel: "Margin",
+      earningsApplicable: true,
+      returnApplicable: true,
+    };
+  }
+  if (policy.family === "cost_reimbursement") {
+    const feeApplies = /fee|profit/.test(policy.revenue_basis || "");
+    let earningsLabel = "Fee earned";
+    if (policy.ceiling_meaning === "cost_plus_fixed_fee") {
+      earningsLabel = "Fixed fee earned";
+    } else if (policy.ceiling_meaning === "cost_plus_target_fee") {
+      earningsLabel = "Incentive fee earned";
+    } else if (
+      policy.ceiling_meaning === "cost_plus_base_and_award_pool"
+    ) {
+      earningsLabel = "Award fee earned";
+    }
+    return {
+      known: true,
+      ceilingLabel,
+      earningsLabel: feeApplies ? earningsLabel : "Not applicable",
+      returnLabel: feeApplies ? "Fee margin" : "Not applicable",
+      earningsApplicable: feeApplies,
+      returnApplicable: feeApplies,
+    };
+  }
+
+  return {
+    known: true,
+    ceilingLabel,
+    earningsLabel: "Earnings",
+    returnLabel: "Return",
+    earningsApplicable: true,
+    returnApplicable: true,
+  };
+}
+
+const aggregateApplicability = (rows, key) => {
+  if (rows.some((row) => row[key] === true)) return true;
+  if (rows.length && rows.every((row) => row[key] === false)) return false;
+  return null;
+};
+
+// Contract-level labels stay precise on a homogeneous award and deliberately become
+// neutral on a mixed or partly-unknown one. The backend count wins when present: it
+// includes every active CLIN and is the authoritative statement of extraction gaps.
+export function profitabilityLabels(burn) {
+  const rows = (burn?.clins || []).map(pricingApplicability);
+  const statedUnknown = burn?.contract?.pricing_unknown;
+  const unknownCount = Number.isInteger(statedUnknown)
+    ? statedUnknown
+    : rows.filter((row) => !row.known).length;
+  const earningsApplicable = aggregateApplicability(rows, "earningsApplicable");
+  const returnApplicable = aggregateApplicability(rows, "returnApplicable");
+  const oneLabel = (key, fallback, applicableKey, applicable) => {
+    if (applicable === false) return "Not applicable";
+    const candidates = applicableKey
+      ? rows.filter((row) => row[applicableKey] === true)
+      : rows;
+    const labels = [...new Set(candidates.map((row) => row[key]))];
+    return unknownCount === 0 && labels.length === 1 ? labels[0] : fallback;
+  };
+  return {
+    ceiling: oneLabel("ceilingLabel", "Price / limit"),
+    earnings: oneLabel(
+      "earningsLabel",
+      "Earnings",
+      "earningsApplicable",
+      earningsApplicable,
+    ),
+    return: oneLabel(
+      "returnLabel",
+      "Return",
+      "returnApplicable",
+      returnApplicable,
+    ),
+    earningsApplicable,
+    returnApplicable,
+    unknownCount,
+  };
+}
 
 const LEVEL_1_COST =
   "Cost equals billings at cost-model level 1 — no direct rates have been supplied.";
@@ -93,7 +243,7 @@ export function summary(burn) {
   const costKnown = totalCostKnown(burn);
   const revenueKnown = totalRevenueKnown(burn);
   const costWhy = margin ? PARTIAL_COST : LEVEL_1_COST;
-  return {
+  const figures = {
     revenue: revenueKnown ? fact(t.revenue ?? 0) : withheld(PRICE_NOT_REVENUE),
     cost: costKnown ? fact(t.cost ?? 0) : withheld(costWhy),
     // Revenue is asked first, ahead of cost, because the two refusals take different
@@ -119,6 +269,14 @@ export function summary(burn) {
           ? withheld("No revenue recognised yet.")
           : fact(((t.revenue || 0) - (t.cost || 0)) / t.revenue),
   };
+  const applicability = profitabilityLabels(burn);
+  if (applicability.earningsApplicable === false) {
+    figures.fee = notApplicable(NO_EARNINGS_CONCEPT);
+  }
+  if (applicability.returnApplicable === false) {
+    figures.margin = notApplicable(NO_EARNINGS_CONCEPT);
+  }
+  return figures;
 }
 
 // One CLIN's money columns, under the same rules. `fee_known` is per CLIN because a
@@ -139,8 +297,8 @@ export function clinFigures(clin, margin) {
     return {
       revenue: fact(spent),
       cost: fact(spent),
-      fee: withheld(PASS_THROUGH),
-      margin: withheld(PASS_THROUGH),
+      fee: notApplicable(PASS_THROUGH),
+      margin: notApplicable(PASS_THROUGH),
     };
   }
   // This CLIN's own cost truth, never the contract's (#152). A mixed award prices one
@@ -154,7 +312,7 @@ export function clinFigures(clin, margin) {
   // to it recognises revenue every week and must keep printing it.
   const revenueKnown = clinRevenueKnown(clin);
   const costWhy = margin ? COST_IS_STANDIN : LEVEL_1_COST;
-  return {
+  const figures = {
     revenue: revenueKnown ? fact(clin.revenue ?? 0) : withheld(PRICE_NOT_REVENUE_CLIN),
     cost: costKnown ? fact(clin.cost ?? 0) : withheld(costWhy),
     fee: !revenueKnown
@@ -176,6 +334,14 @@ export function clinFigures(clin, margin) {
           ? fact(clin.margin_pct)
           : withheld(clin.fee_known ? NO_REVENUE_CLIN : NO_FEE_TERMS_CLIN),
   };
+  const applicability = pricingApplicability(clin);
+  if (applicability.earningsApplicable === false) {
+    figures.fee = notApplicable(NO_EARNINGS_CONCEPT);
+  }
+  if (applicability.returnApplicable === false) {
+    figures.margin = notApplicable(NO_EARNINGS_CONCEPT);
+  }
+  return figures;
 }
 
 // A CLIN's at-completion projection, in whatever shape its policy states one — and
