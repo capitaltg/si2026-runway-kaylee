@@ -441,7 +441,9 @@ export default function FlightDeck({
   const heroColor2 =
     hero?.status === "over" || hero?.status === "unpriced"
       ? "#c23636"
-      : hero?.status === "watch" || hero?.status === "funding"
+      : hero?.status === "watch" ||
+          hero?.status === "funding" ||
+          hero?.status === "fee_eroding"
         ? "#c26e12"
         : "#0b8f65";
   // Live-data strip shows only sources actually feeding this project.
@@ -456,9 +458,14 @@ export default function FlightDeck({
         ? "has charges the engine can't price — burn is unknown, not clear"
         : hero?.status === "funding"
           ? "needs its next funding mod before the PoP ends"
-          : hero?.status === "watch"
-            ? "lands tight against the finish line"
-            : "clears the finish line";
+          : // The hero's runway is still about funding; this line is about where the
+            // money is going while that runway holds (#81). Deliberately says fee and
+            // not "funding", because the funded dollars are not the thing at risk.
+            hero?.status === "fee_eroding"
+            ? "is covering a cost overrun out of its fee"
+            : hero?.status === "watch"
+              ? "lands tight against the finish line"
+              : "clears the finish line";
   // The date the runway is measured from, printed next to every figure derived from
   // it so an as-of reading can't be mistaken for a live countdown.
   const asOf = asOfLabel(sync);

@@ -186,3 +186,244 @@ def test_adding_the_clause_moves_no_money():
         "funds_exceeded",
     ):
         assert typed[key] == untyped[key], key
+
+
+# ── Part 4: the cost overrun eats fee before it eats funding ─────────────────────
+#
+# The rule that makes cost-plus different from everything else Runway models. The
+# obligated dollars cover cost *and* fee, so spending past estimated cost does not
+# breach the funded limit while fee remains — it consumes the fee. That state was
+# invisible on the card: a CPFF CLIN could read "On pace" in green with a third of its
+# fixed fee already spoken for by the overrun.
+#
+# `fee_eroding` is a *label*, deliberately. No denominator moves here — #134 owns
+# whether earned fee nets out of funded availability — and the last test in this block
+# is the one that holds that line.
+
+from app import rates
+
+# Level 2, so `cost` is a real buildup and not a billing stand-in. $40 direct burdens
+# to $85.75/hr (x1.32 fringe, x1.45 OH, x1.12 G&A), which is the quantity the fee rule
+# is evaluated against. At Level 1 cost equals billings by construction and already
+# contains the fee, so "cost passed estimated cost" there is an artefact of the rate
+# ladder — `test_level_1_cost_cannot_erode_a_fee` pins that it stays silent.
+_COST_PER_HOUR = 85.75
+
+
+def _model():
+    return rates.CostModel(
+        rate_set=rates.RateSet(
+            fiscal_year="FY26",
+            pools=tuple(
+                rates.Pool(name=n, rate=r, base=rates.DEFAULT_BASES[n])
+                for n, r in (
+                    (rates.FRINGE, 0.32),
+                    (rates.OVERHEAD, 0.45),
+                    (rates.GNA, 0.12),
+                )
+            ),
+        ),
+        lcat_direct={"software engineer": 40.00},
+    )
+
+
+# 12 weeks at 40 hrs — $41,160 of cost to date, $3,430/wk forward, 40 weeks to go, so
+# cost lands at $178,360 against a $150K estimate: a $28,360 overrun that eats $28,360
+# of a $40K fixed fee and leaves $11,640. The ceiling is $190K (estimate + fee), which
+# that projection still clears, so the funding read is `ok` and the *only* thing wrong
+# with this CLIN is the fee — exactly the case the state exists for.
+_EST_COST = 150_000
+_FIXED_FEE = 40_000
+_FEE_CEILING = _EST_COST + _FIXED_FEE
+
+
+def _weeks(n=12, hours=40):
+    from datetime import date, timedelta
+
+    start = date(2026, 1, 2)
+    return [
+        {
+            "charge_code": "0001",
+            "labor_category": "Software Engineer",
+            "total_hours": hours,
+            "week_ending": (start + timedelta(weeks=i)).isoformat(),
+            "employee_id": "e1",
+        }
+        for i in range(n)
+    ]
+
+
+def _fee_contract(clin_type="CPFF", ceiling=_FEE_CEILING, **fee):
+    """A fully funded cost CLIN whose ceiling is estimated cost + fee, priced so the
+    forward projection overruns the estimate and still clears the ceiling."""
+    return {
+        "id": 1,
+        "contract": {
+            "piid": "TEST-81-FEE",
+            "total_ceiling": ceiling,
+            "total_obligated": ceiling,
+            "contract_type": clin_type,
+        },
+        "clins": [
+            {
+                "clin": "0001",
+                "period": "Base",
+                "title": "Professional Services (Labor)",
+                "is_labor": True,
+                "ceiling": ceiling,
+                "est_hours": 1_900,
+                **fee,
+            }
+        ],
+        "periods": [_PERIOD],
+    }
+
+
+def _fee_card(**kw):
+    contract = _fee_contract(**kw)
+    return burn.compute(contract, _weeks(), cost_model=_model())["clins"][0]
+
+
+def test_the_overrun_reads_fee_eroding_not_a_funding_breach():
+    c = _fee_card(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE)
+
+    # The whole point: nothing about the *funding* is wrong here.
+    assert c["funds_exceeded"] is False
+    assert c["ceiling_breached"] is False
+    # And yet this is not "On pace" — which is what it read before #81.
+    assert c["status"] == "fee_eroding"
+    assert c["status_label"] == "Fee eroding"
+
+
+def test_fee_eroding_states_the_fee_that_is_left():
+    # "$11,640 of the $40K fixed fee remains" is the actionable half of the state; a
+    # colour without the number is not a finding.
+    c = _fee_card(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE)
+    projected = c["fee_position"]["projected"]
+
+    # $178,354.18 of projected cost against the $150K estimate. The odd cents are the
+    # burden chain ($40 x 1.32 x 1.45 x 1.12 = $85.7472/hr), carried rather than rounded
+    # away so the figures here foot to the same buildup #77 reports.
+    assert projected["overrun"] == 28_354.18
+    assert projected["absorbed"] == 28_354.18
+    assert projected["at_completion"] == 11_645.82
+    assert projected["exhausted"] is False
+    assert c["fee_exhausted"] is False
+
+
+def test_the_card_and_the_fee_alert_never_disagree():
+    # Both are driven off `absorbed` on the same projected position, on purpose. A CLIN
+    # whose pill says the fee is going while the alert list is empty (or the reverse) is
+    # the failure this shares one derivation to prevent.
+    p = burn.compute(
+        _fee_contract(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE),
+        _weeks(),
+        cost_model=_model(),
+    )
+    assert p["clins"][0]["status"] == "fee_eroding"
+    assert [a["code"] for a in p["fee_alerts"]] == ["CLIN 0001"]
+    assert p["fee_alerts"][0]["fee_lost"] == 28_354.18
+    # #80 already gated `all_clear` on the alert, so this was never "all clear" — but a
+    # reader who only looked at the pill could not tell.
+    assert p["all_clear"] is False
+
+
+def test_no_overrun_is_not_an_alert():
+    # A CLIN inside its estimated cost has absorbed nothing, so the state must not fire
+    # merely because a fee exists. Same fixture with an estimate the projection clears —
+    # which leaves the forward band's own read of a CLIN landing well short of its
+    # budget (`under`), untouched by the fee.
+    c = _fee_card(estimated_cost=300_000, fixed_fee=_FIXED_FEE, ceiling=340_000)
+    assert c["fee_position"]["projected"]["absorbed"] == 0.0
+    assert c["status"] == "under"
+
+
+def test_award_fee_at_risk_is_not_fee_erosion():
+    # CPAF's undetermined award pool sits below target from day one on every healthy
+    # CPAF contract. `_award_fee_position` never sets `absorbed` for exactly that
+    # reason, and this pins that the status inherits that discipline rather than
+    # painting amber on the normal state of the type (#80).
+    c = _fee_card(
+        clin_type="CPAF",
+        estimated_cost=_EST_COST,
+        base_fee=5_000,
+        award_fee_pool=35_000,
+    )
+    assert c["fee_position"]["projected"]["at_risk"] > 0
+    assert c["fee_position"]["projected"]["absorbed"] == 0.0
+    assert c["status"] == "ok"
+
+
+def test_level_1_cost_cannot_erode_a_fee():
+    # No cost model: cost is hours x the negotiated billing rate, which already contains
+    # the fee. Comparing that to estimated cost is comparing a number to a component of
+    # itself, and the fee position says so with `cost_known: False`.
+    c = burn.compute(
+        _fee_contract(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE), _weeks()
+    )["clins"][0]
+    assert c["cost_known"] is False
+    assert c["fee_position"]["known"] is False
+    assert c["status"] != "fee_eroding"
+
+
+def test_a_red_is_never_downgraded_to_fee_eroding():
+    # Precedence, and the reason the refinement is scoped to `ok`/`watch`. Where the
+    # ceiling is exactly estimated cost + fee, exhausting the fee *is* a ceiling breach
+    # by construction — cost past est + fee is cost past the ceiling — so the ceiling
+    # read wins and keeps its red. "The fee is gone" must never read amber on a CLIN
+    # that is also blowing its ceiling.
+    c = _fee_card(estimated_cost=_EST_COST, fixed_fee=10_000, ceiling=160_000)
+    assert c["fee_position"]["projected"]["exhausted"] is True
+    assert c["ceiling_breached"] is True
+    assert c["status"] == "over"
+    assert c["status_label"] == "Over ceiling"
+
+
+def test_the_exhausted_label_exists_for_the_case_that_can_reach_it():
+    # `_pill` at the unit level, because a fully funded CLIN whose ceiling is estimate
+    # plus fee can't reach it (see above) — it becomes reachable once the ceiling
+    # carries headroom over est + fee, or funding softening holds the status at `watch`.
+    # "Fee eroding" on a CLIN with no fee left understates it by the amount that
+    # matters, so the label exists and stays amber either way.
+    assert burn._pill("fee_eroding") == "Fee eroding"
+    assert burn._pill("fee_eroding", fee_exhausted=True) == "Fee exhausted"
+
+
+def test_fixed_price_keeps_its_margin_vocabulary():
+    # FFP has no fee mechanic to erode — profit is price minus cost, reported as
+    # `margin_position` and labelled "Margin at risk"/"Margin exceeded" since #79. A
+    # cost-type state leaking onto it would undo that ticket.
+    c = _fee_card(clin_type="FFP", estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE)
+    assert c["margin_managed"] is True
+    assert c["status"] != "fee_eroding"
+    assert c["fee_position"] is None
+
+
+def test_fee_erosion_moves_no_funding_figure():
+    # The line this commit must not cross. Two identical CLINs — same ceiling, same
+    # obligation, same hours, same cost model — differing only in whether the award
+    # printed fee terms. The status differs, and nothing denominated in dollars does.
+    # #134 is where the funded slice may start netting fee out; until then a fee state
+    # that moved a runway would be that ticket landing by accident.
+    eroding = _fee_card(estimated_cost=_EST_COST, fixed_fee=_FIXED_FEE)
+    no_terms = _fee_card()
+
+    assert eroding["status"] == "fee_eroding"
+    assert no_terms["status"] == "ok"
+    for key in (
+        "budget",
+        "spent",
+        "cost",
+        "remaining",
+        "weekly",
+        "weeks_left",
+        "exhaust_week",
+        "runway_days",
+        "stop_date",
+        "stop_date_passed",
+        "funds_exceeded",
+        "ceiling_breached",
+        "pct",
+        "pct_budget",
+    ):
+        assert eroding[key] == no_terms[key], key

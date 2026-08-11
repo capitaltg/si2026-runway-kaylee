@@ -572,6 +572,7 @@ def _pill(
     ceiling_breached: bool = True,
     funds_exceeded: bool = False,
     margin_managed: bool = False,
+    fee_exhausted: bool = False,
 ) -> str:
     """Status → pill label. `over` names whichever limit is actually in jeopardy.
 
@@ -610,6 +611,14 @@ def _pill(
         if funds_exceeded:
             return "Funds exceeded"
         return "Over ceiling" if ceiling_breached else "Funds short"
+    if status == "fee_eroding":
+        # Two labels for one state, because "Fee eroding" on a CLIN whose fee is
+        # entirely gone understates it by exactly the amount that matters. Both stay
+        # amber: this is a profitability statement about money the company loses, not a
+        # funding limit, and the reds on a cost-type CLIN all name a funding limit.
+        # Whether a *fully* absorbed fee deserves the red that fixed-price work gets
+        # for the same fact ("Margin exceeded") is a live question — see #144.
+        return "Fee exhausted" if fee_exhausted else "Fee eroding"
     return {
         "watch": "Watch",
         "ok": "On pace",
@@ -1176,6 +1185,31 @@ def _compute_clin(
         else None
     )
 
+    # Is the projected cost overrun eating this CLIN's fee (#81 part 4)? The rule that
+    # makes cost-plus different from everything else Runway models: the obligated
+    # dollars cover cost *and* fee, so spending past estimated cost does not breach the
+    # funded limit while fee remains — it consumes the fee.
+    #
+    # Read off the same `absorbed` on the same projected position that #80's
+    # `fee_alerts` list is built from, deliberately, so the CLIN's own pill and the
+    # alert can never disagree about one CLIN. `absorbed` is only ever fee that *cost*
+    # has taken — a fixed fee eaten by the overrun (52.216-8's `contractor_fee_first`)
+    # or an incentive fee walked down by the share ratio. It is never CPAF's
+    # undetermined award pool, which sits below target from day one on every healthy
+    # CPAF contract and is a fee-at-risk report, not an overrun.
+    #
+    # Gated on the payload's own `known` conjunction rather than the position's: at
+    # Level 1 cost is a billing stand-in that already contains the fee, so "cost has
+    # passed estimated cost" there is an artefact of the rate ladder and not a fact
+    # about profit.
+    fee_eroding = bool(
+        fee_projected is not None
+        and fee_projected.known
+        and cost_known
+        and fee_projected.absorbed > 0
+    )
+    fee_exhausted = fee_eroding and bool(fee_projected.exhausted)
+
     if weekly <= 0:
         status = "unpriced" if unpriced else "paused"
     elif margin_managed:
@@ -1220,6 +1254,26 @@ def _compute_clin(
                 funds_exceeded,
             )
         )
+
+    # The state between "on pace" and "over the funded limit" (#81 part 4). Cost has
+    # passed estimated cost and the fee is absorbing it, which is where the money
+    # actually goes on cost-plus work and was invisible on the card until now — a CPFF
+    # CLIN could read "On pace" in green with a third of its fixed fee already spoken
+    # for by the overrun.
+    #
+    # A refinement of `ok`/`watch` only. It is emphatically *not* a funding read and
+    # must never be confused with one: the same distinction #22 drew between routine
+    # incremental funding and a real breach, applied one level down. So it cannot
+    # promote itself over a red, cannot fire when the funding is already spent through
+    # or the ceiling is going, and moves no dollar figure — #134 owns whether fee nets
+    # out of the funded slice, and until it lands every funding number here is
+    # unchanged.
+    #
+    # `under` is excluded too, though it is only reachable past PoP end: there the
+    # budget closed out with money unspent, so "the overrun is eating your fee" is not
+    # the finding — and a CLIN can only reach `under` with a *realized* underspend.
+    if fee_eroding and status in ("ok", "watch"):
+        status = "fee_eroding"
 
     # Hard-stop forecast (#23): the calendar date charging on this CLIN gets
     # blocked — when cumulative spend reaches the *binding* budget at the current
@@ -1390,7 +1444,13 @@ def _compute_clin(
         "stop_reason": stop_reason,
         "stop_date_passed": stop_date_passed,
         "status": status,
-        "status_label": _pill(status, ceiling_breached, funds_exceeded, margin_managed),
+        "status_label": _pill(
+            status, ceiling_breached, funds_exceeded, margin_managed, fee_exhausted
+        ),
+        # Whether the fee is fully absorbed rather than merely eroding (#81). Carried
+        # because `status` alone can't tell the two apart and the pill's own wording is
+        # not something a consumer should have to string-match.
+        "fee_exhausted": fee_exhausted,
         # Which limit is in jeopardy, so the frontend can label a red `over` the
         # same way this does (and its simulator can too). `ceiling_breached` is a
         # projection; `funds_exceeded` already happened, and outranks it.

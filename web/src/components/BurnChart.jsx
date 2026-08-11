@@ -123,7 +123,10 @@ export default function BurnChart({ clin, contract }) {
     ? "var(--bad)"
     : clin.status === "over"
       ? "var(--bad)"
-      : clin.status === "watch"
+      : // `fee_eroding` (#81) is amber like `watch`. The projection line is the thing
+        // that eats the fee, so drawing it green while the card says the fee is going
+        // makes the chart contradict its own pill.
+        clin.status === "watch" || clin.status === "fee_eroding"
         ? "var(--warn)"
         : "var(--good)";
 

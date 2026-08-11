@@ -90,3 +90,26 @@ test("asOfLabel still labels a sync whose age is unknown", () => {
   // how old it is.
   assert.equal(asOfLabel({ as_of: "2026-04-10" }), "as of 10 Apr 26");
 });
+
+// ── #81 part 4: the fee-erosion pill ────────────────────────────────────────────
+
+test("fee_eroding is amber, and says so with the fee that is left", async () => {
+  const { pill, statusColor } = await import("./format.js");
+
+  // Amber, beside the funding states — not a red. Every red on a cost-type CLIN names
+  // a funding limit, and this one names the fee: the funded dollars are not at risk,
+  // the company's profit is. Green was the bug: before #81 the backend had no state
+  // for this, so a CPFF CLIN eating its fee read "On pace".
+  assert.equal(statusColor("fee_eroding"), "var(--warn)");
+  assert.equal(pill("fee_eroding").label, "Fee eroding");
+  assert.equal(pill("fee_eroding").color, "var(--warn)");
+
+  // Sharpened when there is no fee left to erode. Mirrors burn.py's `_pill`, and reads
+  // the card's `fee_exhausted` rather than string-matching the label.
+  assert.equal(pill("fee_eroding", true, false, false, true).label, "Fee exhausted");
+  assert.equal(pill("fee_eroding", true, false, false, true).color, "var(--warn)");
+
+  // The over/funds labels are unaffected by the new argument.
+  assert.equal(pill("over", true, false, false, true).label, "Over ceiling");
+  assert.equal(pill("over", false, false, false, true).label, "Funds short");
+});

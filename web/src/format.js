@@ -76,6 +76,11 @@ const PILL = {
   // backend has emitted this since #22 but PILL had no entry, so it rendered "—".
   funding: { label: "Funding due", color: "--warn", bg: "--warnBg" },
   watch: { label: "Watch", color: "--warn", bg: "--warnBg" },
+  // Cost past estimated cost, with the fee absorbing it (#81). Amber, beside the
+  // funding states rather than among the reds: it is money the company loses, not a
+  // funding limit, and every red on a cost-type CLIN names a funding limit. `pill()`
+  // sharpens the label to "Fee exhausted" when there is no fee left to erode.
+  fee_eroding: { label: "Fee eroding", color: "--warn", bg: "--warnBg" },
   ok: { label: "On pace", color: "--good", bg: "--goodBg" },
   under: { label: "Under pace", color: "--warn", bg: "--warnBg" },
   paused: { label: "Paused", color: "--faint", bg: "--panel2" },
@@ -120,11 +125,16 @@ const pillStyle = (p) => ({
 // All three labels above name a funding limit and fixed-price work has none — its red
 // means cost is projected past the price and the fee is gone. Same statuses, different
 // vocabulary, so the pill can never tell an FFP reader their funding ran out.
+// `feeExhausted` sharpens the amber `fee_eroding` label the same way (#81): the state
+// is the same, but "Fee eroding" on a CLIN with none of its fee left understates it by
+// exactly the amount that matters. Read it off the card's `fee_exhausted`, never by
+// string-matching the label.
 export function pill(
   status,
   ceilingBreached = true,
   fundsExceeded = false,
   marginManaged = false,
+  feeExhausted = false,
 ) {
   if (marginManaged) {
     const m = MARGIN_PILL[status] || { label: "—", color: "--dim", bg: "--panel2" };
@@ -137,7 +147,12 @@ export function pill(
       ? p.label
       : "Funds short";
   return {
-    label: status === "over" ? overLabel : p.label,
+    label:
+      status === "over"
+        ? overLabel
+        : status === "fee_eroding" && feeExhausted
+          ? "Fee exhausted"
+          : p.label,
     color: `var(${p.color})`,
     style: pillStyle(p),
   };
@@ -147,7 +162,10 @@ export function pill(
 export const statusColor = (status) =>
   status === "over" || status === "unpriced"
     ? "var(--bad)"
-    : status === "watch" || status === "under" || status === "funding"
+    : status === "watch" ||
+        status === "under" ||
+        status === "funding" ||
+        status === "fee_eroding"
       ? "var(--warn)"
       : "var(--good)";
 
