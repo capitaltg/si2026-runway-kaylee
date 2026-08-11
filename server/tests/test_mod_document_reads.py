@@ -96,9 +96,8 @@ def test_the_split_is_read_from_the_document_when_the_model_omits_it():
     assert by_num["0002"]["obligated"] == 90_000.0
 
 
-def test_an_extractor_supplied_split_wins_over_the_text_scrape():
-    """The scrape is a fallback, not a second opinion — real funding_lines are a
-    structured read of the whole document, the regex only of one sentence."""
+def test_the_document_split_wins_over_a_conflicting_model_split():
+    """The PDF/AcroForm is the source of truth when both reads are present."""
     contract = _award()
     _merge_mod(
         contract,
@@ -112,7 +111,26 @@ def test_an_extractor_supplied_split_wins_over_the_text_scrape():
         },
     )
     by_num = {c["clin"]: c for c in contract["clins"]}
-    assert by_num["0001"]["obligated"] == 1_975_000.0
+    assert by_num["0001"]["obligated"] == 1_850_000.0
+    assert by_num["0002"]["obligated"] == 90_000.0
+
+
+def test_a_model_split_is_used_only_when_it_reconciles():
+    """A structured model split still helps text-only ingests, but cannot invent
+    or misattribute more dollars than the mod says it obligated."""
+    contract = _award()
+    _merge_mod(
+        contract,
+        {
+            "mod_number": "P00002",
+            "effective_date": "2026-06-01",
+            "amount_obligated": 1_175_000.0,
+            "cumulative_obligated": 2_925_000.0,
+            "funding_lines": [{"clin": "0001", "amount": 1_000_000.0}],
+        },
+    )
+    by_num = {c["clin"]: c for c in contract["clins"]}
+    assert by_num["0001"]["obligated"] == 800_000.0
     assert by_num["0002"]["obligated"] is None
 
 
