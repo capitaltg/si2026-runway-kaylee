@@ -87,7 +87,11 @@ _FUND_LAG_SLACK = 0.15
 # the next 60 days*, added to costs already incurred, will exceed 75% of the funds
 # allotted. So this is the window in which a PM is already obliged to be doing
 # something about funding — flagging earlier is noise, flagging later is late.
-# #24 adds the 75%-of-funded half of the same clause as its own state.
+# The 75%-of-allotted half of the same clause has no state of its own: #24 proposed
+# one and was closed not-building with #25's letter, its only consumer. If it is ever
+# revived it must read its base off `funding_clause` below rather than assuming -22 —
+# 75% of *allotted* is the threshold under -22 only. Under -20 the base is estimated
+# cost, on T&M it is the ceiling price, and on fixed price there is no notification.
 _FUNDING_DUE_DAYS = 60
 # Minimum weeks elapsed in the active period before an obligation *rate* can be
 # read off the mod history. Below this, a single early tranche divided by one or
@@ -997,6 +1001,10 @@ def _compute_clin(
     # state there is. The old `0 < funded` guard treated it as no-funding-info and
     # fell back to a full-ceiling runway, hiding exactly the case that matters.
     incrementally_funded = funded is not None and funded < ceiling
+    # Resolved here rather than at the payload because this is the first point where
+    # both halves of the answer exist — the type (from `policy`) and whether the money
+    # arrives in tranches. See the payload key for why it goes no further than that.
+    funding_clause = policy.funding_clause_for(incrementally_funded)
     budget = funded if incrementally_funded else ceiling
     remaining = budget - spent
     pct = (spent / ceiling) if ceiling else 0.0
@@ -1324,6 +1332,18 @@ def _compute_clin(
         "budget": round(budget, 2),
         "funded": round(funded, 2) if funded is not None else None,
         "incrementally_funded": incrementally_funded,
+        # The single FAR clause that actually governs this CLIN's funding limit (#81).
+        # Which of -20 / -22 applies is not a property of the type: Limitation of Cost
+        # governs a fully funded cost contract, Limitation of Funds an incrementally
+        # funded one, so the policy needs `incrementally_funded` to pick. T&M carries
+        # 52.232-7 either way — its limit is the ceiling price, not an allotment — and
+        # fixed-price carries None, because it has no limitation-of-funds mechanic at
+        # all. `pricing_policy.funding_clauses` above is the *candidate* list; this is
+        # the resolved one, and it is the only one anything user-facing may cite.
+        # Deliberately not passed into `_funds_exceeded` / `_funded_shortfall_status`:
+        # those decide in dollars, this is a pure lookup, and handing them a clause
+        # invites a threshold to be derived from it there instead of from the policy.
+        "funding_clause": funding_clause,
         # Funding-pace read (#22): obligated vs elapsed-clock fraction, whether
         # funding is keeping pace, and whether a mod is flagged outstanding.
         "funded_frac": round(funded_frac, 4),
@@ -1887,6 +1907,7 @@ def compute(
             funding_keeps_pace = pace_override
         else:
             funding_keeps_pace = clin_funded_frac >= elapsed_frac - _FUND_LAG_SLACK
+        nl_policy = policy_of(c)
         status = _nl_status(spent, budget, ceiling, incrementally_funded)
         nl_funds_exceeded = _funds_exceeded(
             spent, budget, ceiling, incrementally_funded
@@ -1902,7 +1923,7 @@ def compute(
                 # a cost contract is the one line item most likely to print its own
                 # type, so it resolves per CLIN here too rather than inheriting the
                 # header by assumption.
-                "pricing_policy": policy_of(c).payload(),
+                "pricing_policy": nl_policy.payload(),
                 # A logged travel or ODC dollar is a cost dollar — there is no rate
                 # ladder between the two here, so the measured quantity is cost
                 # whatever the CLIN's type says, and there is no margin read to make
@@ -1916,6 +1937,14 @@ def compute(
                 "funded": round(funded, 2) if funded is not None else None,
                 "budget": round(budget, 2),
                 "incrementally_funded": incrementally_funded,
+                # The governing clause (#81), resolved the same way labor resolves it.
+                # It can be None here while the card still shows a funding status: a
+                # travel/ODC CLIN is measured in cost dollars whatever its type says
+                # (see `measured_against` above), so an FFP-typed one keeps its funding
+                # read but has no limitation-of-funds clause to cite. That is #79's
+                # deliberate call about non-labor spend, and the honest answer for a
+                # consumer asking "what would I cite?" is nothing, not -22.
+                "funding_clause": nl_policy.funding_clause_for(incrementally_funded),
                 "spent": round(spent, 2),
                 # `pct` stays ceiling-based; `pct_budget` is the same spend against
                 # the binding budget the status is actually read off, and
@@ -2018,6 +2047,10 @@ def compute(
             # funding) or the full ceiling. Drives whether the UI says "funding
             # runs out" vs "blows the ceiling".
             "limited_by": "funding" if c["incrementally_funded"] else "ceiling",
+            # And the clause that governs the limit `limited_by` names (#81), so a
+            # banner or a letter built from this row cites what actually applies
+            # instead of assuming -22. None where the type has no funding clause.
+            "funding_clause": c["funding_clause"],
             # The dated hard stop behind this tripwire (#23), so the banner can say
             # *when* rather than only how many weeks early. `limited_by` above is
             # already the same value `stop_reason` carries, so it isn't repeated.
@@ -2143,6 +2176,11 @@ def compute(
             # by definition funding-limited, so `stop_reason` isn't repeated here.
             "stop_date": c["stop_date"],
             "stop_date_passed": c["stop_date_passed"],
+            # The clause behind this row (#81). This is the list #25's funding letter
+            # is generated from, so it is the one place a wrong citation reaches a
+            # contracting officer — an amber funding row is funding-limited by
+            # definition, but *which* clause limits it still depends on the type.
+            "funding_clause": c["funding_clause"],
             "funded": c["funded"],
             "budget": c["budget"],
             "funded_frac": c["funded_frac"],
@@ -2349,6 +2387,8 @@ def compute(
                 "limited_by": (
                     "funding" if worst["incrementally_funded"] else "ceiling"
                 ),
+                # The clause governing the hero's limit (#81).
+                "funding_clause": worst["funding_clause"],
                 # The hero tile's day count as a date (#23) — same arithmetic, so
                 # the two can't disagree. Passed means the wall is today or behind.
                 "stop_date": worst["stop_date"],

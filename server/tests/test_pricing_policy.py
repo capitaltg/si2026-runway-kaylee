@@ -382,13 +382,21 @@ def test_pricing_unknown_counts_the_clins_that_could_not_be_typed():
 def _type_blind(payload):
     """The burn payload with everything that legitimately depends on contract type
     removed: the #76 fields themselves, plus `vehicle`, which has always echoed the
-    header text verbatim. What's left must not vary with the type at all."""
-    drop = {"pricing_policy"}
+    header text verbatim. What's left must not vary with the type at all.
+
+    `funding_clause` joined the list in #81. It is a citation, not a number — which
+    clause governs is precisely a fact about the type — and it rides several surfaces,
+    so the strip follows it onto the hero and the tripwire lists. Keeping it inside
+    this helper rather than relaxing the assertion is the point: the bar below still
+    holds that no *number* moves on a billings-measured type."""
+    drop = {"pricing_policy", "funding_clause"}
+    scrub = lambda d: {k: v for k, v in d.items() if k not in drop}
     return {
         **payload,
-        "clins": [
-            {k: v for k, v in c.items() if k not in drop} for c in payload["clins"]
-        ],
+        "clins": [scrub(c) for c in payload["clins"]],
+        "hero": scrub(payload["hero"]) if payload.get("hero") else payload.get("hero"),
+        "tripwires": [scrub(t) for t in payload["tripwires"]],
+        "funding": [scrub(f) for f in payload["funding"]],
         "contract": {
             k: v
             for k, v in payload["contract"].items()
