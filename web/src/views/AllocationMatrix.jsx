@@ -220,6 +220,8 @@ function causeText(x) {
   switch (x?.cause) {
     case "clin_unpriced":
       return "this CLIN has no rate table at all — import the rate schedule";
+    case "clin_unburdened":
+      return "this CLIN's rates are unburdened direct rates — there is no billable rate to map to";
     case "priced_elsewhere":
       return `priced on CLIN ${x.priced_on || "another line"}, not the one it's charged to`;
     case "ambiguous_rate_line":
@@ -2478,8 +2480,16 @@ export default function AllocationMatrix({
               )}
               {!newPersonRateOptions.length && (
                 <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--warn)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  This CLIN has no rate table. Enter an Other LCAT and explicit rate, or
-                  <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
+                  {activeNewClin?.rate_table_state === "unburdened" ? (
+                    // The schedule is in; it just isn't burdened (#139). Offering an
+                    // import here would send the user after a document we have.
+                    "This CLIN prices categories at unburdened direct rates, so there's no billable rate to pick. Enter an Other LCAT and explicit rate."
+                  ) : (
+                    <>
+                      This CLIN has no rate table. Enter an Other LCAT and explicit rate, or
+                      <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
+                    </>
+                  )}
                 </div>
               )}
               <button
@@ -2705,7 +2715,9 @@ export default function AllocationMatrix({
                           // problem, reported once on the CLIN card (#64) — it must
                           // not paint a red cell per person. Red on 40 cells for one
                           // missing PDF page is what trained people to ignore red.
-                          const noise = cell?.cause === "clin_unpriced";
+                          const noise =
+                            cell?.cause === "clin_unpriced" ||
+                            cell?.cause === "clin_unburdened";
                           const flagged = cell?.unmatched && !noise;
                           const mapped = cell?.via === "alias";
                           const filled = val > 0;
@@ -2978,13 +2990,18 @@ export default function AllocationMatrix({
                       style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}
                       onClick={(ev) => ev.stopPropagation()}
                     >
-                      No rate table on this CLIN — all{" "}
+                      {c.rate_table_state === "unburdened"
+                        ? "Direct rates only on this CLIN — no burdened rate to bill from, so all "
+                        : "No rate table on this CLIN — all "}
                       {c.unmatched_lcats?.length || 0} categor
                       {(c.unmatched_lcats?.length || 0) === 1 ? "y" : "ies"} bill at the blended
                       {c.blended_rate ? ` $${Math.round(c.blended_rate)}/hr` : " rate"}.
-                      <div style={{ marginTop: 6 }}>
-                        <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
-                      </div>
+                      {/* No import offer when the schedule is already in (#139). */}
+                      {c.rate_table_state !== "unburdened" && (
+                        <div style={{ marginTop: 6 }}>
+                          <ImportRateSchedule contractId={contractId} onImported={reloadRates} compact />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     !!c.lcat_issues?.length && (
@@ -3502,8 +3519,16 @@ function MappingPanel({
         </div>
 
         {/* Cause A has no mapping answer: no rate line exists to point at, so the
-            panel offers the document instead of a picker full of nothing. */}
-        {mapping.cause === "clin_unpriced" && !rateLines.length ? (
+            panel offers the document instead of a picker full of nothing. On the
+            unburdened half (#139) there is equally nothing to map to, but the
+            document is already here — say so and offer nothing. */}
+        {mapping.cause === "clin_unburdened" && !rateLines.length ? (
+          <div style={{ marginTop: 16, fontSize: 12.5, color: "var(--text)" }}>
+            This contract&apos;s rate schedule prices each category at an unburdened direct rate, with the
+            indirect factors stated separately, so there is no billable rate line to map to. Nothing to
+            import — the schedule is already ingested.
+          </div>
+        ) : mapping.cause === "clin_unpriced" && !rateLines.length ? (
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 12.5, color: "var(--text)", marginBottom: 10 }}>
               This contract has no rate lines at all yet, so there is nothing to map to. Import the award&apos;s

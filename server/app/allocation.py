@@ -205,6 +205,11 @@ def compute_allocation(
                 # schedule is a document problem, not 40 people's problem — and
                 # per-LCAT mapping offers off `lcat_issues`.
                 "rate_table_missing": card.get("rate_table_missing", False),
+                # …and which gap it is, so the card can withhold "import the rate
+                # schedule" from a CLIN whose schedule is already here (#139).
+                "rate_table_state": card.get(
+                    "rate_table_state", lcat_match.TABLE_ABSENT
+                ),
                 "lcat_issues": card.get("lcat_issues", []),
                 "aliased_lcats": card.get("aliased_lcats", []),
             }

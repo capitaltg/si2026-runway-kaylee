@@ -1461,6 +1461,13 @@ def _compute_clin(
         # missing continuation sheet, one statement — the UI reads this instead of
         # painting a red cell per person for the same document.
         "rate_table_missing": source != "rate_table",
+        # Which kind of rate gap it is (#139): `absent` (no rate lines — a missing
+        # continuation sheet, and importing one is the fix) vs `unburdened` (a
+        # cost-type award's direct rates per LCAT, with the indirect factors
+        # separate — the schedule is in, the burdening is what's missing, and no
+        # document fixes it). Both leave `rate_table_missing` true; only the first
+        # may be answered with "import the rate schedule".
+        "rate_table_state": lcat_match.rate_table_state(clin),
         # Timesheet rows charged to this CLIN. For an `unpriced` CLIN this is the
         # count the engine found but could not value — the "N rows, $0 priced" story.
         "charged_rows": len(clin_rows),
@@ -2190,6 +2197,9 @@ def compute(
             # The LCATs riding on the blended rate, so the prompt can be specific
             # about what is unpriced without listing every person.
             "lcats": c["unmatched_lcats"],
+            # `absent` or `unburdened` (#139) — the banner phrases itself off this
+            # and only offers an import on the half a document can answer.
+            "rate_table_state": c["rate_table_state"],
         }
         for c in computed
         if c["rate_table_missing"] and c["charged_rows"] and c["status"] != "unpriced"
