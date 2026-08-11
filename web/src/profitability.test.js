@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  pricedBy,
+  rateChain,
+  rateVariance,
   awardPeriods,
   clinFigures,
   feeBasisLabel,
@@ -317,4 +320,106 @@ test("only CLINs with a fee mechanic get a card — fixed-price and T&M lines ca
     feeClins(burn).map((c) => c.code),
     ["CLIN 0001"],
   );
+});
+
+// ---- the buildup (#82 section 2) ------------------------------------------------
+// rate_set shape from a live level-2 contract (42).
+const withChain = {
+  contract: {
+    cost_model: {
+      level: 2,
+      margin_available: true,
+      rate_set: {
+        fiscal_year: "2026",
+        scope: "contract",
+        status: "provisional",
+        complete: true,
+        pools: [
+          { name: "fringe", label: "Fringe", rate: 0.272, base: "direct_labor", status: "provisional" },
+          { name: "overhead", label: "Overhead", rate: 0.449, base: "labor_plus_fringe", status: "provisional" },
+          { name: "gna", label: "G&A", rate: 0.08, base: "total_cost_input", status: "provisional" },
+        ],
+      },
+    },
+  },
+  totals: {},
+  clins: [],
+};
+
+test("the chain names every rate with the base it applies to, in order", () => {
+  const chain = rateChain(withChain);
+  assert.deepEqual(
+    chain.steps.map((s) => [s.label, s.rate, s.baseLabel]),
+    [
+      ["Fringe", 0.272, "direct labor"],
+      ["Overhead", 0.449, "direct labor + fringe"],
+      ["G&A", 0.08, "total cost input (labor + fringe + overhead)"],
+    ],
+  );
+});
+
+test("a provisional rate set is flagged, because the true-up reprices every hour already charged", () => {
+  assert.equal(rateChain(withChain).provisional, true);
+  const final = JSON.parse(JSON.stringify(withChain));
+  final.contract.cost_model.rate_set.status = "final";
+  assert.equal(rateChain(final).provisional, false);
+});
+
+test("a level-1 contract has no chain to show", () => {
+  assert.equal(rateChain({ contract: { cost_model: { level: 1, rate_set: null } } }), null);
+  assert.equal(rateChain({ contract: {} }), null);
+});
+
+test("each pricing tier is named, and the billing-rate fallback is marked a stand-in", () => {
+  const mix = pricedBy({
+    cost_rate_mix: [
+      { source: "lcat_direct", hours: 900 },
+      { source: "negotiated_fallback", hours: 100 },
+    ],
+  });
+  assert.equal(mix[0].label, "Category (LCAT) direct rate");
+  assert.equal(mix[0].standIn, false);
+  assert.equal(mix[1].standIn, true, "the fallback is the one tier that is not a cost fact");
+});
+
+test("rate variance is flattened across CLINs with the CLIN kept", () => {
+  const rows = rateVariance({
+    clins: [
+      {
+        code: "CLIN 0001",
+        is_labor: true,
+        rate_variance: [{ lcat: "Program Manager (PMP)", delta: 2.13, direction: "above_buildup", pct: 0.0162 }],
+      },
+      { code: "CLIN 0002", is_labor: true, rate_variance: [] },
+    ],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].code, "CLIN 0001");
+  assert.equal(rows[0].direction, "above_buildup");
+});
+
+// Live CPAF (contract 42): a $157,923 pool reporting $0 available with 0 periods. The
+// zero means "nothing recorded to earn against", not "the fee is gone".
+test("a CPAF pool with no evaluation periods recorded is unallocated, not spent", () => {
+  const a = awardPeriods({
+    basis: "base_plus_award",
+    award_pool: 157923.16,
+    award_earned: 0,
+    award_available: 0,
+    base_earned: 4785.91,
+    periods_determined: 0,
+    periods_total: 0,
+    periods: [],
+  });
+  assert.equal(a.periodsRecorded, false);
+  assert.equal(a.pool, 157923.16);
+});
+
+test("a CPAF with recorded periods reports them", () => {
+  const a = awardPeriods({
+    basis: "base_plus_award",
+    periods_total: 1,
+    periods: [{ name: "Period 1", status: "pending" }],
+  });
+  assert.equal(a.periodsRecorded, true);
 });

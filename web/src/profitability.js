@@ -228,6 +228,11 @@ export function feeGap(fp) {
 export function awardPeriods(fp) {
   if (fp.basis !== "base_plus_award") return null;
   return {
+    // With no evaluation periods recorded, `award_available` is 0 because there is
+    // nothing to earn against — not because the pool is spent. Verified on a live
+    // CPAF (contract 42): a $157,923 pool reporting $0 available and 0 periods. The
+    // view has to say which of the two it is, or the card reads as fee already gone.
+    periodsRecorded: (fp.periods_total || 0) > 0 || (fp.periods || []).length > 0,
     pool: fp.award_pool,
     earned: fp.award_earned,
     available: fp.award_available,
@@ -263,6 +268,81 @@ export function shareRatio(fp) {
 // neither — so an empty list is the normal state on most contracts, not a failure.
 export const feeClins = (burn) =>
   orderedClins(burn).filter((c) => c.fee_position);
+
+// ---- the buildup, expanded (#82 section 2) --------------------------------------
+//
+// Where an accountant checks Runway's arithmetic against her own, so the chain shows
+// the rate applied *and the base it was applied to* at every step rather than totals.
+// Reconciliation is the feature. All of it comes off `contract.cost_model.rate_set`
+// and the per-CLIN `rate_variance` the engine already computes — the IndirectRates
+// view owns rate *entry*, and this view must not become a second place to edit them.
+
+// The base each pool applies to, as the buildup states it. Named in prose because
+// "total_cost_input" is a term of art and the whole point of the section is that a
+// reader can follow the multiplication.
+const POOL_BASE = {
+  direct_labor: "direct labor",
+  labor_plus_fringe: "direct labor + fringe",
+  total_cost_input: "total cost input (labor + fringe + overhead)",
+};
+export const poolBaseLabel = (base) => POOL_BASE[base] || base || "—";
+
+// The indirect chain, or null at level 1 where there is no buildup to show.
+// `status` carries provisional-vs-final: a provisional rate means every figure derived
+// from it gets repriced at the year-end true-up (#87), which is a caveat this section
+// is the right place to state and the wrong place to hide.
+export function rateChain(burn) {
+  const set = burn?.contract?.cost_model?.rate_set;
+  if (!set || !(set.pools || []).length) return null;
+  return {
+    fiscalYear: set.fiscal_year,
+    scope: set.scope,
+    status: set.status,
+    // False when a pool the buildup needs is missing, in which case the chain is
+    // partial and the cost below it is too.
+    complete: set.complete !== false,
+    provisional: set.status !== "final",
+    steps: (set.pools || []).map((p) => ({
+      name: p.name,
+      label: p.label || p.name,
+      rate: p.rate,
+      base: p.base,
+      baseLabel: poolBaseLabel(p.base),
+      status: p.status,
+    })),
+  };
+}
+
+// Which tier priced an hour. Level 3 is a person's own direct rate, level 2 the LCAT
+// category rate, level 1 the billing rate standing in for cost — a CLIN that is 90%
+// category-costed and 10% fallback is a real state, and one dominant label hides it.
+const COST_SOURCE = {
+  employee_direct: "Per-person direct rate",
+  lcat_direct: "Category (LCAT) direct rate",
+  negotiated_fallback: "Billing rate, standing in for cost",
+  none: "Not priced",
+};
+export const costSourceLabel = (source) => COST_SOURCE[source] || source;
+
+export const pricedBy = (clin) =>
+  (clin.cost_rate_mix || []).map((m) => ({
+    source: m.source,
+    label: costSourceLabel(m.source),
+    hours: m.hours,
+    // The one tier that is not a cost fact. Flagged so a mixed CLIN can show which
+    // slice of its hours is a stand-in.
+    standIn: m.source === "negotiated_fallback",
+  }));
+
+// Derived-vs-negotiated reconciliation per LCAT (`rate_variance`). Only LCATs whose
+// cost was actually derived appear — comparing a fallback against itself would always
+// report zero variance and mean nothing. Flattened across CLINs with the code kept,
+// because the same LCAT can price differently on two CLINs and that difference is
+// itself worth seeing.
+export const rateVariance = (burn) =>
+  orderedClins(burn).flatMap((c) =>
+    (c.rate_variance || []).map((v) => ({ ...v, code: c.code })),
+  );
 
 // What `spent` and every figure derived from it is denominated in (`measured_against`,
 // #79). Printed beside each CLIN because a cost-measured line and a billings-measured

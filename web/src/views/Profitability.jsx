@@ -11,8 +11,11 @@ import {
   marginAvailable,
   measuredIn,
   orderedClins,
+  pricedBy,
   projection,
   projectionReason,
+  rateChain,
+  rateVariance,
   shareRatio,
   summary,
 } from "../profitability.js";
@@ -177,6 +180,8 @@ export default function Profitability({ contractId, setActiveId }) {
   const tiles = useMemo(() => summary(burn), [burn]);
   const clins = useMemo(() => orderedClins(burn), [burn]);
   const fee = useMemo(() => feeClins(burn), [burn]);
+  const chain = useMemo(() => rateChain(burn), [burn]);
+  const variance = useMemo(() => rateVariance(burn), [burn]);
 
   if (error) {
     return <div style={{ padding: 40, color: "var(--bad)", fontSize: 14 }}>{error}</div>;
@@ -398,6 +403,154 @@ export default function Profitability({ contractId, setActiveId }) {
         </div>
       </div>
 
+      {/* ---- The buildup, expanded ---------------------------------------- */}
+      {chain && (
+        <div style={{ ...panelStyle, marginTop: 22 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: grotesk, fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+              The buildup
+            </div>
+            <div style={{ fontSize: 12, color: "var(--dim)" }}>
+              FY {chain.fiscalYear} · {chain.scope === "contract" ? "contract rates" : "company default rates"} ·{" "}
+              <span style={{ color: chain.provisional ? "var(--warn)" : "var(--good)" }}>
+                {chain.provisional ? "provisional" : "final"}
+              </span>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 3, maxWidth: 760 }}>
+            Each rate with the base it applies to, so the arithmetic can be checked
+            against your own books rather than trusted.
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+            <div style={{ fontSize: 12.5, color: "var(--text)" }}>
+              <strong>Direct labor</strong>
+              <span style={{ color: "var(--dim)" }}> — hours × the direct rate for each category</span>
+            </div>
+            {chain.steps.map((s) => (
+              <div
+                key={s.name}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  fontSize: 12.5,
+                  paddingLeft: 14,
+                  borderLeft: "2px solid var(--border)",
+                }}
+              >
+                <span style={{ fontWeight: 600, minWidth: 76 }}>{s.label}</span>
+                <span style={{ fontFamily: mono, color: "var(--text)" }}>{pct(s.rate)}</span>
+                <span style={{ color: "var(--dim)" }}>on {s.baseLabel}</span>
+                {s.status && s.status !== "final" && (
+                  <span style={{ fontSize: 11, color: "var(--warn)" }}>{s.status}</span>
+                )}
+              </div>
+            ))}
+            <div style={{ fontSize: 12.5, color: "var(--text)" }}>
+              <strong>= Cost</strong>
+              <span style={{ color: "var(--dim)" }}>
+                {" "}
+                — then fee on top, per each CLIN's pricing policy, gives revenue
+              </span>
+            </div>
+          </div>
+
+          {chain.provisional && (
+            <div style={{ marginTop: 14, fontSize: 12, color: "var(--dim)", lineHeight: 1.55, maxWidth: 700 }}>
+              These are provisional billing rates. Actual indirect rates are not known
+              until the books close, and the difference reprices every hour already
+              charged — so every cost, fee and margin figure on this page moves at the
+              year-end true-up.
+            </div>
+          )}
+
+          {!chain.complete && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--warn)" }}>
+              The buildup is missing a pool, so the cost below it is partial.
+            </div>
+          )}
+
+          {/* How the hours were actually priced — which tier answered, and for how
+              many hours. A CLIN that is mostly category-costed with a fallback tail
+              is a real state that one dominant label would hide. */}
+          {clins.some((c) => (c.cost_rate_mix || []).length > 0) && (
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+                How the hours were priced
+              </div>
+              {clins
+                .filter((c) => (c.cost_rate_mix || []).length > 0)
+                .map((c) => (
+                  <div key={c.code} style={{ fontSize: 12.5, marginBottom: 5 }}>
+                    <span style={{ fontWeight: 600 }}>{c.code}</span>
+                    <span style={{ color: "var(--dim)" }}>
+                      {" — "}
+                      {pricedBy(c)
+                        .map((m) => `${Math.round(m.hours).toLocaleString()} hrs at ${m.label.toLowerCase()}`)
+                        .join(" · ")}
+                    </span>
+                    {c.blended_rate != null && (
+                      <span style={{ color: "var(--faint)", fontFamily: mono }}>
+                        {" · blended "}
+                        {money(c.blended_rate)}/hr
+                      </span>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Reconciliation: what the buildup derives per LCAT against what the award
+              negotiated. The engine computes this; the section exists to show it. */}
+          {variance.length > 0 && (
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+                Derived vs. negotiated rate
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+                  <thead>
+                    <tr>
+                      <th style={thLeft}>LCAT</th>
+                      <th style={thLeft}>CLIN</th>
+                      <th style={th}>Built up</th>
+                      <th style={th}>Negotiated</th>
+                      <th style={th}>Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {variance.map((v, i) => (
+                      <tr key={`${v.code}-${v.lcat}-${i}`}>
+                        <td style={{ ...tdLeft, fontSize: 12.5 }}>{v.lcat}</td>
+                        <td style={{ ...tdLeft, fontSize: 12.5, color: "var(--dim)" }}>{v.code}</td>
+                        <td style={td}>${v.derived_price?.toFixed(2)}</td>
+                        <td style={td}>${v.negotiated_rate?.toFixed(2)}</td>
+                        <td
+                          style={{
+                            ...td,
+                            color: v.direction === "above_buildup" ? "var(--good)" : "var(--warn)",
+                          }}
+                          title={
+                            v.direction === "above_buildup"
+                              ? "The award pays more than the buildup costs — margin on this category."
+                              : "The buildup costs more than the award pays on this category."
+                          }
+                        >
+                          {v.direction === "above_buildup" ? "+" : "−"}${Math.abs(v.delta).toFixed(2)}
+                          {v.pct != null ? ` (${pct(Math.abs(v.pct))})` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ---- Fee at risk --------------------------------------------------- */}
       {fee.length > 0 && (
         <div style={{ marginTop: 26 }}>
@@ -539,7 +692,7 @@ export default function Profitability({ contractId, setActiveId }) {
                       {award.earned != null && (
                         <FeeStat label="Award fee earned" figure={{ value: award.earned, withheld: null }} />
                       )}
-                      {award.available != null && (
+                      {award.available != null && award.periodsRecorded && (
                         <FeeStat
                           label="Still available"
                           figure={{ value: award.available, withheld: null }}
@@ -547,6 +700,14 @@ export default function Profitability({ contractId, setActiveId }) {
                         />
                       )}
                     </div>
+                    {!award.periodsRecorded && (
+                      <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--dim)", lineHeight: 1.55, maxWidth: 620 }}>
+                        No award-fee evaluation periods are recorded, so none of this
+                        pool can be earned yet. That is why nothing shows as available —
+                        the pool is unallocated, not spent. Record the periods to see
+                        the fee position move.
+                      </div>
+                    )}
                     <AwardPeriods award={award} />
                   </>
                 )}
