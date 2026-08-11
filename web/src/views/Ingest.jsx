@@ -358,6 +358,13 @@ export default function Ingest({ onSaved }) {
   // sync falls back to a seed derived from the PIID, which draws a *different*
   // contract's award and roster — rows the sync now refuses rather than stores.
   const [seed, setSeed] = useState("");
+  // The generation opts that seed was used with — the other half of the pairing, and
+  // the half that had no way in until #136. A seed alone does not identify an award:
+  // `pop_in_progress` shifts the effective date, which shifts the fiscal-year digits
+  // of the PIID Fixtura draws, so the same seed generates -24- historical and -25-
+  // in-progress. Left blank the first sync guesses from the award, and a wrong guess
+  // is a contract that can never sync.
+  const [opts, setOpts] = useState("");
   const fileRef = useRef(null);
 
   async function run(file) {
@@ -395,6 +402,7 @@ export default function Ingest({ onSaved }) {
     setResult(null);
     setFileName(null);
     setSeed("");
+    setOpts("");
     setEditing(false);
     setStage("upload");
   }
@@ -409,6 +417,7 @@ export default function Ingest({ onSaved }) {
         result,
         seed === "" ? null : Number(seed),
         result.source_document_id ?? null,
+        opts.trim() === "" ? null : opts.trim(),
       );
       reset();
       onSaved?.(saved.id); // jump straight to the new contract's flight deck
@@ -565,6 +574,8 @@ export default function Ingest({ onSaved }) {
           onConfirm={onConfirm}
           seed={seed}
           setSeed={setSeed}
+          opts={opts}
+          setOpts={setOpts}
         />
       )}
     </div>
@@ -574,7 +585,7 @@ export default function Ingest({ onSaved }) {
 // The review/edit surface. The SAME form powers three cases: reviewing an AI
 // extraction, editing it, and manual entry (which is just an empty draft opened
 // in edit mode). Everything saves through POST /api/contracts/confirm.
-function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed, setSeed }) {
+function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed, setSeed, opts, setOpts }) {
   const [openRates, setOpenRates] = useState({}); // clin index -> expanded?
   const c = value.contract || {};
   const fc = c.field_confidence || {};
@@ -899,7 +910,23 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
             }}
           />
         </label>
-        <div style={{ flex: 1 }} />
+        <label
+          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)", flex: 1 }}
+          title="The generation opts that seed was used with, as key=value pairs or a JSON object. Stored alongside the seed, because Fixtura draws an award from both: pop_in_progress moves the effective date back a year per preceding option period, which changes the fiscal-year digits of the contract number. Left blank, the first sync derives opts from the award — and a derived pop_in_progress on a historical award produces a renumbered contract whose every timesheet row is then refused."
+        >
+          Opts
+          <input
+            type="text"
+            value={opts}
+            onChange={(e) => setOpts(e.target.value)}
+            placeholder="pop_in_progress=true, option_years=1"
+            style={{
+              flex: 1, minWidth: 130, height: 38, padding: "0 10px", borderRadius: 10,
+              border: "1px solid var(--border)", background: "var(--panel2)",
+              color: "var(--text)", fontSize: 13,
+            }}
+          />
+        </label>
         <button
           onClick={onReset}
           style={{

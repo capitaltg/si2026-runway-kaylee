@@ -14,13 +14,18 @@ export async function getSources() {
   return r.json();
 }
 
-export async function confirm(extraction, seed, documentId) {
+export async function confirm(extraction, seed, documentId, opts) {
   // seed (optional) records the Fixtura batch this award came from, so future
   // timesheet syncs for this contract stay coherent instead of using the default.
+  // opts (optional) is the other half of that pairing — the generation knobs the
+  // award was made with. Without them the first sync derives its own, and a derived
+  // `pop_in_progress` renumbers the contract Fixtura draws, which the provenance
+  // gate then refuses forever (#136). `key=value` pairs or a JSON object.
   // documentId (optional) is the upload ingest stashed for this extraction —
   // confirming is what attaches the source PDF to the contract it produced (#30).
   const params = new URLSearchParams();
   if (seed != null && seed !== "") params.set("seed", seed);
+  if (opts != null && opts !== "") params.set("opts", opts);
   if (documentId != null) params.set("document_id", documentId);
   const q = params.toString() ? `?${params}` : "";
   const r = await fetch(`${BASE}/api/contracts/confirm${q}`, {
@@ -28,7 +33,19 @@ export async function confirm(extraction, seed, documentId) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(extraction),
   });
-  if (!r.ok) throw new Error(`Confirm failed (${r.status})`);
+  if (!r.ok) {
+    // The detail carries the reason a save was refused — a mistyped generation knob
+    // names itself and lists the ones that exist. "Confirm failed (400)" over the top
+    // of that would send the user back to a form with nothing to correct.
+    let detail = `Confirm failed (${r.status})`;
+    try {
+      const body = await r.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      // Not JSON — keep the status-code message.
+    }
+    throw new Error(detail);
+  }
   return r.json();
 }
 
@@ -117,15 +134,20 @@ export async function addMod(contractId, file) {
 
 export async function syncTimesheets(
   contractId,
-  { rows, seed, scenario, allowMismatch } = {}
+  { rows, seed, opts, scenario, allowMismatch } = {}
 ) {
   // Only send params the caller actually set. With none, the backend derives the
   // generation opts from the award itself and crews the roster to the FTEs its
   // labor lines were priced at; `scenario` ("red" / "amber") opts into a demo
   // bundle's deliberately hot or cool roster instead.
+  //
+  // `opts` states the generation knobs the award was made with rather than letting
+  // them be derived (#136) — the repair for a contract whose derived opts draw a
+  // renumbered award and so can never sync. `key=value` pairs or a JSON object.
   const qs = new URLSearchParams();
   if (rows != null) qs.set("rows", rows);
   if (seed != null) qs.set("seed", seed);
+  if (opts != null && opts !== "") qs.set("opts", opts);
   if (scenario != null) qs.set("scenario", scenario);
   if (allowMismatch) qs.set("allow_mismatch", "true");
   const q = qs.toString();

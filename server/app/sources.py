@@ -127,6 +127,108 @@ BUNDLE_PIIDS = {
 }
 
 
+# Every generation knob Fixtura reads, so a stated pairing can be checked for
+# typos before it is stored. A misspelled knob is the failure mode worth catching:
+# Fixtura ignores what it doesn't recognise, so `pop_inprogress` generates the
+# wrong contract silently and the user is back at the refusal they were trying to
+# get out of, with nothing new to look at.
+#
+# Deliberately permissive about WHICH knobs, including the contract-shaping ones
+# `derive_scenario_opts` refuses to touch (`active_period`, `lcat_lines`). That
+# refusal is about inference: deriving them from an extraction rewrites the contract
+# Fixtura draws. A knob a user *states* is provenance, not a guess — if the award was
+# generated with it, replaying it is the only way to reproduce the award, and
+# forbidding it here would leave the #136 hole open for exactly those bundles.
+KNOWN_OPTS = frozenset(
+    {
+        # contract-shaping
+        "active_period",
+        "agency",
+        "contract_type",
+        "funding",
+        "lcat_lines",
+        "mod_types",
+        "n_mods",
+        "option_years",
+        "pop_in_progress",
+        "rate_agreement",
+        "rate_variance",
+        "set_aside",
+        "work_site",
+        # roster-only
+        "ot_freq",
+        "shared_pool",
+        "staffing",
+        "target_hours",
+    }
+)
+
+
+def _literal(text: str):
+    """A bare `key=value` value read as the type it looks like."""
+    lowered = text.strip().lower()
+    if lowered in ("true", "false"):
+        return lowered == "true"
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return text.strip()
+
+
+def parse_opts(raw) -> dict:
+    """Generation opts stated by a caller, as a dict ready to send to Fixtura.
+
+    Two spellings, because the same value gets typed into a form field and passed on
+    a query string: a JSON object (`{"pop_in_progress": true, "option_years": 1}`) or
+    a comma-separated list (`pop_in_progress=true, option_years=1`). The short form
+    is what makes the review screen's opts box usable by hand next to the seed box;
+    JSON is there for anything carrying a list, like `lcat_lines`.
+
+    Blank input returns `{}` — "the caller said nothing" — which every call site
+    reads as "fall back to what you would have done anyway". Raises ValueError on
+    unparseable text or an unknown knob, so a typo answers immediately instead of
+    generating the wrong contract and reproducing the bug this exists to fix.
+    """
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        opts = dict(raw)
+    else:
+        text = str(raw).strip()
+        if not text:
+            return {}
+        if text.startswith("{"):
+            try:
+                opts = json.loads(text)
+            except ValueError as e:
+                raise ValueError(f"Opts is not valid JSON: {e}.")
+            if not isinstance(opts, dict):
+                raise ValueError("Opts must be a JSON object of generation knobs.")
+        else:
+            opts = {}
+            for pair in text.split(","):
+                if not pair.strip():
+                    continue
+                if "=" not in pair:
+                    raise ValueError(
+                        f"Could not read opt '{pair.strip()}'. Use key=value pairs "
+                        "(pop_in_progress=true, option_years=1) or a JSON object."
+                    )
+                key, value = pair.split("=", 1)
+                opts[key.strip()] = _literal(value)
+    unknown = sorted(str(k) for k in opts if k not in KNOWN_OPTS)
+    if unknown:
+        raise ValueError(
+            f"Unknown generation opt(s): {', '.join(unknown)}. "
+            f"Known opts: {', '.join(sorted(KNOWN_OPTS))}."
+        )
+    return opts
+
+
 def scenario(name: str) -> dict:
     """The `{"seed", "opts"}` pair for a named demo scenario.
 

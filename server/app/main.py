@@ -230,6 +230,7 @@ def _store_face_rates(contract_id: int, header: dict) -> Optional[str]:
 def confirm(
     extraction: Extraction,
     seed: Optional[int] = None,
+    opts: Optional[str] = None,
     document_id: Optional[int] = None,
 ):
     """Save a reviewed extraction as a contract. An optional Fixtura `seed`
@@ -242,6 +243,16 @@ def confirm(
     roster. Those rows are now refused at the sync rather than stored — so an award
     ingested without its seed is one whose first sync will stop and ask for it.
 
+    `opts` is the other half of that pairing (#136), and a seed alone is not enough to
+    reproduce an award: Fixtura builds the PIID's fiscal-year digits from the award's
+    effective date, and `pop_in_progress` moves that date back a year per preceding
+    option period — so one seed generates `-24-` as a historical contract and `-25-`
+    as an in-progress one. Left blank, the first sync DERIVES opts from the award,
+    which is a guess, and a guess that lands on the other spelling produces a contract
+    permanently unable to sync: every row it draws reads as a stranger's labor. Stated
+    here, the pairing is recorded rather than re-derived. Accepts `key=value` pairs or
+    a JSON object; an unknown knob is a 400 rather than a knob silently ignored.
+
     `document_id` is the upload ingest stashed for this extraction (#30); confirming
     is what attaches it to the contract. Optional, and a stale or already-claimed id
     is reported rather than raising — manual entry has no document at all, and a
@@ -251,6 +262,12 @@ def confirm(
     _seed_award_obligation(data)
     if seed is not None:
         data["sync_seed"] = seed
+    try:
+        stated_opts = sources.parse_opts(opts)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if stated_opts:
+        data["sync_opts"] = stated_opts
     cid = db.save_contract(extraction.contract.piid, data)
     stored = db.claim_document(document_id, cid) if document_id is not None else False
     rates_stored, rate_fy = _store_face_rates(cid, data.get("contract") or {})
@@ -261,6 +278,9 @@ def confirm(
         # Echoed so the review screen can say the batch was recorded — a silently
         # dropped seed and no seed at all look identical until the first sync fails.
         "sync_seed": data.get("sync_seed"),
+        # Same reason, for the other half of the pairing: the review screen has to be
+        # able to show that the opts it sent are the opts the first sync will replay.
+        "sync_opts": data.get("sync_opts"),
         # Named so the UI can say the cost model was populated from the award rather
         # than leave the user wondering why the rates view is suddenly non-empty.
         "indirect_rates_stored": rates_stored,
@@ -1133,6 +1153,7 @@ def sync_timesheets(
     contract_id: int,
     rows: int = sources.SYNC_ROW_CAP,
     seed: Optional[int] = None,
+    opts: Optional[str] = None,
     scenario: Optional[str] = None,
     allow_mismatch: bool = False,
 ):
@@ -1162,12 +1183,37 @@ def sync_timesheets(
     because block 10A comes through OCR, `contract_no` is a generated field and a
     disagreement there is never a misread.
 
+    Opts precedence sits above both, because an explicit `?opts=` is the only input
+    that can *state* the pairing rather than reconstruct it (#136): a caller naming
+    opts wins over a pin and over the derivation. It is the way to repair a contract
+    whose derived opts drew the wrong award — the derivation cannot tell an in-progress
+    award from a historical one with the same seed, and Fixtura numbers those two
+    differently, so no amount of re-deriving gets such a contract unstuck. Accepts
+    `key=value` pairs or a JSON object; an unknown knob is a 400. Naming opts and a
+    scenario together is refused rather than ranked: a demo scenario IS a stated
+    pairing, so the two requests contradict each other and guessing which one the
+    caller meant is how a demo bundle silently stops reproducing its own bundle.
+
     `?allow_mismatch=true` stores anyway and says so in the response, for the case
     where the mismatch is understood and the rows are wanted regardless.
     """
     contract = db.get_contract(contract_id)
     if contract is None:
         raise HTTPException(status_code=404, detail="Contract not found.")
+    try:
+        stated_opts = sources.parse_opts(opts)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if stated_opts and scenario is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"?opts= and ?scenario={scenario} each name a whole (seed, opts) "
+                "pairing, so only one of them can govern a sync. Send the opts to "
+                "replay this award's own pairing, or the scenario to replay a demo "
+                "bundle's."
+            ),
+        )
     name = scenario if scenario is not None else contract.get("sync_scenario")
     picked = None
     if name:
@@ -1185,12 +1231,18 @@ def sync_timesheets(
     # replays the opts it was pinned with — unless the caller names a scenario or a
     # seed, either of which is a request for a new pairing.
     pinned_opts = contract.get("sync_opts") if seed is None else None
-    if picked:
-        opts = picked["opts"]
+    if stated_opts:
+        # Stated beats every reconstruction, including a demo contract's own recorded
+        # scenario. On a contract carrying `sync_scenario` this is a one-shot: the
+        # scenario record still governs the next auto-sync, because a demo bundle is
+        # defined by that record and one repair call is not a request to redefine it.
+        used_opts = stated_opts
+    elif picked:
+        used_opts = picked["opts"]
     elif pinned_opts:
-        opts = pinned_opts
+        used_opts = pinned_opts
     else:
-        opts = sources.derive_scenario_opts(contract)
+        used_opts = sources.derive_scenario_opts(contract)
     effective_seed = (
         seed
         if seed is not None
@@ -1205,7 +1257,7 @@ def sync_timesheets(
         )
     )
     try:
-        ts = sources.fetch_timesheets(rows=rows, seed=effective_seed, opts=opts)
+        ts = sources.fetch_timesheets(rows=rows, seed=effective_seed, opts=used_opts)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Timesheet sync failed: {e}")
 
@@ -1242,8 +1294,8 @@ def sync_timesheets(
     if picked is None and check["checked"] and not check["foreign_rows"]:
         if contract.get("sync_seed") != effective_seed:
             remember["sync_seed"] = effective_seed
-        if contract.get("sync_opts") != opts:
-            remember["sync_opts"] = opts
+        if contract.get("sync_opts") != used_opts:
+            remember["sync_opts"] = used_opts
     if remember:
         blob = {
             k: v for k, v in contract.items() if k not in ("id", "piid", "created_at")
@@ -1259,6 +1311,10 @@ def sync_timesheets(
         # data generated against the award it's attached to.
         "scenario": name or "derived",
         "seed": effective_seed,
+        # The other half of the pairing, reported for the same reason the seed is: a
+        # refusal is only diagnosable if the caller can see BOTH halves that produced
+        # the batch, and until now the opts were invisible from outside the route.
+        "opts": used_opts,
         # Reported on every sync, not just a refused one: "these rows are this
         # contract's" is the fact the burn numbers rest on, and it is cheap to say.
         "provenance": check,
