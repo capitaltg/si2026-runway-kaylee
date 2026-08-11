@@ -303,19 +303,19 @@ test("pricing policy metadata names the applicable concepts for every fee family
     ],
     [
       policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_fixed_fee", revenue_basis: "cost_plus_fixed_fee" }),
-      ["Cost + fixed fee", "Fixed fee earned", "Fee rate"],
+      ["Cost + fixed fee", "Fixed fee earned", "Fee margin"],
     ],
     [
       policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_base_and_award_pool", revenue_basis: "cost_plus_earned_fee" }),
-      ["Cost + fee pool", "Award fee earned", "Fee rate"],
+      ["Cost + fee pool", "Award fee earned", "Fee margin"],
     ],
     [
       policyClin({ family: "cost_reimbursement", ceiling_meaning: "cost_plus_target_fee", revenue_basis: "cost_plus_earned_fee" }),
-      ["Target cost + fee", "Incentive fee earned", "Fee rate"],
+      ["Target cost + fee", "Incentive fee earned", "Fee margin"],
     ],
     [
       policyClin({ family: "fixed_price", ceiling_meaning: "ceiling_price", revenue_basis: "cost_plus_earned_profit" }),
-      ["Ceiling price", "Incentive profit", "Profit rate"],
+      ["Ceiling price", "Incentive profit", "Profit margin"],
     ],
   ];
 
@@ -381,7 +381,7 @@ test("mixed policies use neutral summary labels while homogeneous policies stay 
   assert.deepEqual(profitabilityLabels({ clins: [cpff, passThrough] }), {
     ceiling: "Price / limit",
     earnings: "Fixed fee earned",
-    return: "Fee rate",
+    return: "Fee margin",
     earningsApplicable: true,
     returnApplicable: true,
     unknownCount: 0,
@@ -418,6 +418,19 @@ test("unknown pricing stays distinct from not applicable and surfaces the backen
   assert.equal(labels.unknownCount, 3);
   assert.equal(labels.earningsApplicable, null);
   assert.equal(labels.returnApplicable, null);
+});
+
+test("a non-labor line stays not applicable even when its pricing policy is unknown", () => {
+  const row = pricingApplicability({
+    is_labor: false,
+    pricing_policy: { known: false, family: "unknown" },
+  });
+  assert.equal(row.known, false);
+  assert.equal(row.ceilingLabel, "Limit · policy unknown");
+  assert.equal(row.earningsLabel, "Not applicable");
+  assert.equal(row.returnLabel, "Not applicable");
+  assert.equal(row.earningsApplicable, false);
+  assert.equal(row.returnApplicable, false);
 });
 
 test("labor CLINs list before non-labor ones, and every CLIN is listed", () => {

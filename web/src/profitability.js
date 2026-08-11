@@ -70,7 +70,24 @@ const NO_EARNINGS_CONCEPT =
 // simply has no earnings or return concept.
 export function pricingApplicability(clin) {
   const policy = clin?.pricing_policy || {};
-  if (policy.known !== true) {
+  const known = policy.known === true;
+  const ceilingLabel = known
+    ? CEILING_LABEL[policy.ceiling_meaning] || "Price / limit"
+    : "Limit · policy unknown";
+  // Non-labor spend cannot earn fee or profit regardless of whether its printed
+  // pricing type was recognized. Keep the unknown count and limit caveat, while
+  // stating the applicability fact that is already certain.
+  if (!clin?.is_labor) {
+    return {
+      known,
+      ceilingLabel,
+      earningsLabel: "Not applicable",
+      returnLabel: "Not applicable",
+      earningsApplicable: false,
+      returnApplicable: false,
+    };
+  }
+  if (!known) {
     return {
       known: false,
       ceilingLabel: "Limit · policy unknown",
@@ -81,26 +98,13 @@ export function pricingApplicability(clin) {
     };
   }
 
-  const ceilingLabel =
-    CEILING_LABEL[policy.ceiling_meaning] || "Price / limit";
-  if (!clin?.is_labor) {
-    return {
-      known: true,
-      ceilingLabel,
-      earningsLabel: "Not applicable",
-      returnLabel: "Not applicable",
-      earningsApplicable: false,
-      returnApplicable: false,
-    };
-  }
-
   if (policy.family === "fixed_price") {
     const incentive = policy.revenue_basis === "cost_plus_earned_profit";
     return {
       known: true,
       ceilingLabel,
       earningsLabel: incentive ? "Incentive profit" : "Profit",
-      returnLabel: incentive ? "Profit rate" : "Margin",
+      returnLabel: incentive ? "Profit margin" : "Margin",
       earningsApplicable: true,
       returnApplicable: true,
     };
@@ -131,7 +135,7 @@ export function pricingApplicability(clin) {
       known: true,
       ceilingLabel,
       earningsLabel: feeApplies ? earningsLabel : "Not applicable",
-      returnLabel: feeApplies ? "Fee rate" : "Not applicable",
+      returnLabel: feeApplies ? "Fee margin" : "Not applicable",
       earningsApplicable: feeApplies,
       returnApplicable: feeApplies,
     };

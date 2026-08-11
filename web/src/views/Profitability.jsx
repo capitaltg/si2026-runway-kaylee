@@ -260,9 +260,9 @@ export default function Profitability({ contractId, setActiveId }) {
           <strong style={{ color: "var(--warn)" }}>
             {pricing.unknownCount} pricing polic{pricing.unknownCount === 1 ? "y is" : "ies are"} unknown.
           </strong>{" "}
-          Runway is using its legacy billings fallback for those CLINs. Their price,
-          earnings, and return labels are marked as policy-unknown rather than being
-          presented as typed contract facts.
+          Runway keeps its legacy fallback wherever pricing affects the calculation.
+          Their price or limit labels are marked as policy-unknown; earnings and
+          return that are independently non-applicable remain N/A.
         </div>
       )}
 
@@ -326,7 +326,7 @@ export default function Profitability({ contractId, setActiveId }) {
           <div style={tileSub}>
             {pricing.returnApplicable === false
               ? "Not applicable under this contract's pricing policy"
-              : pricing.return === "Fee rate"
+              : pricing.return === "Fee margin"
                 ? "Earned fee as a share of revenue"
                 : "Earnings as a share of revenue"}
           </div>
