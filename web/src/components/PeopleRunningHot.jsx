@@ -57,7 +57,8 @@ export default function PeopleRunningHot({ heat, onOpenPerson }) {
         <div style={label}>Who's running hot</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 11.5, color: "var(--faint)" }}>
-            hours above each person's expected week, on a CLIN that's off pace
+            hours above each person's expected week, on a CLIN that's off pace or out of
+            contracted hours
           </span>
           <span style={{ display: "flex", gap: 2, fontSize: 11.5 }}>
             {[

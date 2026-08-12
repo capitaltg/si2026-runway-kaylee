@@ -186,10 +186,50 @@ def test_a_payroll_split_names_the_overtime():
 
 
 def test_nobody_surfaces_when_the_clin_is_healthy():
-    """`capacity.py` forbids scoring people against their expected hours. The gate
-    is the CLIN being off-pace — so heavy hours on a well-funded CLIN say nothing."""
+    """`capacity.py` forbids scoring people against their expected hours. The gate is
+    the CLIN being in trouble — so heavy hours on a well-funded CLIN that prints no
+    contracted-hours estimate say nothing."""
     result, alloc = _run(_contract(ceiling=5_000_000.0), _rows_for({"Alex Cole": 50.0}))
     assert alloc["clins"][0]["base_status"] not in heat.HOT_CLIN_STATES
+    assert result["people"] == []
+    assert result["clins"] == []
+
+
+def test_hours_running_out_early_opens_the_gate_on_a_healthy_clin():
+    """#193: dollars on pace, contracted hours not. Only a T&M line makes those the
+    same event; on every other type they come apart, and the panel used to report
+    nobody while `hours_ceilings` in the same payload said the estimate exhausts early.
+    """
+    # 200 contracted hours against 50 hrs/wk charged — gone inside the window, on a
+    # CLIN funded well enough to read healthy on money.
+    result, alloc = _run(
+        _contract(ceiling=5_000_000.0, lcat_est=200.0), _rows_for({"Alex Cole": 50.0})
+    )
+    assert alloc["clins"][0]["base_status"] not in heat.HOT_CLIN_STATES
+    (ceiling,) = result["hours_ceilings"]
+    assert ceiling["early"] is True
+    (person,) = result["people"]
+    assert person["name"] == "Alex Cole"
+    (clin,) = result["clins"]
+    assert clin["hot_because"] == [heat.GATE_HOURS]
+
+
+def test_a_dollar_overrun_still_reports_as_a_dollar_finding():
+    """The original gate is unchanged, and `hot_because` says so — a line hot in both
+    currencies must not be described as an hours-only finding."""
+    result, _ = _run(_contract(lcat_est=200.0), _rows_for({"Alex Cole": 50.0}))
+    (clin,) = result["clins"]
+    assert clin["hot_because"] == [heat.GATE_DOLLARS, heat.GATE_HOURS]
+
+
+def test_a_ceiling_that_outlasts_the_period_does_not_open_the_gate():
+    """`early` is the flag, not the mere presence of an estimate. A generous estimate
+    on a healthy CLIN is not a finding and must not start naming people."""
+    result, _ = _run(
+        _contract(ceiling=5_000_000.0, lcat_est=50_000.0),
+        _rows_for({"Alex Cole": 50.0}),
+    )
+    assert [c["early"] for c in result["hours_ceilings"]] == [False]
     assert result["people"] == []
     assert result["clins"] == []
 

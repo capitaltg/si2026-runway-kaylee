@@ -30,10 +30,35 @@ export function windowPhrase(heat) {
 }
 
 /**
+ * Why `available` is not just the expected week times the weeks in the window.
+ *
+ * Because the row did not add up without it. A person expected at 40 hrs/wk over a
+ * four-week window read "against 144 available" — and 40 × 4 is 160, so the sentence
+ * asked the reader to trust a number its own next line contradicted. The missing 16
+ * hours were leave, which `heat.py` nets out on purpose (a month with a week off offers
+ * 120 hours, so billing 126 is genuinely over) and which the server has been sending
+ * all along as `leave_hours` / `holiday_hours`.
+ *
+ * Returns null when nothing was deducted: expected × weeks is then the whole story and
+ * spelling out arithmetic the reader can already do is noise.
+ */
+export function availabilityNote(person, heat) {
+  const weeks = heat?.window?.weeks || 0;
+  const gross = Number(person?.expected_hours_per_week || 0) * weeks;
+  if (!gross) return null;
+  const deductions = [];
+  if (person.leave_hours) deductions.push(`${hrs(person.leave_hours)} hrs leave`);
+  if (person.holiday_hours)
+    deductions.push(`${hrs(person.holiday_hours)} hrs holiday`);
+  if (!deductions.length) return null;
+  return `${hrs(gross)} expected, less ${deductions.join(" and ")}`;
+}
+
+/**
  * One person's finding, hours first.
  *
- * "184 hrs against 152 available over the last 4 charged weeks — 32 hrs over
- *  (8 hrs/wk), costing CLIN 0002 $3,200/wk"
+ * "184 hrs against 152 available (160 expected, less 8 hrs leave) over the last 4
+ *  charged weeks — 32 hrs over (8 hrs/wk), costing CLIN 0002 $3,200/wk"
  */
 export function personSentence(person, heat) {
   if (!person) return "";
@@ -41,8 +66,9 @@ export function personSentence(person, heat) {
   // expectation, so the left-hand one has to be the whole person's too — otherwise a
   // row that reads "100 hrs against 152 available — 32 hrs over" does not add up.
   const worked = person.worked_hours_booked ?? person.worked_hours;
+  const note = availabilityNote(person, heat);
   const parts = [
-    `${hrs(worked)} hrs against ${hrs(person.available_hours)} available over ${windowPhrase(heat)}`,
+    `${hrs(worked)} hrs against ${hrs(person.available_hours)} available${note ? ` (${note})` : ""} over ${windowPhrase(heat)}`,
     `${hrs(person.over_hours)} hrs over (${hrs(person.over_hours_per_week)} hrs/wk)`,
   ];
   const clins = (person.clins || []).map((c) => c.clin);
@@ -102,6 +128,12 @@ export function overtimeNote(person) {
 export function diagnosisSentence(clin) {
   if (!clin) return "";
   const at = clin.exhaust_week_at_expected;
+  // Hours-only (#193): this CLIN's dollars are on pace, so there is no dollar exhaust
+  // week to quote. Either sentence below would invent a money forecast the payload does
+  // not make — the finding here is the award's contracted hours, not the budget.
+  if (clin.hot_because && !clin.hot_because.includes("dollars")) {
+    return `CLIN ${clin.id} is on pace on dollars, but its contracted hours run out before the period does — the hours below are what's consuming them.`;
+  }
   if (clin.diagnosis === "stop_overtime") {
     const bought =
       clin.weeks_bought > 0 ? ` — ${hrs(clin.weeks_bought)} weeks of runway` : "";
@@ -171,7 +203,7 @@ export function heatSummary(heat) {
       clins: [],
       ceilings,
       empty: (heat?.window?.weeks ?? 0)
-        ? "Nobody is working above their expected hours on an off-pace CLIN."
+        ? "Nobody is working above their expected hours on a CLIN that's off pace or running out of contracted hours."
         : "No timesheet weeks synced yet, so hours against capacity can't be read.",
     };
   }
