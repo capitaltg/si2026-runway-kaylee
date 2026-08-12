@@ -104,6 +104,97 @@ BUNDLES = {
 AMBER_DAYS = 60
 
 
+# Fixtura prints an incentive share as a pair, `[80, 20]`; the award prints it as
+# "80/20" and `schemas.CLIN.share_ratio` is the string, Government share first.
+def _share_ratio(value):
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        return f"{value[0]}/{value[1]}"
+    return value or None
+
+
+# The CLIN-level cost and fee lines (#78, #183), mapped by the name each type prints
+# them under. Every one of these is Optional on both sides, so a type that does not
+# price a given element simply omits it — an FFP CLIN has no fee element at all, and
+# a CPFF one has no incentive bracket.
+def _clin_cost_fee(cl):
+    out = {
+        # "Total Estimated Cost" on a cost-type CLIN, "Target Cost" on an incentive
+        # one. FPI prints only the latter, so this is the one field that has to look
+        # under two names.
+        "estimated_cost": cl.get("estimated_cost") or cl.get("target_cost"),
+        "fixed_fee": cl.get("fixed_fee"),  # CPFF
+        "base_fee": cl.get("base_fee"),  # CPAF, guaranteed
+        "award_fee_pool": cl.get("award_fee_pool"),  # CPAF, at risk
+        "target_fee": cl.get("target_fee"),  # CPIF
+        "min_fee": cl.get("min_fee"),  # CPIF bracket
+        "max_fee": cl.get("max_fee"),
+        "target_profit": cl.get("target_profit"),  # FPI: profit, not fee
+        "share_ratio": _share_ratio(cl.get("share_ratio")),
+    }
+    # `ceiling_price` is the FPI price ceiling (FAR 16.403), which is a different
+    # quantity from the CLIN total in `ceiling`. Fixtura also stamps it on T&M, where
+    # it is just the ceiling under another name — carrying it there would assert an
+    # incentive structure the line does not have.
+    if _type_code(cl.get("type")) == "FPI":
+        out["ceiling_price"] = cl.get("ceiling_price")
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _type_code(value):
+    return (value or "").strip().upper()
+
+
+# The three indirect rates, read off the cost buildup Fixtura already computed for a
+# labor CLIN. Without these the contract ingests at cost tier 1: cost is unburdened
+# direct labor, `margin_available` is false, and every margin figure is withheld —
+# which is honest, but means a regenerated bundle cannot demonstrate margin at all.
+_BUILDUP_KEYS = {
+    "fringe": "indirect_fringe",
+    "overhead": "indirect_overhead",
+    "g_and_a": "indirect_gna",
+}
+
+
+def _indirect_rates(c):
+    for p in c["periods"]:
+        for cl in p["clins"]:
+            buildup = cl.get("cost_buildup")
+            if not buildup:
+                continue
+            rates_out = {
+                _BUILDUP_KEYS[step["key"]]: step["rate"]
+                for step in buildup
+                if step.get("key") in _BUILDUP_KEYS and step.get("rate") is not None
+            }
+            if rates_out:
+                return rates_out
+    return {}
+
+
+def _header_totals(c):
+    """The award's own cost/fee totals (#159), footed from the CLINs that price them.
+
+    Summed rather than taken from a header field because Fixtura carries the split at
+    CLIN level only — which is also where the award prints it. A type that prices no
+    fee (FFP, T&M) contributes nothing and the totals stay absent rather than zero:
+    `total_fee: 0` asserts a fee of nothing, which is a different claim from "this
+    award does not price fee separately".
+    """
+    cost = fee = 0.0
+    for p in c["periods"]:
+        for cl in p["clins"]:
+            cost += cl.get("estimated_cost") or cl.get("target_cost") or 0.0
+            fee += (
+                cl.get("fee") or cl.get("target_fee") or cl.get("target_profit") or 0.0
+            )
+    out = {}
+    if cost:
+        out["total_estimated_cost"] = round(cost, 2)
+    if fee:
+        out["total_fee"] = round(fee, 2)
+    return out
+
+
 def to_runway(c):
     """Fixtura's nested contract in the shape Runway's extraction produces.
 
@@ -136,6 +227,7 @@ def to_runway(c):
                     "acrn": cl.get("acrn"),
                     "est_hours": cl.get("est_hours"),
                     "labor_rates": cl.get("labor_rates") or None,
+                    **_clin_cost_fee(cl),
                 }
             )
     return {
@@ -150,6 +242,8 @@ def to_runway(c):
             "incrementally_funded": not c.get("fully_funded"),
             "effective_date": str(c["effective_date"]),
             "contracting_officer": c["contracting_officer"],
+            **_header_totals(c),
+            **_indirect_rates(c),
         },
         "periods": periods,
         "clins": clins,
@@ -176,7 +270,9 @@ def build(spec):
         "govcon_timesheet", rows=1_000_000, seed=seed, opts=dict(opts)
     )
     labor = presets.generate_preset(
-        "govcon_labor_export", rows=len(scenario["roster"]) * 6, seed=seed,
+        "govcon_labor_export",
+        rows=len(scenario["roster"]) * 6,
+        seed=seed,
         opts=dict(opts),
     )
     leave = presets.generate_preset(
