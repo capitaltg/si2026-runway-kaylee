@@ -45,7 +45,7 @@ and the mistake already ticketed as #42.
 import re
 from dataclasses import dataclass, field, replace
 from datetime import date
-from typing import Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 # FAR references for the six pricing types, kept next to the policies they justify
 # so a future reader can check the table against the regulation rather than against
@@ -568,15 +568,28 @@ class FeeTerms:
     # Ratio text was present and unreadable — a data-quality problem that must not
     # look the same as no ratio at all.
     share_unreadable: bool = False
+    # Provenance for the two figures the award *header* can supply (#159). A
+    # contract-level total standing in for one line's terms is a weaker statement than
+    # that line printing them, and no consumer may lose the difference.
+    estimated_cost_from_header: bool = False
+    fee_from_header: bool = False
+    # Why header totals that existed were refused. See `HeaderFee.gap`.
+    header_gap: Optional[str] = None
 
 
-def fee_terms(clin: Optional[dict]) -> FeeTerms:
-    """Read the fee figures off one CLIN dict, with the share ratio parsed."""
+def fee_terms(
+    clin: Optional[dict], header_fee: Optional["HeaderFee"] = None
+) -> FeeTerms:
+    """Read the fee figures off one CLIN dict, with the share ratio parsed.
+
+    `header_fee` is what the award header's own cost and fee totals contribute to this
+    CLIN, resolved by `header_fee_by_clin` (#159). It only ever *fills*: a figure the
+    CLIN itself printed always wins, because the line's own terms are the terms."""
     clin = clin or {}
     raw_ratio = clin.get("share_ratio")
     parsed = parse_share_ratio(raw_ratio)
     stated = bool((raw_ratio or "").strip()) if isinstance(raw_ratio, str) else False
-    return FeeTerms(
+    terms = FeeTerms(
         estimated_cost=_num(clin.get("estimated_cost")),
         fixed_fee=_num(clin.get("fixed_fee")),
         base_fee=_num(clin.get("base_fee")),
@@ -591,6 +604,127 @@ def fee_terms(clin: Optional[dict]) -> FeeTerms:
         share_raw=(raw_ratio or "").strip() or None if stated else None,
         share_unreadable=stated and parsed is None,
     )
+    return _fill_from_header(terms, header_fee)
+
+
+@dataclass(frozen=True)
+class HeaderFee:
+    """What the award header's cost and fee totals contribute to one CLIN (#159).
+
+    Ingest extracts `total_estimated_cost` and `total_fee` off the face of the award,
+    scores them, shows them on the review screen and stores them — and until now
+    nothing read them, so a document could ingest cleanly while its primary cost and
+    fee terms had no effect on the fee model at all.
+
+    They are a *contract-level* statement, though, and it is a CLIN-level rule that
+    earns the fee. So the only safe reading is the unambiguous one: one fee-bearing
+    CLIN on the award means the header totals are that line's terms. More than one
+    means the award stated a total without stating the split, and dividing it would be
+    the guess this module exists to refuse.
+
+    `gap` is that refusal, named so the CLIN card can explain it:
+
+      `clin_allocation` — the totals exist but several lines could hold them, so which
+      line they belong to is a question only the user can answer.
+      `fee_split`       — CPAF, where the negotiated fee is a base fee *plus* an award
+      pool and one total cannot be split back into two without inventing the pool.
+
+    A gap never fills anything. It explains why a position with figures available is
+    still refusing to compute."""
+
+    estimated_cost: Optional[float] = None
+    # Which `FeeTerms` field the header's single fee total *is* under this CLIN's type.
+    fee_field: Optional[str] = None
+    fee: Optional[float] = None
+    gap: Optional[str] = None
+
+
+# Which `FeeTerms` figure a header "total fee" maps to, per type — the types spell the
+# negotiated fee differently, and mapping it to the wrong field would leave the
+# position unknown while looking like it had been filled.
+#
+# CPAF is absent on purpose (see `HeaderFee.gap`): a CPAF line takes the header's cost
+# and leaves the fee as the gap the award actually left.
+_HEADER_FEE_FIELD = {
+    "CPFF": "fixed_fee",
+    "CPIF": "target_fee",
+    # FPI prints "Target Profit" rather than a fee. It is the same figure the face of a
+    # fixed-price incentive award totals as fee, and the one `_incentive_position`
+    # reads, so mapping it here is a naming difference and not a reinterpretation.
+    "FPI": "target_profit",
+}
+
+_FEE_BEARING = ("CPFF", "CPIF", "CPAF", "FPI")
+
+
+def fee_bearing(policy: Optional[PricingPolicy]) -> bool:
+    """Whether a CLIN under this policy earns a fee `earned_fee` can compute.
+
+    Deliberately a property of the *policy* and not of which figures the CLIN happens
+    to carry: an FFP or T&M line with a stray fee figure on it is still not fee-bearing
+    (its profit is price minus cost), and a CPFF line with every figure blank still is
+    — that blankness is the whole case #159 is about. An unknown type is excluded
+    because it must keep behaving exactly as the pre-#76 engine did."""
+    return bool(policy and policy.known and policy.code in _FEE_BEARING)
+
+
+def header_fee_by_clin(
+    header: Optional[dict], clins: Optional[Sequence[dict]], policy_of
+) -> Dict[str, HeaderFee]:
+    """The header's cost/fee totals resolved against the award's CLINs, keyed by CLIN.
+
+    Resolved once for the contract — like `burn`'s award-fee period routing, and for the
+    same reason: whether the totals are unambiguous is the one question a per-CLIN call
+    cannot answer about itself.
+
+    Only labor CLINs are eligible, because they are the only lines the engine gives a
+    fee position to today. That also keeps the common award shape working: a cost-type
+    travel line sitting beside one CPFF labor line must not make the award look like it
+    has two candidates for the header's fee. Widening this is #155's call, not this
+    one's."""
+    header = header or {}
+    est = _num(header.get("total_estimated_cost"))
+    fee = _num(header.get("total_fee"))
+    if est is None and fee is None:
+        return {}
+    eligible = [
+        c for c in (clins or []) if c.get("is_labor") and fee_bearing(policy_of(c))
+    ]
+    if not eligible:
+        return {}
+    if len(eligible) > 1:
+        gap = HeaderFee(gap="clin_allocation")
+        return {str(c.get("clin")): gap for c in eligible}
+    clin = eligible[0]
+    fee_field = _HEADER_FEE_FIELD.get(policy_of(clin).code)
+    return {
+        str(clin.get("clin")): HeaderFee(
+            estimated_cost=est,
+            fee_field=fee_field,
+            fee=fee if fee_field else None,
+            gap="fee_split" if fee is not None and fee_field is None else None,
+        )
+    }
+
+
+def _fill_from_header(terms: FeeTerms, header_fee: Optional[HeaderFee]) -> FeeTerms:
+    """Fill the figures the CLIN left blank from the award header's totals.
+
+    Fills, never overrides — and stamps which figures came from the header, so nothing
+    downstream can report a contract-level total as a line's printed terms."""
+    if header_fee is None:
+        return terms
+    patch: dict = {}
+    if terms.estimated_cost is None and header_fee.estimated_cost is not None:
+        patch["estimated_cost"] = header_fee.estimated_cost
+        patch["estimated_cost_from_header"] = True
+    fee_field = header_fee.fee_field
+    if fee_field and header_fee.fee is not None and getattr(terms, fee_field) is None:
+        patch[fee_field] = header_fee.fee
+        patch["fee_from_header"] = True
+    if header_fee.gap:
+        patch["header_gap"] = header_fee.gap
+    return replace(terms, **patch) if patch else terms
 
 
 @dataclass(frozen=True)
@@ -649,6 +783,10 @@ class FeePosition:
     # FPI's point of total assumption: the cost above which the contractor absorbs
     # every additional dollar. None without a price ceiling to compute it from.
     pta: Optional[float] = None
+    # At least one figure behind this position came off the award *header* rather than
+    # the CLIN (#159). The arithmetic is identical; the claim is weaker, and a surface
+    # reporting fee has to be able to say so.
+    header_derived: bool = False
 
     @property
     def target_delta(self) -> Optional[float]:
@@ -702,6 +840,7 @@ class FeePosition:
             "share_contractor": self.share_contractor,
             "share_raw": self.share_raw,
             "pta": round(self.pta, 2) if self.pta is not None else None,
+            "header_derived": self.header_derived,
         }
 
 
@@ -1026,11 +1165,32 @@ def earned_fee(
     if not policy.known:
         return None
     if policy.code == "CPFF":
-        return _fixed_fee_position(terms, cost)
-    if policy.code == "CPAF":
-        return _award_fee_position(terms, cost, periods)
-    if policy.code == "CPIF":
-        return _incentive_position(terms, cost, profit=False)
-    if policy.code == "FPI":
-        return _incentive_position(terms, cost, profit=True)
-    return None
+        position = _fixed_fee_position(terms, cost)
+    elif policy.code == "CPAF":
+        position = _award_fee_position(terms, cost, periods)
+    elif policy.code == "CPIF":
+        position = _incentive_position(terms, cost, profit=False)
+    elif policy.code == "FPI":
+        position = _incentive_position(terms, cost, profit=True)
+    else:
+        return None
+    return _carry_header_provenance(position, terms)
+
+
+def _carry_header_provenance(position: FeePosition, terms: FeeTerms) -> FeePosition:
+    """Move the header provenance (#159) off the terms and onto the position.
+
+    Both directions matter. A position computed off a contract-level total says so,
+    because "the award printed this line's fee" and "the award printed one fee for the
+    whole contract and this is the only line that could hold it" are different claims
+    and the second one is the weaker. A position still refusing to compute names the
+    header gap alongside the figures it lacks, so the card can say the totals need
+    allocating instead of repeating that the award printed nothing — which is the
+    difference between a dead end and an action."""
+    if position.known:
+        if terms.estimated_cost_from_header or terms.fee_from_header:
+            return replace(position, header_derived=True)
+        return position
+    if terms.header_gap and terms.header_gap not in position.missing:
+        return replace(position, missing=position.missing + (terms.header_gap,))
+    return position

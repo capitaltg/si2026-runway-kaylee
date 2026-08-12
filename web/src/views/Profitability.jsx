@@ -758,6 +758,19 @@ export default function Profitability({ contractId, setActiveId }) {
                       Fee exhausted
                     </span>
                   )}
+                  {/* The figures came off the award header rather than this line (#159).
+                      Same arithmetic, weaker claim: the award stated one contract-level
+                      total and this was the only line that could hold it. Said plainly,
+                      because a reader checking these dollars against the CLIN's own
+                      schedule page will not find them there. */}
+                  {fp.header_derived && (
+                    <span
+                      style={{ fontSize: 11, color: "var(--dim)" }}
+                      title="This award stated its total estimated cost and total fee at the header rather than on the line item. This is the only fee-bearing CLIN, so those totals are its terms."
+                    >
+                      Terms from contract header
+                    </span>
+                  )}
                 </div>
 
                 {gap && (
