@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ingest, confirm, getSources } from "../api.js";
 import { offersCostFeeFields } from "../pricing.js";
+import { mergeConfidence, newWarnings } from "../ingest-confidence.js";
 
 const money = (v) =>
   v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -354,6 +355,10 @@ export default function Ingest({ onSaved }) {
   const [editing, setEditing] = useState(false);
   const [fileName, setFileName] = useState(null);
   const [error, setError] = useState(null);
+  // Set when the save went through but rescoring flagged something the review screen
+  // had not shown yet (#160). Holds the new contract's id so the user can still go
+  // there once they have read it.
+  const [savedNotice, setSavedNotice] = useState(null);
   // The Fixtura seed the bundle this award came from was generated with, stored on
   // the contract so its timesheet syncs reproduce that same batch. Left blank, the
   // sync falls back to a seed derived from the PIID, which draws a *different*
@@ -401,6 +406,7 @@ export default function Ingest({ onSaved }) {
 
   function reset() {
     setResult(null);
+    setSavedNotice(null);
     setFileName(null);
     setSeed("");
     setOpts("");
@@ -420,6 +426,18 @@ export default function Ingest({ onSaved }) {
         result.source_document_id ?? null,
         opts.trim() === "" ? null : opts.trim(),
       );
+      // Confirm rescores what was saved (#160), so the screen catches up to the
+      // record before it decides whether there is anything to say about it.
+      const rescored = mergeConfidence(result, saved);
+      const fresh = newWarnings(result, rescored);
+      if (fresh.length) {
+        // Saved either way — the contract is already written. Holding here is so a
+        // caution the edits INTRODUCED is read once, on the screen that introduced
+        // it, instead of being discovered weeks later on a flight deck.
+        setResult(rescored);
+        setSavedNotice({ id: saved.id, warnings: fresh });
+        return;
+      }
       reset();
       onSaved?.(saved.id); // jump straight to the new contract's flight deck
     } catch (e) {
@@ -444,6 +462,43 @@ export default function Ingest({ onSaved }) {
           }}
         >
           ⚠️ {error}
+        </div>
+      )}
+
+      {savedNotice && (
+        <div
+          style={{
+            border: "1px solid var(--warn)", background: "var(--warnBg)", borderRadius: 12,
+            padding: "12px 14px", marginBottom: 16, fontSize: 13, color: "var(--text)",
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            Saved — with {savedNotice.warnings.length === 1 ? "a note" : "notes"} on the
+            figures as you edited them.
+          </div>
+          <ul style={{ margin: "0 0 10px", paddingLeft: 18, lineHeight: 1.5 }}>
+            {savedNotice.warnings.map((w, i) => (
+              <li key={i}>
+                {w.note
+                  ? `CLIN ${w.clin}: ${w.note}`
+                  : `${w.field.replace(/_/g, " ")} reads ${Math.round(w.score * 100)}% — ` +
+                    "the value saved isn't one we could verify."}
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => {
+              const id = savedNotice.id;
+              reset();
+              onSaved?.(id);
+            }}
+            style={{
+              border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)",
+              borderRadius: 8, padding: "6px 12px", fontSize: 13, cursor: "pointer",
+            }}
+          >
+            Continue to the contract
+          </button>
         </div>
       )}
 

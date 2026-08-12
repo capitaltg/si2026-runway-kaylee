@@ -13,11 +13,19 @@ sanity-checks the CLINs:
   that field DOWN (min with the baseline), never inflate it;
 - cap: a value that fails its format check, or a cross-field check (obligated >
   ceiling, CLIN ceilings summing past the total), is capped low regardless.
+
+``apply`` runs twice per contract: once on the extraction, and again when the user
+confirms the review screen (#160), because a score computed against the values the
+model read says nothing about the values the human saved. The second pass takes
+``source="confirmed"``, which drops the model-as-doubt input — by then the scores on
+the object are this module's own from the first pass, and min-ing against them would
+ratchet a field down forever on a correction that fixed it.
 """
 
 import re
 from typing import Optional
 
+from . import pricing
 from .schemas import Extraction
 
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -56,7 +64,13 @@ _HEADER_CHECKS = {
     "piid": lambda h: bool(_PIID_RE.match(h.piid or "")),
     "agency": lambda h: _text(h.agency),
     "contractor": lambda h: _text(h.contractor),
-    "contract_type": lambda h: _text(h.contract_type),
+    # Not merely present: text the pricing layer cannot map is a failed read, and
+    # scoring it 0.93 for being non-empty is how "Cost Reimbursment (sic)" or a
+    # hallucinated type reached the burn engine wearing a green badge (#160).
+    # "vehicle" (IDIQ, BPA) stays uncapped — an ordering vehicle is a correct
+    # reading of what the award says, not a misread of a pricing arrangement.
+    "contract_type": lambda h: _text(h.contract_type)
+    and pricing.classify(h.contract_type)[1] != "unsupported",
     "total_ceiling": lambda h: _money(h.total_ceiling),
     "total_obligated": lambda h: _money(h.total_obligated),
     "total_estimated_cost": lambda h: _money(h.total_estimated_cost),
@@ -117,9 +131,13 @@ def fee_mismatch(cl) -> Optional[str]:
     )
 
 
-def apply(ext: Extraction) -> Extraction:
+def apply(ext: Extraction, source: str = "extracted") -> Extraction:
+    """Score an extraction in place. `source` is "extracted" on the model's read and
+    "confirmed" on the user's save; see the module docstring for why the second pass
+    ignores the scores already on the object rather than min-ing against them."""
     h = ext.contract
-    model_fc = dict(h.field_confidence or {})
+    confirmed = source == "confirmed"
+    model_fc = {} if confirmed else dict(h.field_confidence or {})
     fc = {}
 
     for field, check in _HEADER_CHECKS.items():
@@ -142,7 +160,7 @@ def apply(ext: Extraction) -> Extraction:
 
     clin_total = 0.0
     for cl in ext.clins:
-        score = cl.confidence if cl.confidence is not None else CLIN_BASELINE
+        score = CLIN_BASELINE if confirmed or cl.confidence is None else cl.confidence
         if not _money(cl.ceiling):
             score = min(score, FAIL_CAP)
         note = fee_mismatch(cl)
