@@ -589,6 +589,28 @@ test("missing award terms and missing cost are different problems with different
   assert.equal(feeGap({ ...cpff, cost_known: false }).fix, "cost");
 });
 
+test("a stated total nobody can attribute asks for a decision, not another import (#159)", () => {
+  // The award printed its fee at the header. Telling the user to import the fee
+  // structure sends them back for a document they have already given us.
+  const unallocated = {
+    ...cpff,
+    terms_known: false,
+    missing: ["fixed_fee", "estimated_cost", "clin_allocation"],
+  };
+  const gap = feeGap(unallocated);
+  assert.equal(gap.fix, "allocation");
+  assert.match(gap.message, /more than one line/);
+  assert.doesNotMatch(gap.message, /Import/);
+  // The raw token must never reach the sentence — it is a reason, not a field name.
+  assert.doesNotMatch(gap.message, /clin_allocation/);
+
+  const cpaf = { ...cpff, terms_known: false, missing: ["award_fee_pool", "fee_split"] };
+  const split = feeGap(cpaf);
+  assert.equal(split.fix, "fee_split");
+  assert.match(split.message, /base fee plus an award pool/);
+  assert.doesNotMatch(split.message, /fee_split/);
+});
+
 test("a position with no fee target withholds the target and the delta, not the earned fee", () => {
   const f = feeFigures({ ...cpff, target: null, target_delta: null });
   assert.equal(f.target.value, null);

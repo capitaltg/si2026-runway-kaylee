@@ -875,6 +875,7 @@ def _compute_clin(
     pop_start: Optional[date] = None,
     absence: Optional[dict] = None,
     fee_periods: Optional[List[dict]] = None,
+    header_fee: Optional[pricing.HeaderFee] = None,
 ):
     """Per-CLIN spend, forward burn, runway and status — the heart of the engine.
 
@@ -1166,7 +1167,9 @@ def _compute_clin(
     # The fee position (#80): what this CLIN's fee terms have earned at the cost it has
     # actually incurred, under its own type's rule. Pure arithmetic in `pricing`, called
     # again below on projected cost for the forecast.
-    fee_terms = pricing.fee_terms(clin)
+    # `header_fee` is what the award header's own cost/fee totals contribute to *this*
+    # CLIN (#159), resolved in `compute` because deciding that needs the whole award.
+    fee_terms = pricing.fee_terms(clin, header_fee)
     fee_position = pricing.earned_fee(
         policy, fee_terms, cost, periods=tuple(fee_periods or ())
     )
@@ -2068,6 +2071,10 @@ def compute(
     # Award-fee determinations, per CLIN (#80). Resolved once here rather than per CLIN
     # because routing an unassigned period needs to see every CLIN on the award.
     fee_periods = _fee_periods_by_clin(contract, clins)
+    # The header's own "total estimated cost" / "total fee" (#159), resolved against the
+    # award's CLINs for the same reason: whether one contract-level total unambiguously
+    # belongs to one line is a question only this scope can answer.
+    header_fee = pricing.header_fee_by_clin(header, clins, policy_of)
 
     # First pass with the proxy, just to total the forward burn rate. If SF-30
     # mods have been ingested, re-derive funding pace from that real obligation
@@ -2092,6 +2099,7 @@ def compute(
             pop_start=pop_start,
             absence=absence_settings,
             fee_periods=fee_periods.get(str(c.get("clin"))),
+            header_fee=header_fee.get(str(c.get("clin"))),
         )
         for c in labor
     ]
@@ -2122,6 +2130,7 @@ def compute(
                 pop_start=pop_start,
                 absence=absence_settings,
                 fee_periods=fee_periods.get(str(c.get("clin"))),
+                header_fee=header_fee.get(str(c.get("clin"))),
             )
             for c in labor
         ]

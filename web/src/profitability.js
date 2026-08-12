@@ -480,12 +480,34 @@ export function feeFigures(fp) {
   };
 }
 
+// The two entries in `missing` that are reasons rather than field names (#159). The
+// award *did* state its cost and fee totals, at the header — so "import the fee
+// structure" is the one instruction that cannot help, and the fix is a decision:
+// which line the total belongs to, or how a CPAF fee divides into base and pool.
+const FEE_GAP_REASONS = {
+  clin_allocation: {
+    fix: "allocation",
+    message:
+      "This award states one total fee for the whole contract and more than one line could earn it. Split the total across the CLINs to price them — Runway will not guess the allocation.",
+  },
+  fee_split: {
+    fix: "fee_split",
+    message:
+      "This award states one total fee, but a cost-plus-award-fee line earns a base fee plus an award pool. Enter the two separately — the total alone cannot be divided into them.",
+  },
+};
+
 // Why a fee card can't be trusted, or null when it can. Split rather than collapsed:
 // missing award terms are fixed by importing a document, missing cost by entering
 // rates, and telling a user to do the wrong one wastes the trip.
 export function feeGap(fp) {
   if (!fp.terms_known) {
-    const missing = (fp.missing || []).join(", ");
+    const all = fp.missing || [];
+    // A stated-but-unattributable total outranks the field list: it names a decision
+    // to make, where the field list only names blanks.
+    const reason = all.map((m) => FEE_GAP_REASONS[m]).find(Boolean);
+    if (reason) return reason;
+    const missing = all.join(", ");
     return {
       fix: "terms",
       message: missing
