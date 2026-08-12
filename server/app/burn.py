@@ -31,6 +31,10 @@ from . import pricing, rates
 # Status thresholds, ported verbatim from the design's computeClinFor.
 _PAUSED_WEEKS_LEFT = 999
 _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
+HOT_STATES = ("over", "watch", "fee_eroding")  # hotter than the budget affords
+SLOW_STATES = ("under",)  # needs more hours, not fewer
+FUNDING_STATES = ("funding",)  # needs a mod, not a course correction
+OFF_PACE_STATES = HOT_STATES + FUNDING_STATES + SLOW_STATES
 # Under-burn tripwire: at the current pace the CLIN won't consume its budget
 # until this fraction of the PoP *past* the finish line — a large unspent
 # balance / slipping delivery signal, symmetric to the over-ceiling tripwire.
@@ -1269,12 +1273,7 @@ def _compute_clin(
     projection = None
     # `weekly > 0` is the same test that produces `paused` / `unpriced` below, said
     # here because the status has not been resolved yet at this point.
-    projects = (
-        weekly > 0
-        and not margin_managed
-        and not past_pop
-        and remaining > 0
-    )
+    projects = weekly > 0 and not margin_managed and not past_pop and remaining > 0
     if projects and pop_start and absence:
         projection = _absence_projection(
             spent=spent,

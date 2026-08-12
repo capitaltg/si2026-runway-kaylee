@@ -114,6 +114,57 @@ test("fee_eroding is amber, and says so with the fee that is left", async () => 
   assert.equal(pill("over", false, false, false, true).label, "Funds short");
 });
 
+test("every CLIN pill status has one severity vocabulary", async () => {
+  const { severityOf, statusColor } = await import("./format.js");
+  const expected = {
+    over: "bad",
+    funding: "warn",
+    watch: "warn",
+    fee_eroding: "warn",
+    ok: "good",
+    under: "warn",
+    paused: "neutral",
+    unpriced: "bad",
+    unsupported: "bad",
+    tracked: "neutral",
+  };
+
+  for (const [status, severity] of Object.entries(expected)) {
+    assert.equal(severityOf(status), severity, status);
+  }
+  assert.equal(statusColor("paused"), "var(--dim)");
+  assert.equal(statusColor("tracked"), "var(--dim)");
+});
+
+test("an unknown status is neutral and never reassuring green", async () => {
+  const { severityOf, statusColor } = await import("./format.js");
+
+  assert.equal(severityOf("new_backend_state"), "neutral");
+  assert.equal(statusColor("new_backend_state"), "var(--dim)");
+  assert.notEqual(statusColor("new_backend_state"), "var(--good)");
+});
+
+test("off-pace includes hot, funding, and slow states only", async () => {
+  const { isOffPace } = await import("./format.js");
+
+  for (const status of ["over", "watch", "funding", "under", "fee_eroding"]) {
+    assert.equal(isOffPace(status), true, status);
+  }
+  for (const status of ["ok", "paused", "tracked", "new_backend_state", null]) {
+    assert.equal(isOffPace(status), false, String(status));
+  }
+});
+
+test("deep status colors keep unknown states on the flat neutral accent", async () => {
+  const { statusColorDeep } = await import("./format.js");
+
+  assert.equal(statusColorDeep("over"), "#c23636");
+  assert.equal(statusColorDeep("watch"), "#c26e12");
+  assert.equal(statusColorDeep("ok"), "#0b8f65");
+  assert.equal(statusColorDeep("paused"), "var(--dim)");
+  assert.equal(statusColorDeep("new_backend_state"), "var(--dim)");
+});
+
 // ── #81 part 5: the T&M ceiling price is its own limit ──────────────────────────
 
 test("a ceiling-price limit is named as a price, not as a ceiling", async () => {

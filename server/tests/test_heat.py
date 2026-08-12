@@ -1,6 +1,11 @@
 """Who's running hot (#83) — capacity, the two-forecast diagnosis, hours ceilings."""
 
-from app import allocation, heat
+from app import allocation, burn, heat
+
+
+def test_hot_clin_states_share_the_burn_vocabulary():
+    assert heat.HOT_CLIN_STATES is burn.HOT_STATES
+    assert set(burn.OFF_PACE_STATES) > set(burn.HOT_STATES)
 
 
 # Sized so one person at ~45 hrs/wk puts the CLIN in `over` — the gate every

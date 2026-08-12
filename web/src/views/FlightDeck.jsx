@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getBurn, getHeat, getSources, syncTimesheets, listContracts, askRunway, listPlans, getAllocation } from "../api.js";
 import PeopleRunningHot from "../components/PeopleRunningHot.jsx";
-import { money, moneyM, pct, pill, hueFor, statusColor, panelStyle, shortDate, stopPhrase, asOfLabel } from "../format.js";
+import { money, moneyM, pct, pill, hueFor, statusColor, statusColorDeep, panelStyle, shortDate, stopPhrase, asOfLabel } from "../format.js";
 import BurnChart from "../components/BurnChart.jsx";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import AlertCarouselCard from "../components/AlertCarouselCard.jsx";
@@ -459,14 +459,7 @@ export default function FlightDeck({
       )
     : null;
   const heroColor = statusColor(hero?.status);
-  const heroColor2 =
-    hero?.status === "over" || hero?.status === "unpriced"
-      ? "#c23636"
-      : hero?.status === "watch" ||
-          hero?.status === "funding" ||
-          hero?.status === "fee_eroding"
-        ? "#c26e12"
-        : "#0b8f65";
+  const heroColor2 = statusColorDeep(hero?.status);
   // Live-data strip shows only sources actually feeding this project.
   const liveSources = sources.filter((s) => s.status === "live" || s.status === "synced");
   const stripSources = liveSources.length ? liveSources : sources;
@@ -475,18 +468,13 @@ export default function FlightDeck({
       ? hero?.limited_by === "funding"
         ? "runs out of funded dollars before the PoP ends"
         : "blows the ceiling before the PoP ends"
-      : hero?.status === "unpriced"
-        ? "has charges the engine can't price — burn is unknown, not clear"
-        : hero?.status === "funding"
-          ? "needs its next funding mod before the PoP ends"
-          : // The hero's runway is still about funding; this line is about where the
-            // money is going while that runway holds (#81). Deliberately says fee and
-            // not "funding", because the funded dollars are not the thing at risk.
-            hero?.status === "fee_eroding"
-            ? "is covering a cost overrun out of its fee"
-            : hero?.status === "watch"
-              ? "lands tight against the finish line"
-              : "clears the finish line";
+      : ({
+          unpriced: "has charges the engine can't price — burn is unknown, not clear",
+          funding: "needs its next funding mod before the PoP ends",
+          fee_eroding: "is covering a cost overrun out of its fee",
+          watch: "lands tight against the finish line",
+          ok: "clears the finish line",
+        })[hero?.status] || null;
   // The date the runway is measured from, printed next to every figure derived from
   // it so an as-of reading can't be mistaken for a live countdown.
   const asOf = asOfLabel(sync);
@@ -1476,7 +1464,9 @@ export default function FlightDeck({
                 ? `Tightest on ${worstMargin.code} · fixed price, so cost against the price is the constraint — not funding`
                 : `Fixed price throughout — margin needs direct rates before it can be read`
               : hero
-                ? `Limited by ${hero.clin} · ${heroSub}`
+                ? heroSub
+                  ? `Limited by ${hero.clin} · ${heroSub}`
+                  : `Limited by ${hero.clin}`
                 : "No burn logged yet — sync timesheets"}
           </div>
           {/* The runway's vantage point (see `asOfLabel`). Withheld on the margin

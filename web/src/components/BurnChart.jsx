@@ -1,5 +1,5 @@
 import React from "react";
-import { moneyM } from "../format.js";
+import { moneyM, statusColor } from "../format.js";
 
 // Burn-vs-pace chart for one CLIN. Geometry ported from the design's buildChart
 // (docs/design/Runway.dc.html): a straight actual line origin → (current week,
@@ -119,16 +119,7 @@ export default function BurnChart({ clin, contract }) {
     return { week, val: budget + weekly * (week - runOutWeek) };
   })();
 
-  const projColor = overBudget
-    ? "var(--bad)"
-    : clin.status === "over"
-      ? "var(--bad)"
-      : // `fee_eroding` (#81) is amber like `watch`. The projection line is the thing
-        // that eats the fee, so drawing it green while the card says the fee is going
-        // makes the chart contradict its own pill.
-        clin.status === "watch" || clin.status === "fee_eroding"
-        ? "var(--warn)"
-        : "var(--good)";
+  const projColor = overBudget ? "var(--bad)" : statusColor(clin.status);
 
   const x0 = mx(0),
     yc = my(spent),

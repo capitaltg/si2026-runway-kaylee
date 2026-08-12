@@ -10,7 +10,13 @@ in it diagnoses `reduce_staffing` with under a week of runway bought — so the 
 here are the only coverage that branch has. See the PR notes.
 """
 
-from app import allocation, heat, suggest
+from app import allocation, burn, heat, suggest
+
+
+def test_move_directions_share_the_burn_vocabulary():
+    assert suggest.REDUCE_STATES is burn.HOT_STATES
+    assert suggest.RAISE_STATES is burn.SLOW_STATES
+
 
 WEEKS = ["2026-02-06", "2026-02-13", "2026-02-20", "2026-02-27"]
 

@@ -6,7 +6,16 @@ import {
   addExpense,
   deleteExpense,
 } from "../api.js";
-import { money, pct, panelStyle, hueFor, pill, clauseRisk } from "../format.js";
+import {
+  money,
+  pct,
+  panelStyle,
+  hueFor,
+  pill,
+  clauseRisk,
+  severityOf,
+  severityColor,
+} from "../format.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const mono = "'IBM Plex Mono',monospace";
@@ -137,18 +146,14 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
   const status = card?.status || nlStatus(logged, ceiling);
   const p = pill(status);
   const alarm = status === "over" || status === "funding";
+  const severity = severityOf(status);
   const remainingColor =
-    status === "over"
+    severity === "bad"
       ? "var(--bad)"
-      : status === "funding" || status === "watch"
+      : severity === "warn"
         ? "var(--warn)"
         : "var(--text)";
-  const barColor =
-    status === "over"
-      ? "var(--bad)"
-      : status === "funding" || status === "watch"
-        ? "var(--warn)"
-        : "var(--good)";
+  const barColor = severityColor(severity);
 
   function onDraft(field, value) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -283,7 +288,7 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
               style={{
                 ...panelStyle,
                 marginBottom: 16,
-                borderLeft: `3px solid ${status === "over" ? "var(--bad)" : "var(--warn)"}`,
+                borderLeft: `3px solid ${severityColor(severity)}`,
               }}
             >
               <div style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
@@ -294,7 +299,7 @@ export default function Expenses({ contractId, initialClin, setActiveId }) {
                       fontFamily: grotesk,
                       fontWeight: 600,
                       fontSize: 14,
-                      color: status === "over" ? "var(--bad)" : "var(--warn)",
+                      color: severityColor(severity),
                     }}
                   >
                     {/* `funds_exceeded` names the limit actually passed; limited_by
