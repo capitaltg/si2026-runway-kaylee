@@ -375,6 +375,113 @@ def test_fpi_is_margin_managed_too():
     assert card["margin_position"] is not None
 
 
+# ------------------------------------------------------------------ the margin hero
+
+
+def test_an_all_fixed_price_contract_ships_a_margin_hero_in_place_of_the_runway():
+    # #196. The stand-in for the hero tile, and the pair is mutually exclusive: the
+    # engine decides which of the two a surface shows, once, so the portfolio card and
+    # the Flight Deck cannot name different lines or disagree about what is knowable.
+    card, p = _card("FFP", _model())
+    assert p["hero"] is None
+    mh = p["margin_hero"]
+    assert mh["clin"] == card["code"]
+    assert mh["status"] == card["status"]
+    assert mh["pct"] == card["margin_position"]["projected_margin_pct"]
+    assert mh["dollars"] == card["margin_position"]["projected_margin"]
+    assert mh["known"] is True
+
+
+def test_the_margin_hero_withholds_the_figure_at_cost_tier_1():
+    # #191's exact configuration: LCAT direct rates but no indirect pool. The
+    # arithmetic resolves — `margin_position.known` is True, because the *hours*
+    # priced — while the cost underneath is unburdened direct labor, so the margin is
+    # overstated by the whole fringe + overhead + G&A load. `margin_available` is the
+    # flag that knows the difference, and the figures are absent rather than flagged:
+    # a surface cannot print what it was not sent.
+    tier_1 = rates.CostModel(lcat_direct={"software engineer": 40.00})
+    assert tier_1.margin_available is False
+    card, p = _card("FFP", tier_1)
+    assert card["margin_position"]["known"] is True
+    mh = p["margin_hero"]
+    assert mh["known"] is False
+    assert mh["pct"] is None
+    assert mh["dollars"] is None
+    # Still names the line and its severity — a withheld tile is about something.
+    assert mh["clin"] == card["code"]
+    assert mh["status"] == card["status"]
+
+
+def test_the_tightest_margin_is_the_hero():
+    # Same selection rule the runway hero uses: worst first, in the units that matter
+    # for this shape. Dollars of projected margin, not percent — a 5% margin on a $2M
+    # line is a bigger hole than 4% on $50k.
+    c = _contract("FFP")
+    c["clins"].append(
+        {
+            "clin": "0002",
+            "period": "Base",
+            "title": "Second deliverable",
+            "is_labor": True,
+            "ceiling": 100_000,
+            "est_hours": 1_000,
+            "type": "FFP",
+        }
+    )
+    rows = _rows() + [{**r, "charge_code": "0002", "total_hours": 90} for r in _rows()]
+    p = burn.compute(c, rows, cost_model=_model())
+    by_code = {x["code"]: x for x in p["clins"]}
+    tightest = min(
+        by_code.values(), key=lambda x: x["margin_position"]["projected_margin"]
+    )
+    assert p["margin_hero"]["clin"] == tightest["code"] == "CLIN 0002"
+
+
+def test_a_mixed_award_keeps_its_runway_hero_and_gets_no_margin_hero():
+    # A T&M line inside the award means there IS a funding wall, so the runway is the
+    # honest headline and the tile stays a runway. Offering both would hand the choice
+    # back to the surfaces, which is the drift this replaces.
+    c = _contract("T&M")
+    c["clins"].append(
+        {
+            "clin": "0002",
+            "period": "Base",
+            "title": "Fixed deliverable",
+            "is_labor": True,
+            "ceiling": 100_000,
+            "est_hours": 1_000,
+            "type": "FFP",
+        }
+    )
+    rows = _rows() + [{**r, "charge_code": "0002"} for r in _rows()]
+    p = burn.compute(c, rows, cost_model=_model())
+    assert p["hero"] is not None
+    assert p["margin_hero"] is None
+
+
+def test_price_is_the_ceiling_only_when_every_line_is_fixed_price():
+    # What lets a card say "of price" instead of "of ceiling". True on wholly
+    # fixed-price work, where the ceiling constrains nothing; false as soon as a
+    # cost-reimbursable travel line is in the same denominator — the common shape,
+    # where the ceiling really is a ceiling and calling it the price would name a
+    # limit larger than anything the margin is measured against.
+    _, p = _card("FFP", _model())
+    assert p["margin_hero"]["price_is_ceiling"] is True
+
+    c = _contract("FFP")
+    c["clins"].append(
+        {
+            "clin": "0002",
+            "period": "Base",
+            "title": "Travel",
+            "is_labor": False,
+            "ceiling": 54_000,
+        }
+    )
+    p = burn.compute(c, _rows(), cost_model=_model())
+    assert p["margin_hero"]["price_is_ceiling"] is False
+
+
 # -------------------------------------------------------------------- the rollups
 
 
@@ -392,6 +499,26 @@ def test_portfolio_totals_equal_the_sum_of_their_clins():
     # rather than 0 — which would read as "out of money today".
     ffp_card = pf["contracts"][2]
     assert ffp_card["runway_days"] is None
+
+
+def test_a_card_with_no_runway_carries_the_margin_its_flight_deck_shows():
+    # #196. The card rendered a blank day count under a "Runway" heading while the
+    # Flight Deck one click later showed a projected margin off the same payload — the
+    # figure existed, the card just had no field to read it from. Forwarded whole rather
+    # than re-derived, so the two can never drift apart the way #191 did.
+    rows, model = _rows(), _model()
+    contract = _contract("FFP")
+    card = burn.portfolio([(contract, rows, [], model)])["contracts"][0]
+    deck = burn.compute(contract, rows, [], model)
+    assert card["runway_days"] is None
+    assert deck["margin_hero"] is not None
+    assert card["margin_hero"] == deck["margin_hero"]
+
+    # And the funded types keep a runway and are sent no margin hero, so a card can
+    # never show both.
+    tm = burn.portfolio([(_contract("T&M"), rows, [], model)])["contracts"][0]
+    assert tm["runway_days"] is not None
+    assert tm["margin_hero"] is None
 
 
 def test_a_portfolio_card_reports_the_same_dollars_as_its_own_flight_deck():

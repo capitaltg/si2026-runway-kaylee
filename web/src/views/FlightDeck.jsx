@@ -11,7 +11,6 @@ import { suggestFor } from "../suggest.js";
 import { scopeNotices } from "../scope-notice.js";
 import { clampAlertIndex, nextAlertIndex, orderedFlightDeckAlerts } from "../flight-deck-alerts.js";
 import { planDrift, driftAlert, driftSentence, actualsDraft, rateResolver } from "../drift.js";
-import { marginAvailable } from "../profitability.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -452,23 +451,16 @@ export default function FlightDeck({
   // (#79) — and a "—" under "Days of runway" would read as missing data rather than as
   // a figure that doesn't apply. The tile becomes a margin hero instead: the tightest
   // projected margin across the fixed-price lines, which is the equivalent question.
-  const marginClins = labor.filter((c) => c.margin_managed && c.margin_position);
-  const marginOnly = !hero && marginClins.length > 0;
-  const worstMargin = marginOnly
-    ? marginClins.reduce((a, b) =>
-        a.margin_position.projected_margin <= b.margin_position.projected_margin ? a : b,
-      )
-    : null;
-  // Whether this tile may print the margin it computed. `margin_position.known` says
-  // the arithmetic resolved; it does NOT say the cost underneath is a real buildup.
-  // A contract with LCAT direct rates but no indirect pool sits at Level 1 — cost is
-  // unburdened direct labor, so the margin is overstated by the whole fringe +
-  // overhead + G&A load, and `margin_available` is false. Profitability already
-  // withholds on that flag (#82); the hero is the largest number on the screen and
-  // has to withhold on the same one, or the two surfaces disagree about whether
-  // margin is knowable at all.
-  const marginKnown =
-    marginOnly && worstMargin.margin_position.known && marginAvailable(burn);
+  //
+  // Both the selection and the may-we-print-it gate belong to the engine now (#196).
+  // They were derived here, which left the portfolio card — the screen that links to
+  // this one — with no way to reach the same answer, so it printed a blank day count
+  // under a "Runway" heading. `margin_hero.pct` is already withheld server-side where
+  // the cost underneath isn't a real buildup (#191, `margin_available`), so the tile
+  // reads one flag instead of conjoining two.
+  const marginHero = burn.margin_hero;
+  const marginOnly = !hero && !!marginHero;
+  const marginKnown = marginOnly && marginHero.known;
   // The tile's accent, from whichever status the tile is actually reporting. On the
   // margin hero there is no `hero` *by definition* (`marginOnly` requires it to be
   // absent), so reading `hero?.status` alone made every all-fixed-price contract
@@ -476,7 +468,7 @@ export default function FlightDeck({
   // whose margin was already exceeded. The margin line's own status is the honest
   // source: `margin_managed` CLINs carry the same status keys, relabelled by
   // MARGIN_PILL (#79), so severity resolves the same way.
-  const heroStatus = hero?.status ?? worstMargin?.status;
+  const heroStatus = hero?.status ?? marginHero?.status;
   const heroColor = statusColor(heroStatus);
   const heroColor2 = statusColorDeep(heroStatus);
   // Nothing to characterise at all — no runway and no margin to read, which is what
@@ -1486,7 +1478,7 @@ export default function FlightDeck({
           <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 52, lineHeight: 1, marginTop: 8 }}>
             {marginOnly
               ? marginKnown
-                ? pct(worstMargin.margin_position.projected_margin_pct)
+                ? pct(marginHero.pct)
                 : "—"
               : hero && hero.days != null
                 ? hero.days
@@ -1495,7 +1487,7 @@ export default function FlightDeck({
           <div style={{ fontSize: 12.5, opacity: 0.92, marginTop: 8, lineHeight: 1.4 }}>
             {marginOnly
               ? marginKnown
-                ? `Tightest on ${worstMargin.code} · fixed price, so cost against the price is the constraint — not funding`
+                ? `Tightest on ${marginHero.clin} · fixed price, so cost against the price is the constraint — not funding`
                 : `Fixed price throughout — margin needs a full cost buildup (direct rates and indirect pools) before it can be read`
               : hero
                 ? heroSub
