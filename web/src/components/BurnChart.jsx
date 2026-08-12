@@ -119,6 +119,11 @@ export default function BurnChart({ clin, contract }) {
     return { week, val: budget + weekly * (week - runOutWeek) };
   })();
 
+  // `overBudget` is a fact about this chart's own geometry rather than a status, so it
+  // stays a separate test. Everything else defers to the shared vocabulary (#145) —
+  // which is what keeps `fee_eroding` (#81) amber here: the projection line is the
+  // thing that eats the fee, so drawing it green while the card says the fee is going
+  // would make the chart contradict its own pill.
   const projColor = overBudget ? "var(--bad)" : statusColor(clin.status);
 
   const x0 = mx(0),

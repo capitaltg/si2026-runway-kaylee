@@ -118,7 +118,11 @@ const sectionLabel = {
   marginBottom: 9,
 };
 
-// Health comes from the shared status severity; view-specific copy stays here.
+// Health comes from the shared status severity (#145); the copy stays here because it
+// is this card's wording, not vocabulary. Severity is what puts `fee_eroding` (#81)
+// under "Watch closely" beside `watch`: on plan against its funding, losing fee to the
+// overrun. Reading it off the shared map is also what stops the next backend state
+// reading "On plan" green here, which is the blind spot the old chain had.
 function healthOf(hero) {
   const severity = severityOf(hero?.status);
   if (severity === "bad")
