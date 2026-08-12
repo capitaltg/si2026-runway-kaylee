@@ -40,7 +40,8 @@ class CLIN(BaseModel):
     )
     title: str = Field(description="Supplies/services description")
     type: Optional[str] = Field(
-        default=None, description="Contract type for this CLIN, e.g. 'T&M', 'CPFF', 'FFP'"
+        default=None,
+        description="Contract type for this CLIN, e.g. 'T&M', 'CPFF', 'FFP'",
     )
     is_labor: bool = Field(
         description="True if this is a labor CLIN, False for travel/ODC/materials"

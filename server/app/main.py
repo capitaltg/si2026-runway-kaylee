@@ -2425,9 +2425,18 @@ def remove_person(employee_id: str):
 
 @app.get("/api/portfolio")
 def portfolio():
-    """Cross-contract KPI aggregate + one summary card per contract."""
+    """Cross-contract KPI aggregate + one summary card per contract.
+
+    The cost model travels with each contract so a card reports the same dollars its
+    own Flight Deck does — see `burn.portfolio`.
+    """
     pairs = [
-        (c, db.get_timesheets(c["id"]), db.list_expenses(c["id"]))
+        (
+            c,
+            db.get_timesheets(c["id"]),
+            db.list_expenses(c["id"]),
+            _cost_model(c["id"]),
+        )
         for c in db.list_contracts()
     ]
     return burn.portfolio(pairs)

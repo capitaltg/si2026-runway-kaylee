@@ -156,9 +156,7 @@ def _stub_agreement(monkeypatch):
             piid=OTHER_PIID,
             fiscal_year="2026",
             status="provisional",
-            pools=[
-                IndirectPool(pool="fringe", rate=0.268, base="direct_labor")
-            ],
+            pools=[IndirectPool(pool="fringe", rate=0.268, base="direct_labor")],
         ),
     )
 

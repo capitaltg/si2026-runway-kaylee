@@ -87,14 +87,23 @@ def build_grounding(focused_id=None) -> dict:
     context with no per-question data fetch or tool-use round trip.
     """
     contracts = db.list_contracts()
+    # The cost model travels with each contract for the same reason it does on the
+    # portfolio endpoint: without it every figure here is a Level-1 read, so Ask
+    # Runway would answer with dollars the Flight Deck does not show.
     pairs = [
-        (c, db.get_timesheets(c["id"]), db.list_expenses(c["id"])) for c in contracts
+        (
+            c,
+            db.get_timesheets(c["id"]),
+            db.list_expenses(c["id"]),
+            db.get_rate_schedule(c["id"]),
+        )
+        for c in contracts
     ]
     portfolio = burn.portfolio(pairs)
 
     detail = []
-    for c, rows, expenses in pairs:
-        b = burn.compute(c, rows, expenses)
+    for c, rows, expenses, cost_model in pairs:
+        b = burn.compute(c, rows, expenses, cost_model)
         b["obligation_history"] = c.get("obligation_history") or []
         detail.append(b)
 
