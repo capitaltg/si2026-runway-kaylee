@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { classifyContractType, offersCostFeeFields } from "./pricing.js";
+import {
+  classifyContractType,
+  effectiveContractType,
+  offersCostFeeFields,
+} from "./pricing.js";
 
 test("abbreviations classify", () => {
   for (const [text, code] of [
@@ -113,4 +117,79 @@ test("the synonym table matches server/app/pricing.py", () => {
   for (const m of vehicles[1].matchAll(/"([^"]*)"/g)) {
     assert.equal(classifyContractType(m[1]).unknown, "vehicle", `vehicle "${m[1]}"`);
   }
+});
+
+// #183: the editor used to read only `CLIN.type`, so a CPFF award whose CLIN left the
+// type blank hid every cost and fee input — on a line the server then resolved to the
+// header's fee-bearing policy the moment it was saved.
+test("a blank CLIN type inherits the header policy, and offers its fields", () => {
+  for (const header of [
+    "CPFF",
+    "Cost Plus Fixed Fee",
+    "CPIF",
+    "Cost Plus Incentive Fee",
+    "CPAF",
+    "Cost Plus Award Fee",
+    "FPI",
+    "Fixed Price Incentive Firm Target",
+  ]) {
+    assert.equal(effectiveContractType("", header).source, "header", header);
+    assert.equal(offersCostFeeFields("", header), true, header);
+    assert.equal(offersCostFeeFields(null, header), true, header);
+  }
+});
+
+test("an explicit CLIN type beats the header, both directions", () => {
+  // The mixed award: an FFP deliverable line on a cost-type award prices one price.
+  assert.equal(offersCostFeeFields("FFP", "CPFF"), false);
+  assert.equal(offersCostFeeFields("T&M", "CPAF"), false);
+  // And the reverse — a cost CLIN on a fixed-price award still prices cost and fee.
+  assert.equal(offersCostFeeFields("CPFF", "FFP"), true);
+  assert.equal(effectiveContractType("CPFF", "FFP").code, "CPFF");
+  assert.equal(effectiveContractType("CPFF", "FFP").source, "clin");
+});
+
+test("an inherited fixed-price or T&M policy offers nothing it does not have", () => {
+  for (const header of ["FFP", "Firm Fixed Price", "T&M", "Time and Materials", "", null]) {
+    assert.equal(offersCostFeeFields("", header), false, String(header));
+  }
+});
+
+test("a vehicle header inherits nothing, and neither does an unreadable one", () => {
+  assert.equal(offersCostFeeFields("", "IDIQ"), false);
+  assert.deepEqual(effectiveContractType("", "IDIQ"), {
+    code: null, source: null, unknown: "vehicle", rejected: "IDIQ",
+  });
+  assert.equal(offersCostFeeFields("", "CPFF/T&M"), false);
+});
+
+// The fallback `policy_for` performs and the reason it carries the rejected text out:
+// the header read succeeds, so the fields appear, but the CLIN's own text was refused.
+test("an unreadable CLIN type falls through to the header and keeps what was rejected", () => {
+  const p = effectiveContractType("see attachment 2", "CPFF");
+  assert.deepEqual(p, {
+    code: "CPFF", source: "header", unknown: null, rejected: "see attachment 2",
+  });
+  assert.equal(offersCostFeeFields("see attachment 2", "CPFF"), true);
+});
+
+test("with neither field readable, the CLIN's reason wins over the header's", () => {
+  // A CLIN naming a vehicle is a vehicle problem; the blank header adds nothing.
+  assert.equal(effectiveContractType("BPA", "").unknown, "vehicle");
+  assert.equal(effectiveContractType("???", "IDIQ").unknown, "unsupported");
+  assert.equal(effectiveContractType("", "").unknown, "absent");
+  assert.equal(effectiveContractType(null, null).rejected, null);
+});
+
+// Parity is the point: the client resolves the effective type the way `policy_for`
+// documents it, so this checks the precedence the docstring states is still stated.
+test("policy_for still resolves CLIN before header", () => {
+  const src = readFileSync(new URL("../../server/app/pricing.py", import.meta.url), "utf8");
+  const body = /def policy_for\((.*?)\n(?=def |# =)/s.exec(src);
+  assert.ok(body, "could not find policy_for in pricing.py");
+  assert.match(
+    body[1],
+    /candidates = \(\("clin", clin\.get\("type"\)\), \("header", header\.get\("contract_type"\)\)\)/,
+    "policy_for's resolution order changed; web/src/pricing.js mirrors it",
+  );
 });
