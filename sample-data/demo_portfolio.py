@@ -17,6 +17,12 @@ derives the PIID from the seed and the effective date, so two contracts built fr
 one seed are the same award wearing different contract types. That was the flaw in
 the first sweep of this set.
 
+AURORA also gets its SF-30 funding trail pre-loaded (P00001, P00002), so the Funding
+History screen reads as a staircase rather than one bar at award. **P00003 — the
+supplemental agreement that clears the red — is left on disk on purpose**: dropping it
+in live is the last beat of the demo, and the Flight Deck goes green in front of the
+room. Regenerate all three with `python3 sample-data/regenerate.py burn`.
+
 The stack must be up: Fixtura on :8000, Runway on :8001 (see the README).
 """
 
@@ -62,6 +68,17 @@ DEMO = [
         "story": "THE demo contract. Over its funded slice with a dated stop-work "
         "risk — this is the one to click into.",
         "want": "over",
+        # Pre-load the two INCREMENTAL funding actions so the Funding History
+        # screen shows a real staircase instead of one bar at award. Each ingest is
+        # a Bedrock round trip (~17s), which is exactly why they belong in the build
+        # script and not on stage.
+        #
+        # P00003 — the supplemental agreement that CLEARS the red — is deliberately
+        # left on disk. It is the last beat of the demo: drop it live and the Flight
+        # Deck goes green in front of the room. Regenerate all three with
+        # `python3 sample-data/regenerate.py burn`.
+        "mods": ["P00001", "P00002"],
+        "mod_stem": "fixtura-runway-burn-demo",
     },
     {
         "key": "amber",
@@ -125,6 +142,59 @@ def call(method, path, body=None, timeout=300):
         )
 
 
+def upload_mod(cid, pdf: Path):
+    """POST one SF-30 to /mods as multipart, the same shape the browser sends.
+
+    Hand-rolled rather than pulled from `requests`, which this script does not
+    otherwise need."""
+    boundary = "----runway-demo-portfolio"
+    body = (
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{pdf.name}"\r\n'
+            f"Content-Type: application/pdf\r\n\r\n"
+        ).encode()
+        + pdf.read_bytes()
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+    req = urllib.request.Request(
+        f"{API}/api/contracts/{cid}/mods", data=body, method="POST"
+    )
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    # Generous: extraction is a Bedrock round trip, not a local parse.
+    with urllib.request.urlopen(req, timeout=300) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def at_award_face(payload, contract):
+    """Trim a `to_runway` payload to what the SF-26 itself obligates.
+
+    `to_runway` states `total_obligated` as the contract's CURRENT cumulative, every
+    incremental action already folded in, because that is what Fixtura's structured
+    contract carries. An award form cannot say that: block 15G reports what *this
+    signature* obligated, and the later money arrives on SF-30s.
+
+    Two things went wrong from posting the cumulative as the award face. The funding
+    timeline collapsed to a single bar — `Extraction` has no `obligation_history`
+    field, so the trail is dropped and `_seed_award_obligation` synthesizes one
+    "Award" entry at whatever `total_obligated` says. And the mods became unlayerable:
+    ingest P00001 onto a face that already counts it and the contract double-counts.
+
+    The first `obligation_history` entry is the award action, and its `funding_lines`
+    say which CLINs that signature actually funded. Anything not named gets 0 — an
+    award that did not obligate a line did not obligate it. Read off the Fixtura
+    contract rather than the payload, because `to_runway` drops `funding_lines`."""
+    history = contract.get("obligation_history") or []
+    if not history:
+        return payload
+    award = history[0]
+    by_clin = {ln["clin"]: ln["amount"] for ln in award.get("funding_lines") or []}
+    payload["contract"]["total_obligated"] = award["cumulative_obligated"]
+    for cl in payload["clins"]:
+        cl["obligated"] = by_clin.get(cl["clin"], 0.0)
+    return payload
+
+
 def opts_for(spec):
     return {
         "pop_in_progress": True,
@@ -142,13 +212,30 @@ def opts_for(spec):
 def build_one(spec):
     opts = opts_for(spec)
     contract = presets.build_scenario(spec["seed"], dict(opts))["contract"]
+    payload = to_runway(contract)
+    # A contract whose mods get ingested has to start where its award started, or the
+    # increments land on top of money already counted. Without mods the cumulative
+    # figure IS the current truth, so leave it alone rather than understate funding.
+    if spec.get("mods"):
+        payload = at_award_face(payload, contract)
     optstr = urllib.parse.quote(",".join(f"{k}={v}" for k, v in opts.items()))
     saved = call(
         "POST",
         f"/api/contracts/confirm?seed={spec['seed']}&opts={optstr}",
-        to_runway(contract),
+        payload,
     )
     cid = saved["id"]
+    for mod_no in spec.get("mods") or []:
+        pdf = HERE / f"{spec['mod_stem']}.mod.{mod_no}.sf30.pdf"
+        if not pdf.exists():
+            print(f"     !! {mod_no} missing — run regenerate.py; funding trail short")
+            continue
+        try:
+            r = upload_mod(cid, pdf)
+            print(f"     {mod_no} -> obligated {r.get('total_obligated')}")
+        except Exception as e:
+            # One flaky Bedrock call should not cost the whole portfolio.
+            print(f"     !! {mod_no} ingest failed ({e}) — funding trail short")
     call("POST", f"/api/contracts/{cid}/timesheets/sync")
     call("PUT", f"/api/contracts/{cid}/name", {"name": spec["nickname"]})
     return cid, contract["piid"]
@@ -156,11 +243,16 @@ def build_one(spec):
 
 def measure(cid):
     b = call("GET", f"/api/contracts/{cid}/burn")
+    # How many dated funding actions the timeline actually holds. 1 means the award
+    # alone; a mod-loaded contract should read 3. Cheap, and it is the one thing that
+    # silently degrades — a failed mod ingest still leaves a working contract.
+    actions = len(call("GET", f"/api/contracts/{cid}/funding")["obligation_history"])
     labor = [c for c in b["clins"] if c.get("is_labor")]
     hero = b.get("hero") or {}
     cm = b["contract"].get("cost_model") or {}
     t = b["totals"]
     return {
+        "actions": actions,
         "status": [c["status"] for c in labor],
         "runway": hero.get("days"),
         "tripwires": len(b.get("tripwires") or []),

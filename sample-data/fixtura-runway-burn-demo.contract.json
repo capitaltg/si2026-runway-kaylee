@@ -1,9 +1,9 @@
 {
  "piid": "7026HEXDVC0001043",
  "solicitation_no": "701928R",
- "effective_date": "2026-01-21",
- "solicitation_issue_date": "2025-11-20",
- "offer_due_date": "2026-01-07",
+ "effective_date": "2026-01-28",
+ "solicitation_issue_date": "2025-11-27",
+ "offer_due_date": "2026-01-14",
  "naics_code": "541712",
  "naics_title": "Research and Development in the Physical, Engineering and Life Sciences",
  "size_standard": "1,000 employees",
@@ -27,12 +27,14 @@
   "address": "89083 Robinson Radial, Lisatown, WV 21427",
   "phone": "(654) 235-1161",
   "indirect_rates": {
-   "fringe": 0.2831,
-   "overhead": 0.4768,
-   "g_and_a": 0.1609,
+   "fringe": 0.272,
+   "overhead": 0.4964,
+   "work_site": "offsite",
+   "work_site_label": "Contractor facility (off-site)",
+   "g_and_a": 0.1328,
    "profit": 0.0703,
    "variance": 0.0,
-   "wrap_rate": 2.199769
+   "wrap_rate": 2.156195
   }
  },
  "contracting_officer": "Carla Gray",
@@ -41,7 +43,7 @@
  "gov_rep_address": "7242 Julie Plain Suite 969, Coxberg, NY 65187",
  "gov_rep_phone": "(101) 226-9166",
  "signer_title": "COO",
- "acceptance_date": "2026-03-30",
+ "acceptance_date": "2026-04-06",
  "contract_type": "T&M",
  "pricing": {
   "type": "T&M",
@@ -69,52 +71,52 @@
   "ceiling_clause_cite": "FAR 52.232-7"
  },
  "fully_funded": false,
- "total_ceiling": 4677562.4,
- "total_obligated": 2925000.0,
- "unfunded_balance": 1752562.4,
+ "total_ceiling": 4585135.2,
+ "total_obligated": 2825000.0,
+ "unfunded_balance": 1760135.2,
  "obligation_history": [
   {
    "mod": "Award",
-   "date": "2026-01-21",
+   "date": "2026-01-28",
    "action": "Initial award / base-period funding",
-   "amount": 800000.0,
-   "cumulative_obligated": 800000.0,
+   "amount": 775000.0,
+   "cumulative_obligated": 775000.0,
    "funding_lines": [
     {
      "clin": "0001",
      "acrn": "AA",
      "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
-     "amount": 800000.0
+     "amount": 775000.0
     }
    ]
   },
   {
    "mod": "P00001",
-   "date": "2026-03-27",
+   "date": "2026-04-03",
    "action": "Incremental funding (FAR 52.232-22)",
-   "amount": 950000.0,
-   "cumulative_obligated": 1750000.0,
+   "amount": 925000.0,
+   "cumulative_obligated": 1700000.0,
    "funding_lines": [
     {
      "clin": "0001",
      "acrn": "AA",
      "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
-     "amount": 950000.0
+     "amount": 925000.0
     }
    ]
   },
   {
    "mod": "P00002",
-   "date": "2026-05-31",
+   "date": "2026-06-07",
    "action": "Incremental funding (FAR 52.232-22)",
-   "amount": 1175000.0,
-   "cumulative_obligated": 2925000.0,
+   "amount": 1125000.0,
+   "cumulative_obligated": 2825000.0,
    "funding_lines": [
     {
      "clin": "0001",
      "acrn": "AA",
      "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
-     "amount": 1050000.0
+     "amount": 1000000.0
     },
     {
      "clin": "0002",
@@ -134,10 +136,10 @@
  "periods": [
   {
    "name": "Base Year",
-   "pop_start": "2026-01-21",
-   "pop_end": "2027-01-20",
+   "pop_start": "2026-01-28",
+   "pop_end": "2027-01-27",
    "exercised": true,
-   "ceiling": 4677562.4,
+   "ceiling": 4585135.2,
    "clins": [
     {
      "clin": "0001",
@@ -145,7 +147,7 @@
      "title": "Professional Services (Labor)",
      "type": "T&M",
      "is_labor": true,
-     "ceiling": 4314562.4,
+     "ceiling": 4229135.2,
      "est_hours": 20680,
      "labor_rates": [
       {
@@ -156,12 +158,12 @@
        "base_salary": 162053,
        "direct_hours_per_year": 1880,
        "direct_rate": 77.91,
-       "wrap_rate": 2.2,
-       "loaded_rate": 183.43,
-       "derived_loaded_rate": 183.43,
+       "wrap_rate": 2.16,
+       "loaded_rate": 179.8,
+       "derived_loaded_rate": 179.8,
        "est_hours": 3760,
        "direct_amount": 292941.6,
-       "amount": 689696.8
+       "amount": 676048.0
       },
       {
        "lcat": "Systems Engineer",
@@ -171,12 +173,12 @@
        "base_salary": 123053,
        "direct_hours_per_year": 1880,
        "direct_rate": 59.16,
-       "wrap_rate": 2.2,
-       "loaded_rate": 139.29,
-       "derived_loaded_rate": 139.29,
+       "wrap_rate": 2.16,
+       "loaded_rate": 136.53,
+       "derived_loaded_rate": 136.53,
        "est_hours": 3760,
        "direct_amount": 222441.6,
-       "amount": 523730.4
+       "amount": 513352.8
       },
       {
        "lcat": "Senior Cyber SME",
@@ -186,12 +188,12 @@
        "base_salary": 268819,
        "direct_hours_per_year": 1880,
        "direct_rate": 129.24,
-       "wrap_rate": 2.2,
-       "loaded_rate": 304.28,
-       "derived_loaded_rate": 304.28,
+       "wrap_rate": 2.16,
+       "loaded_rate": 298.26,
+       "derived_loaded_rate": 298.26,
        "est_hours": 7520,
        "direct_amount": 971884.8,
-       "amount": 2288185.6
+       "amount": 2242915.2
       },
       {
        "lcat": "Business Analyst",
@@ -201,15 +203,15 @@
        "base_salary": 127338,
        "direct_hours_per_year": 1880,
        "direct_rate": 61.22,
-       "wrap_rate": 2.2,
-       "loaded_rate": 144.14,
-       "derived_loaded_rate": 144.14,
+       "wrap_rate": 2.16,
+       "loaded_rate": 141.28,
+       "derived_loaded_rate": 141.28,
        "est_hours": 5640,
        "direct_amount": 345280.8,
-       "amount": 812949.6
+       "amount": 796819.2
       }
      ],
-     "ceiling_price": 4314562.4,
+     "ceiling_price": 4229135.2,
      "profit_in_rates": true,
      "direct_labor": 1832548.8,
      "cost_buildup": [
@@ -217,32 +219,32 @@
        "key": "fringe",
        "label": "Fringe Benefits",
        "base_label": "Direct Labor",
-       "rate": 0.2831,
-       "amount": 518794.57000000007,
-       "subtotal": 2351343.37
+       "rate": 0.272,
+       "amount": 498453.2699999998,
+       "subtotal": 2331002.07
       },
       {
        "key": "overhead",
        "label": "Overhead",
        "base_label": "Direct Labor + Fringe",
-       "rate": 0.4768,
-       "amount": 1121120.5099999998,
-       "subtotal": 3472463.88
+       "rate": 0.4964,
+       "amount": 1157109.4300000002,
+       "subtotal": 3488111.5
       },
       {
        "key": "g_and_a",
        "label": "G&A",
        "base_label": "Total Cost Input",
-       "rate": 0.1609,
-       "amount": 558707.19,
-       "subtotal": 4031171.07
+       "rate": 0.1328,
+       "amount": 463243.45,
+       "subtotal": 3951354.95
       }
      ],
-     "total_cost_input": 4031171.07,
-     "funded": 2800000.0,
+     "total_cost_input": 3951354.95,
+     "funded": 2700000.0,
      "acrn": "AA",
      "loa": "97 2626 0400 R9OU 252 25X 240174 2D CUZREN",
-     "funded_at_award": 800000.0
+     "funded_at_award": 775000.0
     },
     {
      "clin": "0002",
@@ -250,7 +252,7 @@
      "title": "Travel (Cost-Reimbursable, No Fee)",
      "type": "COST",
      "is_labor": false,
-     "ceiling": 202000.0,
+     "ceiling": 198000.0,
      "cost_element": "travel",
      "labor_rates": [],
      "funded": 90000.0,
@@ -264,7 +266,7 @@
      "title": "Other Direct Costs / Materials (Cost, No Fee)",
      "type": "COST",
      "is_labor": false,
-     "ceiling": 161000.0,
+     "ceiling": 158000.0,
      "cost_element": "reimbursable_materials",
      "labor_rates": [],
      "funded": 35000.0,

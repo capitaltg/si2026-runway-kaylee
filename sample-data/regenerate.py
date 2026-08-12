@@ -17,9 +17,11 @@ Runway's own burn engine rather than asserted.
 Point it at a Fixtura checkout with FIXTURA_PATH if it is not beside this repo.
 """
 
+import copy
 import csv
 import io
 import json
+import math
 import os
 import sys
 from datetime import date
@@ -72,6 +74,10 @@ BUNDLES = {
             "shared_pool": True,
         },
         "want": "over",
+        # This bundle also carries the mod that CLEARS the red (P00003), because a
+        # demo that only shows the failure leaves "so what do you do about it?"
+        # unanswered. See fix_mod.
+        "fix": True,
     },
     "funding-pace": {
         "stem": "fixtura-runway-funding-pace-demo",
@@ -195,6 +201,147 @@ def _header_totals(c):
     return out
 
 
+def _roundup(value, step):
+    return math.ceil(value / step) * step
+
+
+# Titles for the clauses `burn` resolves as a CLIN's governing funding limit. Only the
+# three that can be resolved: fixed-price carries no limitation-of-funds mechanic at all,
+# so there is nothing to cite and nothing to title.
+_CLAUSE_TITLES = {
+    "52.232-7": "Payments under Time-and-Materials and Labor-Hour Contracts",
+    "52.232-20": "Limitation of Cost",
+    "52.232-22": "Limitation of Funds",
+}
+
+
+def fix_mod(contract, payload, mod_record):
+    """Build the SF-30 that ENDS the red — the last beat of the demo.
+
+    The bundle exists to show a contract in trouble, which leaves the obvious
+    question unanswered: what does fixing it look like? This is that document. It
+    is sized against the measured burn rather than hardcoded, so it keeps
+    clearing the board as the bundle is regenerated and the numbers move.
+
+    Two things have to change together, and that pairing is the lesson. Money
+    alone does not fix this contract: at the current run rate the labor line
+    projects past its not-to-exceed value before the period ends, so a mod that
+    only obligates funding buys weeks and still ends red. The ceiling has to move
+    too. Returns None when there is no red state to fix."""
+    clin = next(
+        (c for c in payload["clins"] if c["is_labor"] and c["status"] == "over"), None
+    )
+    if clin is None:
+        return None
+    weeks_left = payload["contract"]["weeks_remaining"]
+    projected = clin["spent"] + clin["weekly"] * weeks_left
+
+    # Ceiling: cover the projection with ~5% of slack, so the fixed contract
+    # reads healthy rather than scraping its own limit.
+    new_ceiling = float(_roundup(projected * 1.05, 50_000))
+    # Funding: an increment, not the whole ceiling. Sixteen weeks of runway
+    # clears FAR 52.232-22(c)'s 60-day notification window with room to spare —
+    # the next tranche a CO would actually obligate, not a blank cheque.
+    new_funded = min(
+        float(_roundup(clin["spent"] + clin["weekly"] * 16, 50_000)), new_ceiling
+    )
+    increment = round(new_funded - clin["funded"], 2)
+    ceiling_delta = round(new_ceiling - clin["ceiling"], 2)
+    prior_cumulative = contract["total_obligated"]
+    total_ceiling = round(contract["total_ceiling"] + ceiling_delta, 2)
+    # Reuse the line of accounting this CLIN is already funded on, so the new
+    # money lands on the same ACRN the earlier mods used.
+    line = next(
+        (
+            ln
+            for h in contract["obligation_history"]
+            for ln in h.get("funding_lines") or []
+            if ln["clin"] == clin["id"]
+        ),
+        {},
+    )
+    entry = {
+        "mod": "P00003",
+        # Dated today: this is the action taken in response to the tripwire the
+        # demo just showed.
+        "date": date.today(),
+        "action": "Supplemental agreement — ceiling increase and incremental funding",
+        "amount": increment,
+        "cumulative_obligated": round(prior_cumulative + increment, 2),
+        "funding_lines": [
+            {
+                "clin": clin["id"],
+                "acrn": line.get("acrn"),
+                "loa": line.get("loa"),
+                "amount": increment,
+            }
+        ],
+    }
+    values = presets.contract_to_sf30(mod_record, entry)
+    money = presets._fmt_money
+    # A ceiling increase is a BILATERAL supplemental agreement (13C) — both
+    # parties sign — not the unilateral change order that incremental funding
+    # alone would be.
+    for unilateral in ("CheckBox13A[0]", "A13[0]", "IsNot[0]"):
+        values.pop(presets._P + unilateral, None)
+    values[presets._P + "CheckBox13C[0]"] = "/1"
+    values[presets._P + "C13[0]"] = "Mutual agreement of the parties (FAR 43.103(a))"
+    values[presets._P + "Is[0]"] = "/1"
+    values[presets._P + "DateSigned[0]"] = presets._fmt_date(entry["date"])
+    # The clause is READ off the CLIN, never asserted. `burn` resolves exactly one
+    # governing clause per CLIN, and its own comment is explicit that the resolved one is
+    # the only clause anything user-facing may cite — this document is user-facing. It
+    # used to name 52.232-22 (Limitation of Funds) unconditionally, which is the
+    # incrementally-funded *cost-reimbursement* clause. On the T&M bundle this mod is
+    # actually built for, the tripwire, the funding letter Drafts writes and the deck all
+    # say 52.232-7, so the demo's paperwork cited a different clause than the demo's app
+    # for the same event. Whichever is the better reading of the FAR, they cannot differ.
+    clause = clin.get("funding_clause") or "52.232-22"
+    clause_title = _CLAUSE_TITLES.get(clause, "Limitation of Funds")
+    values[presets._P + "Description[0]"] = (
+        "The purpose of this modification is to increase the contract ceiling and "
+        "obligate additional funding in response to the Contractor's notification "
+        f"under FAR {clause} ({clause_title}). Accordingly: (a) Total funds "
+        f"obligated on this contract are increased by {money(increment)}, from "
+        f"{money(prior_cumulative)} to {money(entry['cumulative_obligated'])}. "
+        f"(b) The total contract ceiling is increased by {money(ceiling_delta)} to "
+        f"{money(total_ceiling)}. (c) All other terms and conditions remain "
+        "unchanged and in full force and effect. (d) Funds are obligated by CLIN "
+        f"as follows: CLIN {clin['id']} (ACRN {line.get('acrn') or '--'}) "
+        f"{money(increment)}. (e) Not-to-exceed ceilings are revised by CLIN as "
+        f"follows: CLIN {clin['id']} {money(new_ceiling)}."
+    )
+    return {
+        "mod": entry["mod"],
+        "pdf": fill_form_bytes("SF30.pdf", values),
+        "clin": clin["id"],
+        "increment": increment,
+        "ceiling_delta": ceiling_delta,
+        "new_funded": new_funded,
+        "new_ceiling": new_ceiling,
+        "total_ceiling": total_ceiling,
+        "cumulative_obligated": entry["cumulative_obligated"],
+        "date": str(entry["date"]),
+    }
+
+
+def apply_fix(runway_contract, fix):
+    """The contract as Runway holds it AFTER the fix mod is ingested — so the
+    bundle can measure that the mod clears the board instead of claiming it."""
+    fixed = copy.deepcopy(runway_contract)
+    for cl in fixed["clins"]:
+        if cl["clin"] == fix["clin"]:
+            cl["ceiling"] = fix["new_ceiling"]
+            cl["obligated"] = fix["new_funded"]
+    for period in fixed["periods"]:
+        members = [c for c in fixed["clins"] if c["period"] == period["name"]]
+        if members:
+            period["ceiling"] = round(sum(c["ceiling"] for c in members), 2)
+    fixed["contract"]["total_ceiling"] = fix["total_ceiling"]
+    fixed["contract"]["total_obligated"] = fix["cumulative_obligated"]
+    return fixed
+
+
 def to_runway(c):
     """Fixtura's nested contract in the shape Runway's extraction produces.
 
@@ -297,7 +444,16 @@ def build(spec):
         for mod_no, values in presets.contract_to_sf30_trail(mod_record)
     }
 
-    payload = burn.compute(to_runway(contract), sheets)
+    as_runway = to_runway(contract)
+    payload = burn.compute(as_runway, sheets)
+
+    # The bundle whose point is a red board also carries the mod that clears it,
+    # measured rather than asserted — see fix_mod.
+    fix = fix_mod(contract, payload, mod_record) if spec.get("fix") else None
+    fixed_payload = burn.compute(apply_fix(as_runway, fix), sheets) if fix else None
+    if fix:
+        mods[fix["mod"]] = fix["pdf"]
+
     return {
         "scenario": scenario,
         "contract": contract,
@@ -307,6 +463,8 @@ def build(spec):
         "award_pdf": award_pdf,
         "mods": mods,
         "payload": payload,
+        "fix": fix,
+        "fixed_payload": fixed_payload,
     }
 
 
@@ -325,7 +483,13 @@ def summarize(spec, built):
         "all_clear": p["all_clear"],
         "rows": len(built["sheets"]),
         "want": spec["want"],
-        "ok": any(c["status"] == spec["want"] for c in labor),
+        # The fix mod is only useful if it actually clears the board, so hold it
+        # to that rather than trusting the arithmetic that sized it.
+        "fix_clears": (
+            built["fixed_payload"]["all_clear"] if built.get("fixed_payload") else None
+        ),
+        "ok": any(c["status"] == spec["want"] for c in labor)
+        and (built.get("fix") is None or built["fixed_payload"]["all_clear"]),
     }
 
 
@@ -363,8 +527,14 @@ def readme(spec, built):
         + [
             (
                 f"mod.{mod_no}.sf30.pdf",
-                f"**SF-30** modification {mod_no} — feed to "
-                "`POST /api/contracts/{id}/mods`, one at a time.",
+                (
+                    f"**SF-30** modification {mod_no} — the FIX: raises the "
+                    "ceiling and obligates the next tranche, clearing the red "
+                    "board. Ingest LAST, after the tripwire has been shown."
+                    if built.get("fix") and mod_no == built["fix"]["mod"]
+                    else f"**SF-30** modification {mod_no} — feed to "
+                    "`POST /api/contracts/{id}/mods`, one at a time."
+                ),
             )
             for mod_no in built["mods"]
         ]
@@ -444,7 +614,7 @@ Red tripwires firing: **{len(p['tripwires'])}**. Contract `all_clear`: \
 **{p['all_clear']}**.
 
 {_verdict(spec, labor)}
-
+{_fix_section(built)}
 ## How it was generated
 
 Fixtura preset generation, **seed {spec['seed']}**, with:
@@ -471,6 +641,48 @@ Regenerate rather than trust a stale bundle:
 ```
 python3 sample-data/regenerate.py {[k for k, v in BUNDLES.items() if v['stem'] == stem][0]}
 ```
+"""
+
+
+def _fix_section(built):
+    """The measured after-state, so nobody has to take the fix mod on faith."""
+    fix, after = built.get("fix"), built.get("fixed_payload")
+    if not fix or not after:
+        return ""
+
+    def money(v):
+        return f"${v:,.2f}"
+
+    clin = next(x for x in after["clins"] if x["id"] == fix["clin"])
+    return f"""
+## The fix ({fix['mod']})
+
+The story does not end red. `{built['contract']['piid']}` — {fix['mod']}, dated
+{fix['date']} — is the supplemental agreement that answers the tripwire, and it
+moves **two** things, because money alone would not clear this board: at the
+measured run rate the labor line projects past its old not-to-exceed value before
+the period ends, so funding without ceiling just moves the red date.
+
+| | |
+|---|---|
+| Obligates | **{money(fix['increment'])}** to CLIN {fix['clin']} \
+(funded {money(fix['new_funded'])}) |
+| Raises the CLIN ceiling by | **{money(fix['ceiling_delta'])}** \
+(to {money(fix['new_ceiling'])}) |
+| New contract ceiling | {money(fix['total_ceiling'])} |
+| New cumulative obligated | {money(fix['cumulative_obligated'])} |
+
+Measured on the same timesheets, with the mod applied:
+
+| CLIN | Funded | Spent | Runway | Status |
+|---|---|---|---|---|
+| {clin['id']} | {money(clin['funded'])} | {money(clin['spent'])} \
+| {clin['runway_days']} d | `{clin['status']}` |
+
+Red tripwires firing: **{len(after['tripwires'])}**. Contract `all_clear`: \
+**{after['all_clear']}**.
+
+{fix['mod']} clears the Flight Deck.
 """
 
 
