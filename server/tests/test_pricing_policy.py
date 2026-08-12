@@ -401,10 +401,43 @@ def test_pricing_unknown_counts_the_clins_that_could_not_be_typed():
     assert _clin(p, "0002")["pricing_policy"]["unknown_reason"] == "absent"
 
 
+def test_pricing_rejected_reports_the_clin_the_header_rescued():
+    # The #184 case: a CLIN prints pricing text Runway cannot read, the header type
+    # rescues the resolution, and the arithmetic is a real typed read. The rejection
+    # is still a data-quality problem, so it gets its own contract-level report.
+    p = burn.compute(
+        _contract(header_type="T&M", clin_types=("see attachment 2", "T&M", "T&M")),
+        _rows(),
+    )
+    # Unchanged: the policy resolved, so nothing is unknown and no figure moves.
+    assert p["contract"]["pricing_unknown"] == 0
+    assert _clin(p, "0001")["pricing_policy"]["known"] is True
+    assert _clin(p, "0001")["pricing_policy"]["source"] == "header"
+    # And the rejected text surfaces, named to its line and its stand-in policy.
+    assert p["contract"]["pricing_rejected"] == [
+        {
+            "clin": "CLIN 0001",
+            "rejected": "see attachment 2",
+            "policy_label": "Time and Materials",
+            "source": "header",
+        }
+    ]
+
+
+def test_pricing_rejected_is_quiet_when_a_clin_simply_inherits():
+    # A CLIN with no type of its own is the normal shape of a mixed award, not a
+    # degraded read: inheriting the header must warn about nothing.
+    p = burn.compute(_contract(header_type="T&M"), _rows())
+    assert p["contract"]["pricing_rejected"] == []
+    # An unreadable CLIN with nothing to fall back to is unknown, not degraded. It is
+    # already counted, and reporting it twice under two names would double the noise.
+    p = burn.compute(_contract(clin_types=("see attachment 2", None, None)), _rows())
+    assert p["contract"]["pricing_unknown"] == 3
+    assert p["contract"]["pricing_rejected"] == []
+
+
 def test_unsupported_policy_withholds_profitability_but_keeps_burn():
-    card = burn.compute(_contract(header_type="COST"), _rows())[
-        "clins"
-    ][0]
+    card = burn.compute(_contract(header_type="COST"), _rows())["clins"][0]
     assert card["status"] != "unsupported"
     assert card["status_label"] != "Unsupported"
     assert card["pricing_policy"]["status"] == "unsupported"

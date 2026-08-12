@@ -15,6 +15,7 @@ import {
   marginAvailable,
   measuredIn,
   orderedClins,
+  policyDegradation,
   pricedBy,
   pricingApplicability,
   profitabilityLabels,
@@ -461,6 +462,7 @@ export default function Profitability({ contractId, setActiveId }) {
               {clins.map((c) => {
                 const f = clinFigures(c, margin);
                 const applicability = pricingApplicability(c);
+                const degraded = policyDegradation(c);
                 const proj = projection(c);
                 const p = pill(
                   c.status,
@@ -482,6 +484,16 @@ export default function Profitability({ contractId, setActiveId }) {
                           ? c.pricing_policy.notice || "Unsupported contract policy"
                           : c.pricing_policy?.label || "Not stated"}
                       </div>
+                      {/* A rescued CLIN type (#184). Sits on the row rather than only
+                          in the banner because the reader looking at this column is
+                          the one who needs to know the label above came from the
+                          header after this line's own text was rejected. */}
+                      {degraded && (
+                        <div style={{ fontSize: 11, color: "var(--warn)" }}>
+                          CLIN type “{degraded.rejected}” unreadable — using the award
+                          header
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: "var(--faint)" }}>
                         measured in {measuredIn(c)}
                       </div>

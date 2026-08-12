@@ -20,6 +20,7 @@ import {
   orderedClins,
   projection,
   projectionReason,
+  policyDegradation,
   pricingApplicability,
   profitabilityLabels,
   summary,
@@ -867,4 +868,54 @@ test("a non-labor deliverable carries an at-completion position; a travel line h
   assert.equal(p.value, 50000, "realized cost — there is no expense pace to project");
   assert.equal(projection(passThrough), null);
   assert.match(projectionReason(passThrough), /pass-through/);
+});
+
+// ---- rejected CLIN pricing text (#184) ------------------------------------------
+// Three states that must not collapse into each other: a healthy read, an unknown
+// policy, and a known policy whose CLIN-specific text was rejected.
+
+test("a rescued CLIN type reports its rejected text and the policy standing in", () => {
+  const degraded = policyDegradation(
+    policyClin({
+      code: "TM",
+      label: "Time and Materials",
+      source: "header",
+      rejected_type: "see attachment 2",
+    }),
+  );
+  assert.deepEqual(degraded, {
+    rejected: "see attachment 2",
+    policyLabel: "Time and Materials",
+    source: "header",
+  });
+  // And it changes nothing about what the row can say: the policy resolved, so the
+  // applicable concepts are exactly the T&M ones (#184 is provenance only).
+  const row = pricingApplicability(
+    policyClin({
+      family: "time_and_materials",
+      ceiling_meaning: "ceiling_price",
+      rejected_type: "see attachment 2",
+    }),
+  );
+  assert.equal(row.known, true);
+  assert.equal(row.earningsLabel, "Gross profit");
+});
+
+test("a healthy or unknown policy reports no degradation", () => {
+  // Inherited header type with nothing rejected — the normal mixed-award shape.
+  assert.equal(
+    policyDegradation(policyClin({ label: "Time and Materials", source: "header" })),
+    null,
+  );
+  // Unknown is its own state, already counted by `pricing_unknown`; it must not also
+  // read as degraded, or the same CLIN gets warned about twice in two vocabularies.
+  assert.equal(
+    policyDegradation({
+      is_labor: true,
+      pricing_policy: { known: false, family: "unknown", raw: "see attachment 2" },
+    }),
+    null,
+  );
+  assert.equal(policyDegradation({ is_labor: true }), null);
+  assert.equal(policyDegradation(undefined), null);
 });

@@ -2668,6 +2668,25 @@ def compute(
         1 for c in computed + nl_cards if not c["pricing_policy"]["known"]
     )
 
+    # The CLINs whose own type text was rejected and rescued by the header (#184).
+    # Deliberately *not* folded into `pricing_unknown`: these resolutions are real
+    # typed reads, the arithmetic on them is correct, and counting them as unknown
+    # would neutralise labels and withhold figures that are known. What they are is
+    # degraded — the award printed pricing text on the field with higher precedence
+    # and Runway could not read it, so a broader header type is standing in. Reported
+    # as its own list because the fix is per CLIN and the notice has to name the line,
+    # the text we could not read, and the policy doing the rescuing.
+    pricing_rejected = [
+        {
+            "clin": c["code"],
+            "rejected": c["pricing_policy"]["rejected_type"],
+            "policy_label": c["pricing_policy"]["label"],
+            "source": c["pricing_policy"]["source"],
+        }
+        for c in computed + nl_cards
+        if c["pricing_policy"]["known"] and c["pricing_policy"].get("rejected_type")
+    ]
+
     return {
         "contract": {
             "id": contract.get("id"),
@@ -2689,6 +2708,7 @@ def compute(
             # `pricing_policy` (#76), which is what code should branch on.
             "vehicle": header.get("contract_type"),
             "pricing_unknown": pricing_unknown,
+            "pricing_rejected": pricing_rejected,
             "pop_start": clk["pop_start"],
             "pop_end": clk["pop_end"],
             "current_week": cw,
