@@ -50,10 +50,26 @@ opposite remedy.
 ## This does not rank people against a target
 
 `capacity.py` states that nothing built on it may score people against their
-expected hours, and that constraint is kept: the gate here is **the CLIN being
-off-pace**, not the person being over. On a healthy contract nobody surfaces however
-many hours they work. What is ranked is *where an off-pace CLIN's money is going*,
-which is a fact about the contract. Runway never says someone is underperforming.
+expected hours, and that constraint is kept: the gate is **something being wrong with
+the CLIN**, never the person being over. On a healthy contract nobody surfaces however
+many hours they work. What is ranked is *where a CLIN in trouble is going*, which is a
+fact about the contract. Runway never says someone is underperforming.
+
+The gate has two halves, because a CLIN can be in trouble in two currencies (#193):
+
+  * its **dollars** are off-pace — `HOT_CLIN_STATES`, the original gate; or
+  * its **contracted hours** run out early — the `early` flag on `hours_ceilings`.
+
+Dollars alone was too narrow, and narrow in a way that read as broken. Only a T&M line
+prices labour so that hours over plan and dollars over plan are the same event; on
+every other type they come apart, and the interesting combination on a cost-plus line
+is precisely dollars *under*-running while hours *over*-run. A sweep of one bundle per
+contract type found five of six reporting nobody at all while the same payload's
+`hours_ceilings` said a category exhausted its estimate before the period ended — the
+panel contradicting its own response. Hours running out early is a staffing fact
+whatever the dollars are doing, so it opens the gate too, and `clins[].hot_because`
+names which half fired so a surface can say which one it is rather than implying a
+dollar overrun that has not happened.
 
 ## The hours ceiling (the "held to the hours on contract" half)
 
@@ -100,6 +116,12 @@ HOT_CLIN_STATES = burn.HOT_STATES
 # these rather than re-deriving them.
 STOP_OVERTIME = "stop_overtime"
 REDUCE_STAFFING = "reduce_staffing"
+
+# Which half of the gate a CLIN came through (#193). Named rather than inline strings
+# because the client mirrors the distinction to pick its sentence — an hours-only line
+# must not be described with a dollar forecast it does not have.
+GATE_DOLLARS = "dollars"
+GATE_HOURS = "hours"
 
 _DIAGNOSIS_LABELS = {
     STOP_OVERTIME: (
@@ -409,11 +431,21 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
     per_emp = _person_window_hours(charges, weeks)
     alloc_rows = _alloc_lookup(alloc)
 
-    hot_clins = {
+    # Computed before the gate rather than after, because its `early` flag is now half
+    # of the gate — see the module docstring.
+    ceilings = _hours_ceilings(
+        contract, period, rows, window, clin_cards, weeks, current_week, total_weeks
+    )
+
+    dollars_hot = {
         cid
         for cid, card in card_by_id.items()
         if card.get("base_status") in HOT_CLIN_STATES
     }
+    # `_hours_ceilings` only emits CLINs that are already in `card_by_id`, so this can
+    # never widen the gate to a line the allocation payload has no card for.
+    hours_hot = {c["clin"] for c in ceilings if c["early"]}
+    hot_clins = dollars_hot | hours_hot
 
     people = []
     excess_dollars_by_clin = {}
@@ -562,10 +594,18 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
             or exhaust_at_expected >= total_weeks
         )
         diagnosis = STOP_OVERTIME if (excess > 0 and lands_fine) else REDUCE_STAFFING
+        because = []
+        if cid in dollars_hot:
+            because.append(GATE_DOLLARS)
+        if cid in hours_hot:
+            because.append(GATE_HOURS)
         clins.append(
             {
                 "id": cid,
                 "status": card.get("base_status"),
+                # Which half of the gate opened. Order is dollars-first so a line that
+                # is both reads as a money finding, which is the stronger claim.
+                "hot_because": because,
                 "weekly": round(weekly, 2),
                 "weekly_at_expected": round(at_expected, 2),
                 "excess_weekly_dollars": round(excess, 2),
@@ -596,7 +636,5 @@ def compute_heat(contract: dict, rows: List[dict], alloc: dict) -> dict:
         "total_weeks": total_weeks,
         "people": people,
         "clins": clins,
-        "hours_ceilings": _hours_ceilings(
-            contract, period, rows, window, clin_cards, weeks, current_week, total_weeks
-        ),
+        "hours_ceilings": ceilings,
     }

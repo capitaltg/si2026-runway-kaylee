@@ -12,6 +12,7 @@ import {
   ceilingSentence,
   heatSummary,
   windowPhrase,
+  availabilityNote,
 } from "./heat.js";
 
 const HEAT = {
@@ -45,6 +46,33 @@ test("the person sentence names hours worked, hours available, the excess, then 
     personSentence(person(), HEAT),
     "184 hrs against 152 available over the last 4 charged weeks — 32 hrs over (8 hrs/wk) — costing CLIN 0002 $3,200/wk",
   );
+});
+
+// --- the row has to add up on its face ---------------------------------------
+
+test("leave is spelled out, so available reconciles with the expected week", () => {
+  // The reported bug: 40 hrs/wk expected and "against 144 available" over 4 weeks, with
+  // no sign of where the other 16 hours went. 40 × 4 = 160; the 16 were leave.
+  const p = person({ available_hours: 144, leave_hours: 16, worked_hours: 162, over_hours: 18 });
+  const sentence = personSentence(p, HEAT);
+  assert.ok(sentence.includes("162 hrs against 144 available (160 expected, less 16 hrs leave)"));
+});
+
+test("leave and holiday are both named when both were deducted", () => {
+  const p = person({ available_hours: 136, leave_hours: 16, holiday_hours: 8 });
+  assert.equal(
+    availabilityNote(p, HEAT),
+    "160 expected, less 16 hrs leave and 8 hrs holiday",
+  );
+});
+
+test("nothing deducted means no parenthetical — the arithmetic is already visible", () => {
+  assert.equal(availabilityNote(person({ leave_hours: 0, holiday_hours: 0 }), HEAT), null);
+  assert.ok(!personSentence(person(), HEAT).includes("expected, less"));
+});
+
+test("a window with no charged weeks yields no note rather than '0 expected'", () => {
+  assert.equal(availabilityNote(person({ leave_hours: 16 }), { window: { weeks: 0 } }), null);
 });
 
 test("unpriced hours name the CLIN without inventing a dollar figure", () => {
@@ -143,6 +171,37 @@ test("overtime-only diagnoses stopping it, priced in weeks of runway", () => {
   assert.ok(sentence.includes("Stop the overtime"));
   assert.ok(sentence.includes("running out in week 44"));
   assert.ok(sentence.includes("11.2 weeks of runway"));
+});
+
+test("an hours-only CLIN is described in hours, never with a dollar exhaust week", () => {
+  // #193: the gate now opens on contracted hours running out too. Such a line is on
+  // pace on money, so quoting `exhaust_week` would state a money forecast the server
+  // never made — here it is a week past PoP end, which is not a finding at all.
+  const sentence = diagnosisSentence({
+    id: "0001",
+    hot_because: ["hours"],
+    diagnosis: "stop_overtime",
+    exhaust_week: 63,
+    exhaust_week_at_expected: 70,
+    total_weeks: 52,
+  });
+  assert.ok(sentence.includes("on pace on dollars"));
+  assert.ok(sentence.includes("contracted hours run out"));
+  assert.ok(!sentence.includes("63"));
+  assert.ok(!sentence.includes("Stop the overtime"));
+});
+
+test("a CLIN hot on both currencies keeps the dollar remedy", () => {
+  const sentence = diagnosisSentence({
+    id: "0002",
+    hot_because: ["dollars", "hours"],
+    diagnosis: "stop_overtime",
+    exhaust_week: 44,
+    exhaust_week_at_expected: 55.2,
+    weeks_bought: 11.2,
+    total_weeks: 52,
+  });
+  assert.ok(sentence.includes("Stop the overtime"));
 });
 
 test("overstaffing diagnoses cutting people, and says the overtime is not the whole problem", () => {
