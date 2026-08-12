@@ -222,6 +222,21 @@ def clin_figures(clin: dict, margin: bool) -> dict:
     unsupported_notice = policy.get("notice") or UNSUPPORTED_POLICY
     if not clin.get("is_labor"):
         spent = clin.get("spent") or 0
+        # Unless the award priced this line fixed (#155): then it is a deliverable, not
+        # a pass-through, and the refusals are the fixed-price pair — a price earned on
+        # delivery, and a fee that cannot exist before the revenue does. Mirrors
+        # `clinFigures` in `web/src/profitability.js`, cell for cell.
+        if clin.get("margin_managed"):
+            return {
+                "revenue": withheld(PRICE_NOT_REVENUE_CLIN),
+                "cost": fact(spent),
+                "fee": withheld(
+                    unsupported_notice if unsupported else PRICE_NOT_REVENUE_FEE_CLIN
+                ),
+                "margin": withheld(
+                    unsupported_notice if unsupported else PRICE_NOT_REVENUE_FEE_CLIN
+                ),
+            }
         return {
             "revenue": fact(spent),
             "cost": fact(spent),
@@ -425,8 +440,10 @@ def _contract_type(burn: dict) -> str:
     labels = []
     for c in ordered_clins(burn):
         p = c.get("pricing_policy") or {}
-        label = "Unsupported" if p.get("status") == "unsupported" else (
-            p.get("label") if p.get("known") else None
+        label = (
+            "Unsupported"
+            if p.get("status") == "unsupported"
+            else (p.get("label") if p.get("known") else None)
         )
         if label and label not in labels:
             labels.append(label)
@@ -484,9 +501,11 @@ def _clin_sheet(ws, burn: dict, margin: bool) -> dict:
             ws,
             row,
             3,
-            "Unsupported"
-            if policy.get("status") == "unsupported"
-            else policy.get("label") if policy.get("known") else "Not stated",
+            (
+                "Unsupported"
+                if policy.get("status") == "unsupported"
+                else policy.get("label") if policy.get("known") else "Not stated"
+            ),
         )
         if policy.get("status") == "unsupported":
             policy_cell.comment = Comment(

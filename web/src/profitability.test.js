@@ -822,3 +822,49 @@ test("a failed contract list outranks the empty workspace it can no longer prove
   const failed = loadReducer(none, { type: "failed", message: "network error" });
   assert.equal(loadPhase(failed), "error");
 });
+
+// ---- non-labor is not automatically pass-through (#155) --------------------------
+// Travel/ODC lines are reimbursed at cost and earn no fee. A non-labor line the award
+// itself priced fixed is a deliverable, and the engine says which is which with
+// `margin_managed` — this module must not read `is_labor: false` as "pass-through".
+
+const passThrough = { is_labor: false, margin_managed: false, spent: 50000, pricing_policy: { known: true, family: "cost_reimbursement", ceiling_meaning: "estimated_cost", revenue_basis: "cost_plus_fixed_fee" } };
+const deliverable = { is_labor: false, margin_managed: true, spent: 50000, pricing_policy: { known: true, family: "fixed_price", ceiling_meaning: "firm_price", revenue_basis: "price_milestones" }, margin_position: { price: 80000, cost: 50000, projected_cost: 50000, projected_margin: 30000, projected_margin_pct: 0.375, eroding: false, known: true } };
+
+test("a travel CLIN still reports its logged dollars as cost and revenue with no fee", () => {
+  const f = clinFigures(passThrough, true);
+  assert.equal(f.revenue.value, 50000);
+  assert.equal(f.cost.value, 50000);
+  assert.match(f.fee.withheld, /pass-through/);
+  assert.equal(pricingApplicability(passThrough).earningsApplicable, false);
+});
+
+test("a fixed-price non-labor deliverable does not print its price as revenue", () => {
+  // The pass-through branch used to catch this line and report cost == revenue, which
+  // recognised a price on delivery Runway was never told about.
+  const f = clinFigures(deliverable, true);
+  assert.equal(f.revenue.value, null);
+  assert.match(f.revenue.withheld, /earns its price on delivery/);
+  // Cost is still a fact — a logged dollar has no rate ladder behind it.
+  assert.equal(f.cost.value, 50000);
+  // And the fee follows revenue down: price less cost so far is unspent budget.
+  assert.equal(f.fee.value, null);
+  assert.match(f.fee.withheld, /unspent budget, not profit/);
+  assert.equal(f.margin.value, null);
+});
+
+test("profit is the applicable concept on a non-labor deliverable, not 'not applicable'", () => {
+  const a = pricingApplicability(deliverable);
+  assert.equal(a.earningsApplicable, true);
+  assert.equal(a.earningsLabel, "Profit");
+  assert.equal(a.returnLabel, "Margin");
+  assert.equal(a.ceilingLabel, "Firm price");
+});
+
+test("a non-labor deliverable carries an at-completion position; a travel line has none", () => {
+  const p = projection(deliverable);
+  assert.equal(p.kind, "margin");
+  assert.equal(p.value, 50000, "realized cost — there is no expense pace to project");
+  assert.equal(projection(passThrough), null);
+  assert.match(projectionReason(passThrough), /pass-through/);
+});
