@@ -88,3 +88,43 @@ test("scope notices emit one stable warning per missing option modification", ()
     ["missing_option_mod:Option 1", "missing_option_mod:Option 2"],
   );
 });
+
+test("scope notices name the CLIN whose pricing type the header had to rescue", () => {
+  assert.deepEqual(
+    scopeNotices({
+      clin_scope: "period",
+      pop_scoped: true,
+      pricing_rejected: [
+        {
+          clin: "CLIN 0002",
+          rejected: "see attachment 2",
+          policy_label: "Time and Materials",
+          source: "header",
+        },
+      ],
+    }),
+    [
+      {
+        key: "pricing_rejected:CLIN 0002",
+        text: 'CLIN 0002 prints a pricing type Runway cannot read ("see attachment 2"), so its figures use the award header\'s Time and Materials policy instead.',
+      },
+    ],
+  );
+});
+
+test("scope notices stay quiet on a contract with no rejected CLIN types", () => {
+  // Both the healthy case and a malformed entry: a report with no text to show is
+  // not a notice, and printing an empty quotation would be worse than silence.
+  assert.deepEqual(
+    scopeNotices({ clin_scope: "period", pop_scoped: true, pricing_rejected: [] }),
+    [],
+  );
+  assert.deepEqual(
+    scopeNotices({
+      clin_scope: "period",
+      pop_scoped: true,
+      pricing_rejected: [{ clin: "CLIN 0001", rejected: "" }],
+    }),
+    [],
+  );
+});

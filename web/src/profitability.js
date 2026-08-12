@@ -63,6 +63,26 @@ const CEILING_LABEL = {
 const NO_EARNINGS_CONCEPT =
   "This pricing policy reimburses cost without a fee or profit mechanic.";
 
+// The rejected-CLIN-type read, if this line has one (#184). A policy that is `known`
+// and still carries `rejected_type` is a degraded read, not an unknown one: the CLIN
+// printed pricing text on the field with higher precedence, Runway could not map it,
+// and the award header rescued the resolution. Returns null for the healthy case the
+// ticket is explicit about leaving quiet — a CLIN carrying no type of its own and
+// inheriting the header is normal on a mixed award and warns about nothing. Kept apart
+// from `pricingApplicability` because it changes no label and no figure: every concept
+// here is as applicable as it was, and the only thing owed is provenance.
+export function policyDegradation(clin) {
+  const policy = clin?.pricing_policy || {};
+  if (policy.known !== true) return null;
+  const rejected = policy.rejected_type;
+  if (!rejected) return null;
+  return {
+    rejected,
+    policyLabel: policy.label || "header",
+    source: policy.source || null,
+  };
+}
+
 // The concepts a pricing-policy payload makes applicable on one CLIN. This consumes
 // semantic fields the backend already owns rather than reclassifying raw type text in
 // the browser. A future no-fee cost policy therefore works without adding another

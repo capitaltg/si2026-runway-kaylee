@@ -20,6 +20,18 @@ export function scopeNotices(contract = {}) {
       text: "Funded-dollar limits could not be set for this period: some CLINs state their own obligation but the documents print no contract obligated total to scope them against. Runway is reading against ceilings.",
     });
   }
+  // A CLIN printed its own pricing type, Runway could not read it, and the award
+  // header rescued the resolution (#184). The figures are a real typed read and stay
+  // as they are — what the reader is owed is the fact that the more specific field
+  // was rejected, so a mixed award is not silently calculated on its broad header
+  // type. Named per CLIN because that is the granularity of the fix.
+  for (const rejected of contract.pricing_rejected ?? []) {
+    if (!rejected?.clin || !rejected.rejected) continue;
+    notices.push({
+      key: `pricing_rejected:${rejected.clin}`,
+      text: `${rejected.clin} prints a pricing type Runway cannot read ("${rejected.rejected}"), so its figures use the award header's ${rejected.policy_label} policy instead.`,
+    });
+  }
   if (contract.pop_scoped === false) {
     notices.push({
       key: "pop_scope",
