@@ -394,6 +394,30 @@ def test_portfolio_totals_equal_the_sum_of_their_clins():
     assert ffp_card["runway_days"] is None
 
 
+def test_a_portfolio_card_reports_the_same_dollars_as_its_own_flight_deck():
+    # #190. `spent` is a *cost* figure on every fixed-price and cost-reimbursement
+    # CLIN, so a card computed without the contract's cost model prices the identical
+    # hours at the negotiated fallback while the Flight Deck prices them at resolved
+    # direct cost. The landing page then contradicts the detail page one click later —
+    # and on a margin-managed line it flips the status pill too.
+    #
+    # T&M is deliberately absent from the assertion loop below: its revenue basis IS
+    # billing, so it agrees either way and would pass against the bug.
+    rows = _rows()
+    model = _model()
+    for clin_type in ("FFP", "CPFF", "FPI"):
+        contract = _contract(clin_type)
+        card = burn.portfolio([(contract, rows, [], model)])["contracts"][0]
+        deck = burn.compute(contract, rows, [], model)["totals"]
+        assert card["spent"] == deck["spent"], clin_type
+
+    # The bug was invisible without a cost model, so pin that the fixture would in
+    # fact have caught it: at Level 1 the same contract reports a different figure.
+    level_1 = burn.portfolio([(_contract("FFP"), rows, [])])["contracts"][0]
+    with_cost = burn.portfolio([(_contract("FFP"), rows, [], model)])["contracts"][0]
+    assert level_1["spent"] != with_cost["spent"]
+
+
 def test_a_mixed_award_keeps_funding_vocabulary_on_its_funded_lines():
     # One award, an FFP deliverable and a T&M surge line, both burning hard. The
     # contract card must describe the funding breach — that's the more urgent of the

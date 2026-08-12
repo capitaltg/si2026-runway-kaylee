@@ -2891,10 +2891,20 @@ def compute(
 def portfolio(contracts_with_rows: List[tuple]) -> dict:
     """Cross-contract KPI aggregate + one summary card per contract.
     `contracts_with_rows` is a list of
-    (contract_dict, timesheet_rows, expense_rows)."""
+    (contract_dict, timesheet_rows, expense_rows[, cost_model]).
+
+    The cost model is optional per entry only so a test can state a contract that has
+    none. A caller that has one must pass it: `spent` is a *cost* figure on every
+    fixed-price and cost-reimbursement CLIN, so computing a card at Level 1 while the
+    Flight Deck computes the same contract at Level 2 makes the two surfaces report
+    different dollars for identical hours — and flips the status pill with them. T&M
+    is the one type that hides the mistake, because its revenue basis *is* billing.
+    """
     cards = []
-    for contract, rows, expenses in contracts_with_rows:
-        b = compute(contract, rows, expenses)
+    for entry in contracts_with_rows:
+        contract, rows, expenses = entry[0], entry[1], entry[2]
+        cost_model = entry[3] if len(entry) > 3 else None
+        b = compute(contract, rows, expenses, cost_model)
         c, t = b["contract"], b["totals"]
         labor = [x for x in b["clins"] if x.get("is_labor")]
         # Overall health watches every CLIN — a non-labor CLIN over its ceiling is

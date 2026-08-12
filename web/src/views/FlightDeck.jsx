@@ -11,6 +11,7 @@ import { suggestFor } from "../suggest.js";
 import { scopeNotices } from "../scope-notice.js";
 import { clampAlertIndex, nextAlertIndex, orderedFlightDeckAlerts } from "../flight-deck-alerts.js";
 import { planDrift, driftAlert, driftSentence, actualsDraft, rateResolver } from "../drift.js";
+import { marginAvailable } from "../profitability.js";
 
 const grotesk = "'Space Grotesk',sans-serif";
 const tileLabel = {
@@ -458,6 +459,16 @@ export default function FlightDeck({
         a.margin_position.projected_margin <= b.margin_position.projected_margin ? a : b,
       )
     : null;
+  // Whether this tile may print the margin it computed. `margin_position.known` says
+  // the arithmetic resolved; it does NOT say the cost underneath is a real buildup.
+  // A contract with LCAT direct rates but no indirect pool sits at Level 1 — cost is
+  // unburdened direct labor, so the margin is overstated by the whole fringe +
+  // overhead + G&A load, and `margin_available` is false. Profitability already
+  // withholds on that flag (#82); the hero is the largest number on the screen and
+  // has to withhold on the same one, or the two surfaces disagree about whether
+  // margin is knowable at all.
+  const marginKnown =
+    marginOnly && worstMargin.margin_position.known && marginAvailable(burn);
   // The tile's accent, from whichever status the tile is actually reporting. On the
   // margin hero there is no `hero` *by definition* (`marginOnly` requires it to be
   // absent), so reading `hero?.status` alone made every all-fixed-price contract
@@ -1474,7 +1485,7 @@ export default function FlightDeck({
           </div>
           <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 52, lineHeight: 1, marginTop: 8 }}>
             {marginOnly
-              ? worstMargin.margin_position.known
+              ? marginKnown
                 ? pct(worstMargin.margin_position.projected_margin_pct)
                 : "—"
               : hero && hero.days != null
@@ -1483,9 +1494,9 @@ export default function FlightDeck({
           </div>
           <div style={{ fontSize: 12.5, opacity: 0.92, marginTop: 8, lineHeight: 1.4 }}>
             {marginOnly
-              ? worstMargin.margin_position.known
+              ? marginKnown
                 ? `Tightest on ${worstMargin.code} · fixed price, so cost against the price is the constraint — not funding`
-                : `Fixed price throughout — margin needs direct rates before it can be read`
+                : `Fixed price throughout — margin needs a full cost buildup (direct rates and indirect pools) before it can be read`
               : hero
                 ? heroSub
                   ? `Limited by ${hero.clin} · ${heroSub}`
