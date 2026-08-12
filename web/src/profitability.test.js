@@ -634,7 +634,10 @@ test("an undetermined award-fee period is provisional; a zero determination is a
     periods_determined: 2,
     periods_total: 3,
     periods: [
-      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 45000 },
+      // Share raised to cover the determination (#185): a period determined above its
+      // own share is no longer a plan the endpoint will store, so a fixture shouldn't
+      // depict one. The provisional flags this test is about are unaffected.
+      { name: "Period 1", status: "determined", determined_amount: 60000, pool_share: 60000 },
       { name: "Period 2", status: "determined", determined_amount: 0, pool_share: 45000 },
       { name: "Period 3", status: "pending", determined_amount: null, pool_share: 45000 },
     ],
@@ -780,6 +783,39 @@ test("a CPAF with recorded periods reports them", () => {
     periods: [{ name: "Period 1", status: "pending" }],
   });
   assert.equal(a.periodsRecorded, true);
+});
+
+// #185 — the contradiction this ticket removes, pinned where it was visible. The
+// period rows and the fee total are the same money seen at two altitudes, so the rows
+// have to sum to it. They didn't before: a determination larger than its share saved
+// happily and `_award_fee_position` clamped it, leaving the table rendering $90,000
+// while the total counted $45,000. Write-time validation is what makes this assertion
+// hold for anything a user can now store.
+test("the award-fee period rows sum to the earned award fee", () => {
+  const a = awardPeriods({
+    basis: "base_plus_award",
+    award_pool: 180000,
+    award_earned: 71000,
+    award_available: 90000,
+    base_earned: 12000,
+    periods_determined: 2,
+    periods_total: 4,
+    periods: [
+      { name: "Q1", status: "determined", determined_amount: 38000, pool_share: 45000 },
+      { name: "Q2", status: "determined", determined_amount: 33000, pool_share: 45000 },
+      { name: "Q3", status: "pending", determined_amount: null, pool_share: 45000 },
+      { name: "Q4", status: "pending", determined_amount: null, pool_share: 45000 },
+    ],
+  });
+  const shown = a.periods
+    .filter((p) => !p.provisional)
+    .reduce((total, p) => total + (p.determined_amount || 0), 0);
+
+  assert.equal(shown, a.earned, "the rows the table renders are the fee total");
+  // The pending rows are the rest of what those determinations could have earned —
+  // available counts a period's share only once it has been evaluated, so the gap is
+  // fee the government declined, not fee it hasn't looked at yet.
+  assert.equal(a.available - a.earned, 19000);
 });
 
 // ---- Load state (#164) ---------------------------------------------------------
