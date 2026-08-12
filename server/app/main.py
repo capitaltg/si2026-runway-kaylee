@@ -15,6 +15,7 @@ from . import (
     ask,
     burn,
     capacity,
+    confidence,
     db,
     documents,
     draft,
@@ -253,8 +254,21 @@ def confirm(
     is what attaches it to the contract. Optional, and a stale or already-claimed id
     is reported rather than raising — manual entry has no document at all, and a
     contract must save either way. The source panel is evidence, not a gate.
+
+    Confidence is recomputed here rather than carried over from extraction (#160).
+    The scores and `confidence_note` sentences on this payload were calculated
+    against the figures the model read; the user has since edited them, so a
+    correction that fixed a footing error would be stored still wearing the warning
+    it fixed — and an edit that introduced one would be stored with no warning at
+    all. What is saved is what is scored, and the recomputed values come back in the
+    response so the review screen shows what the database now holds.
     """
+    confidence.apply(extraction, source="confirmed")
     data = extraction.model_dump()
+    # Marks these scores as measured against human-confirmed values rather than a raw
+    # extraction — the same numbers mean different things depending on who last
+    # touched the fields under them.
+    data["confidence_source"] = "confirmed"
     _seed_award_obligation(data)
     if seed is not None:
         data["sync_seed"] = seed
@@ -292,6 +306,20 @@ def confirm(
         # Zero on a fixed-price award, which prices the work without disclosing what
         # it costs us — that is Level 1 by nature, not a failed read.
         "direct_rates_stored": direct_stored,
+        # The rescored review screen (#160). Returned rather than left to a refetch
+        # because the warning a user just cleared has to disappear on the screen that
+        # cleared it; a badge that only corrects itself on the next visit reads as a
+        # correction that didn't take.
+        "confidence_source": "confirmed",
+        "field_confidence": extraction.contract.field_confidence,
+        "clin_confidence": [
+            {
+                "clin": cl.clin,
+                "confidence": cl.confidence,
+                "confidence_note": cl.confidence_note,
+            }
+            for cl in extraction.clins
+        ],
     }
 
 
