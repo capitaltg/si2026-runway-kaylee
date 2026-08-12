@@ -1851,6 +1851,30 @@ def _nl_status(
     return "ok"
 
 
+def _nl_margin_status(cost: float, price: float) -> str:
+    """Status for a fixed-price non-labor *deliverable* (#155) — cost against the
+    price, not spend against funding.
+
+    Same shape and bands as `_nl_status`, in the other vocabulary: `_pill` with
+    `margin_managed` turns them into "Margin at risk" / "Margin exceeded", so this
+    line never tells its reader their funding ran out. It has no funding limit to run
+    out of — the government owes the price on delivery (FAR 16.202) and every logged
+    dollar past that price is ours.
+
+    Realized only, like every other figure on a non-labor card: there is no expense
+    series to project a pace off, so `watch` is cost that has *already* reached
+    `_MARGIN_WATCH_FRAC` of the price rather than cost forecast to reach it. That errs
+    in the conservative direction — the amber arrives later here than on a labor CLIN,
+    never earlier."""
+    if cost <= 0:
+        return "tracked"
+    if price and cost >= price:
+        return "over"
+    if price and cost >= _MARGIN_WATCH_FRAC * price:
+        return "watch"
+    return "ok"
+
+
 def _funding_pace_from_history(
     contract: dict, period: dict, current_week: int, burn_weekly: float
 ):
@@ -2185,10 +2209,30 @@ def compute(
             funding_keeps_pace = clin_funded_frac >= elapsed_frac - _FUND_LAG_SLACK
         nl_policy = policy_of(c)
         nl_ceiling_is_price = nl_policy.funding_tripwire == "at_ceiling"
-        status = _nl_status(spent, budget, ceiling, incrementally_funded)
-        nl_funds_exceeded = _funds_exceeded(
-            spent, budget, ceiling, incrementally_funded
-        )
+        # #155: a non-labor line is a cost-reimbursable pass-through only when its own
+        # pricing says so. When the *award itself* priced this line fixed — the CLIN
+        # carried the type text, not the header — its ceiling is a price we agreed to
+        # deliver for, the logged dollars against it are our money, and there is no
+        # limitation of funds to warn about. Treating that as pass-through hid the only
+        # risk the line has (cost eating the price) behind a funding read it cannot have.
+        #
+        # `source == "clin"` is the whole guard, and it is doing real work: a travel or
+        # ODC line under a fixed-price header is normally reimbursed at cost and prints
+        # no type of its own, so inheriting the header would turn the commonest
+        # non-labor CLIN there is into a deliverable on no evidence. This asks the award
+        # rather than the title text — purpose is what the pricing says it is, and
+        # "Travel" in a title is a habit, not a term.
+        nl_deliverable = nl_policy.is_fixed_price and nl_policy.source == "clin"
+        if nl_deliverable:
+            status = _nl_margin_status(spent, ceiling)
+            # No funding limit, so nothing to exceed: FAR 52.232-20/-22 have no
+            # fixed-price version and `funding_clause_for` returns None below.
+            nl_funds_exceeded = False
+        else:
+            status = _nl_status(spent, budget, ceiling, incrementally_funded)
+            nl_funds_exceeded = _funds_exceeded(
+                spent, budget, ceiling, incrementally_funded
+            )
         remaining = budget - spent
         nl_cards.append(
             {
@@ -2203,11 +2247,11 @@ def compute(
                 "pricing_policy": nl_policy.payload(),
                 # A logged travel or ODC dollar is a cost dollar — there is no rate
                 # ladder between the two here, so the measured quantity is cost
-                # whatever the CLIN's type says, and there is no margin read to make
-                # of it. Both keys are present-and-flat so the lists below can filter
-                # labor and non-labor rows on the same field (#79).
+                # whatever the CLIN's type says (#79). What that cost is measured
+                # *against* is what the pricing decides: funded dollars on a
+                # reimbursable line, the price on a fixed-price deliverable (#155).
                 "measured_against": "cost",
-                "margin_managed": False,
+                "margin_managed": nl_deliverable,
                 "ceiling": ceiling,
                 # Binding budget the status is measured against, and whether it's
                 # the funded slice rather than the full ceiling (#41).
@@ -2238,11 +2282,18 @@ def compute(
                 "entries": exp_count.get(num, 0),
                 "status": status,
                 # No forward pace on a non-labor line, so the breach is realized:
-                # spend is past the ceiling, not just past the funded slice.
+                # spend is past the ceiling, not just past the funded slice. On a
+                # fixed-price deliverable the same statuses take the margin wording,
+                # because a red there is cost past the price, not funds gone (#155).
                 "status_label": (
                     "Tracked"
                     if status == "tracked"
-                    else _pill(status, spent >= ceiling, nl_funds_exceeded)
+                    else _pill(
+                        status,
+                        spent >= ceiling,
+                        nl_funds_exceeded,
+                        margin_managed=nl_deliverable,
+                    )
                 ),
                 "ceiling_breached": spent >= ceiling,
                 "funds_exceeded": nl_funds_exceeded,
@@ -2271,6 +2322,41 @@ def compute(
                 # labor does, so it resolves the same way (#81 part 5).
                 "ceiling_is_price": nl_ceiling_is_price,
                 "limited_by": _limited_by(incrementally_funded, nl_ceiling_is_price),
+                # Whether the figure a profitability surface would print as this
+                # line's revenue is revenue at all (#154, #155). True on a
+                # pass-through, where the reimbursement is the cost and lands the week
+                # the dollar is logged. False on a fixed-price deliverable: its price
+                # is earned on delivery, an input Runway does not have, so the price
+                # rolls into the contract total for reconciliation and the flag says
+                # it is not recognised — exactly the labor fixed-price contract.
+                "revenue_known": not nl_deliverable,
+                # And nothing is earned until revenue is. A deliverable's price less
+                # the cost so far is unspent budget, not profit.
+                "fee_known": not nl_deliverable,
+                # The realized cost-vs-price position that stands in for the funding
+                # read on a deliverable (#79's shape, #155's line). `projected_cost`
+                # equals cost because there is no expense pace to project — the same
+                # realized-only stance as `exhaust_week: None` above, and it keeps the
+                # key present so `margin_alerts` renders these rows beside labor.
+                "margin_position": (
+                    {
+                        "price": round(ceiling, 2),
+                        "cost": round(spent, 2),
+                        "projected_cost": round(spent, 2),
+                        "projected_margin": round(ceiling - spent, 2),
+                        "projected_margin_pct": (
+                            round((ceiling - spent) / ceiling, 4) if ceiling else None
+                        ),
+                        "eroding": bool(
+                            ceiling and spent >= _MARGIN_WATCH_FRAC * ceiling
+                        ),
+                        # A logged dollar is a cost dollar with no rate ladder behind
+                        # it, so unlike labor this is never a billing stand-in.
+                        "known": True,
+                    }
+                    if nl_deliverable
+                    else None
+                ),
             }
         )
 
@@ -2304,9 +2390,12 @@ def compute(
     # Revenue and fee rolled up the same way (#79). Non-labor actuals are cost dollars
     # that pass straight through to a reimbursement, so they contribute equally to both
     # and carry no fee — which keeps `total_fee == total_revenue - total_cost` true at
-    # the contract level exactly as it is per CLIN.
+    # the contract level exactly as it is per CLIN. A fixed-price non-labor deliverable
+    # contributes its price instead, the same as a fixed-price labor CLIN does (#155):
+    # the reconciliation holds either way, and `revenue_known` below is what tells a
+    # reader which of the two dollars they are looking at.
     total_revenue = sum(c["revenue"] for c in computed) + sum(
-        c["spent"] for c in nl_cards
+        c["ceiling"] if c["margin_managed"] else c["spent"] for c in nl_cards
     )
     total_fee = total_revenue - total_cost
     cost_model_out = cost_model or rates.CostModel()
@@ -2375,7 +2464,11 @@ def compute(
             "policy": c["pricing_policy"]["code"],
             **c["margin_position"],
         }
-        for c in computed
+        # Non-labor deliverables are in this list for the same reason they are in
+        # `tripwires` when they are reimbursable (#155): the risk is real, and this is
+        # the only list that describes it without funding vocabulary. Their position is
+        # realized rather than projected, which the identical keys make safe to render.
+        for c in computed + nl_cards
         if c["margin_managed"] and c["status"] in ("over", "watch")
     ]
 
@@ -2683,16 +2776,24 @@ def compute(
             # structural figure — either cost is a billing stand-in, or a
             # cost-type CLIN's award printed no fee figures for #80 to earn against.
             "revenue": round(total_revenue, 2),
-            # False when any labor CLIN's revenue is a contract price rather than
-            # revenue recognised (#154). Rolled up with `all` for the same reason cost
-            # is: one fixed-price line inside a mixed award makes the *contract* total
+            # False when any CLIN's revenue is a contract price rather than revenue
+            # recognised (#154). Rolled up with `all` for the same reason cost is: one
+            # fixed-price line inside a mixed award makes the *contract* total
             # part-recognised-part-price, and a total that mixes the two is not a
-            # revenue figure even though most of its dollars are.
+            # revenue figure even though most of its dollars are. Non-labor rows are in
+            # the rollup because a fixed-price deliverable is one of those lines (#155);
+            # a pass-through reports `True` and leaves the total exactly as it was. The
+            # `if computed` guard stays as it is: a contract with no labor at all keeps
+            # its conservative default rather than gaining a new claim here.
             "revenue_known": (
-                all(c["revenue_known"] for c in computed) if computed else False
+                all(c["revenue_known"] for c in computed + nl_cards)
+                if computed
+                else False
             ),
             "fee": round(total_fee, 2),
-            "fee_known": all(c["fee_known"] for c in computed) if computed else False,
+            "fee_known": (
+                all(c["fee_known"] for c in computed + nl_cards) if computed else False
+            ),
         },
         "hero": (
             {

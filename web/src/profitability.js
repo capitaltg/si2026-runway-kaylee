@@ -74,10 +74,13 @@ export function pricingApplicability(clin) {
   const ceilingLabel = known
     ? CEILING_LABEL[policy.ceiling_meaning] || "Price / limit"
     : "Limit · policy unknown";
-  // Non-labor spend cannot earn fee or profit regardless of whether its printed
-  // pricing type was recognized. Keep the unknown count and limit caveat, while
-  // stating the applicability fact that is already certain.
-  if (!clin?.is_labor) {
+  // Pass-through non-labor spend cannot earn fee or profit regardless of whether its
+  // printed pricing type was recognized. Keep the unknown count and limit caveat, while
+  // stating the applicability fact that is already certain. A non-labor line the award
+  // itself priced fixed is not pass-through and falls through to its family below: it
+  // has a price and a cost against it, so profit is exactly the applicable concept
+  // (#155), and `margin_managed` is the engine's own word for that.
+  if (!clin?.is_labor && !clin?.margin_managed) {
     return {
       known,
       ceilingLabel,
@@ -305,8 +308,25 @@ export function clinFigures(clin, margin) {
   // Cost is *known* here even at level 1, which is the one place the gate does not
   // apply: there is no rate ladder between a logged travel dollar and its cost, so
   // nothing is standing in for anything.
+  //
+  // Unless the award priced the line fixed (#155). Then its ceiling is a price earned
+  // on delivery, so the revenue refusal is the fixed-price one and the fee refusal
+  // follows it down — the price less the cost so far is unspent budget, not profit, and
+  // "earns no fee" would be the wrong sentence about a line that earns exactly that.
   if (!clin.is_labor) {
     const spent = clin.spent ?? 0;
+    if (clin.margin_managed) {
+      return {
+        revenue: withheld(PRICE_NOT_REVENUE_CLIN),
+        cost: fact(spent),
+        fee: unsupported
+          ? withheld(unsupportedNotice)
+          : withheld(PRICE_NOT_REVENUE_FEE_CLIN),
+        margin: unsupported
+          ? withheld(unsupportedNotice)
+          : withheld(PRICE_NOT_REVENUE_FEE_CLIN),
+      };
+    }
     return {
       revenue: fact(spent),
       cost: fact(spent),
@@ -406,7 +426,9 @@ export function projection(clin) {
 // to state, a level-1 fixed-price line has one that can't be called cost yet, and a
 // travel CLIN was never going to have one.
 export function projectionReason(clin) {
-  if (!clin.is_labor) return PASS_THROUGH;
+  // Pass-through only: a fixed-price non-labor deliverable does carry a position, and
+  // it reaches this function only in the states a labor one does (#155).
+  if (!clin.is_labor && !clin.margin_managed) return PASS_THROUGH;
   if (clin.margin_position && !clin.margin_position.known)
     return "This CLIN projects its spend against a firm price, but at cost-model level 1 that projection is billings — supply direct rates to read it as cost.";
   return "This CLIN's policy states no at-completion projection: its read is when the funding runs out, not what the work earns.";

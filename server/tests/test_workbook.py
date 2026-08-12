@@ -518,3 +518,36 @@ def test_portfolio_workbook_never_sums_a_withheld_column_into_a_number():
     assert ws.cell(5, cost).value == W.DASH
     assert ws.cell(4, ws.max_column).value.startswith("SIMULATED")
     assert ws.cell(5, ws.max_column).value == "imported"
+
+
+# ---- non-labor is not automatically pass-through (#155) -------------------------
+
+
+def test_clin_figures_pass_through_non_labor():
+    figures = W.clin_figures(
+        {"is_labor": False, "spent": 20_000.0, "pricing_policy": {"known": True}},
+        True,
+    )
+    assert figures["revenue"]["value"] == 20_000.0
+    assert figures["cost"]["value"] == 20_000.0
+    assert "pass-through" in figures["fee"]["withheld"]
+
+
+def test_clin_figures_fixed_price_non_labor_deliverable():
+    """The workbook mirrors `clinFigures` cell for cell, so a deliverable's price is
+    withheld here too — a `.xlsx` printing it as revenue is the same defect in a new
+    medium, and harder to spot because a spreadsheet reads as settled."""
+    figures = W.clin_figures(
+        {
+            "is_labor": False,
+            "margin_managed": True,
+            "spent": 20_000.0,
+            "pricing_policy": {"known": True},
+        },
+        True,
+    )
+    assert figures["revenue"]["value"] is None
+    assert "earns its price on delivery" in figures["revenue"]["withheld"]
+    assert figures["cost"]["value"] == 20_000.0
+    assert "unspent budget, not profit" in figures["fee"]["withheld"]
+    assert figures["margin"]["value"] is None
