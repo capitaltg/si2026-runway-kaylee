@@ -160,6 +160,13 @@ export default function Portfolio({ onOpen, onDeleted }) {
             inc && c.budget != null && c.ceiling
               ? Math.max(0, Math.min(100, (c.budget / c.ceiling) * 100))
               : null;
+          // Fixed price throughout: nothing runs out, so the engine reports no runway
+          // and sends the margin position that answers the equivalent question instead
+          // (#196). The stat swaps wholesale — label, number and caption — because a
+          // percentage printed under a "Runway" heading is worse than the blank
+          // "— days" this replaces. Mutually exclusive with `runway_days` by
+          // construction; see `burn._margin_hero`.
+          const mh = c.margin_hero;
           const isPicked = picked.includes(c.id);
           return (
             <div
@@ -211,12 +218,29 @@ export default function Portfolio({ onOpen, onDeleted }) {
               <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginTop: 16 }}>
                 <div>
                   <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 700 }}>
-                    Runway
+                    {mh ? "Margin" : "Runway"}
                   </div>
-                  <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 26, color: statusColor(c.status), lineHeight: 1.1 }}>
-                    {c.runway_days ?? "—"}
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dim)" }}> days</span>
+                  {/* Colored by whichever line the stat is actually about — the margin
+                      CLIN's own status on a fixed-price card, the way the Flight Deck
+                      hero does it, rather than the rollup that also watches travel. */}
+                  <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 26, color: statusColor(mh ? mh.status : c.status), lineHeight: 1.1 }}>
+                    {mh ? (
+                      mh.known ? pct(mh.pct) : "—"
+                    ) : (
+                      <>
+                        {c.runway_days ?? "—"}
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dim)" }}> days</span>
+                      </>
+                    )}
                   </div>
+                  {/* Withheld margin says what's missing. The blank this replaced said
+                      nothing, and on a fixed-price card "no runway" and "no cost
+                      buildup" are different problems with different fixes. */}
+                  {mh && (
+                    <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 1 }}>
+                      {mh.known ? `projected · ${mh.clin}` : "needs a cost buildup"}
+                    </div>
+                  )}
                 </div>
                 <div style={{ marginLeft: "auto", textAlign: "right" }}>
                   <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 700 }}>
@@ -225,8 +249,17 @@ export default function Portfolio({ onOpen, onDeleted }) {
                   <div style={{ fontFamily: grotesk, fontWeight: 700, fontSize: 26, color: "var(--text)", lineHeight: 1.1 }}>
                     {pct(burned)}
                   </div>
+                  {/* On a wholly fixed-price contract the ceiling *is* the price and
+                      constrains nothing, so "of ceiling" names a limit the margin copy
+                      next to it refuses to name. Only when every CLIN is fixed price:
+                      the common shape is priced labor plus a cost-reimbursable travel
+                      line, and there the ceiling really is a ceiling. */}
                   <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 1 }}>
-                    {inc ? `of funded · ${pct(c.pct)} of ceiling` : "of ceiling"}
+                    {inc
+                      ? `of funded · ${pct(c.pct)} of ceiling`
+                      : mh?.price_is_ceiling
+                        ? "of price"
+                        : "of ceiling"}
                   </div>
                 </div>
               </div>

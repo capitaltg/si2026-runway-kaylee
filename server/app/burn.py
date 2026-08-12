@@ -842,6 +842,44 @@ def _fee_payload(position, projected, in_revenue: bool, cost_known: bool):
     return out
 
 
+def _margin_hero(labor: List[dict], nl_cards: List[dict], cost_model) -> Optional[dict]:
+    """The hero tile's fixed-price stand-in (#79): the tightest projected margin across
+    the fixed-price labor lines, or None.
+
+    Emitted *only* when there is no runway hero, which is exactly when a runway cannot be
+    reported at all — so `hero` and `margin_hero` are mutually exclusive and which of the
+    two a surface shows is a decision made here, once. It used to be made in the Flight
+    Deck view, so the portfolio card — the screen that links to it — had no way to reach
+    the same answer and printed a blank day count instead (#196).
+
+    `known` is the conjunction the honesty contract asks for, and the figures are absent
+    rather than flagged when it is false: `margin_position.known` says the arithmetic
+    resolved, `cost_model.margin_available` says the cost underneath is a real buildup
+    rather than unburdened direct labor. #191 was a surface reading only the first. `clin`
+    and `status` stay either way — a withheld tile still names the line it is about and
+    still colors by its severity.
+    """
+    candidates = [c for c in labor if c["margin_managed"] and c["margin_position"]]
+    if not candidates:
+        return None
+    worst = min(candidates, key=lambda c: c["margin_position"]["projected_margin"])
+    position = worst["margin_position"]
+    known = bool(position["known"] and cost_model.margin_available)
+    return {
+        "clin": worst["code"],
+        "status": worst["status"],
+        "pct": position["projected_margin_pct"] if known else None,
+        "dollars": position["projected_margin"] if known else None,
+        "eroding": position["eroding"],
+        "known": known,
+        # Whether the contract's whole ceiling is a fixed price. False on the common
+        # shape — fixed-price labor plus a cost-reimbursable travel/ODC line — where the
+        # ceiling really is a ceiling, and a surface calling it "the price" would name a
+        # limit larger than anything the margin is measured against.
+        "price_is_ceiling": all(c["margin_managed"] for c in labor + nl_cards),
+    }
+
+
 def _fee_periods_by_clin(contract: dict, clins: List[dict]) -> dict:
     """Award-fee evaluation periods (#80) routed to the CLIN whose pool they draw on.
 
@@ -2399,6 +2437,12 @@ def compute(
     )
     total_fee = total_revenue - total_cost
     cost_model_out = cost_model or rates.CostModel()
+    # Only where there is no runway to report (see `_margin_hero`). A mixed contract
+    # keeps its runway hero: it has a real funding wall, and offering both would put the
+    # choice back in the surfaces.
+    margin_hero = (
+        _margin_hero(computed, nl_cards, cost_model_out) if worst is None else None
+    )
 
     tripwires = [
         {
@@ -2833,6 +2877,9 @@ def compute(
             if worst
             else None
         ),
+        # What the hero tile reports instead on an all-fixed-price contract (#79).
+        # Present only when `hero` is absent — see `_margin_hero`.
+        "margin_hero": margin_hero,
         "clins": computed + nl_cards,
         "tripwires": tripwires,
         "underburn": underburn,
@@ -2945,6 +2992,11 @@ def portfolio(contracts_with_rows: List[tuple]) -> dict:
                 "incrementally_funded": t["incrementally_funded"],
                 "weekly": t["weekly"],
                 "runway_days": b["hero"]["days"] if b["hero"] else None,
+                # And the fixed-price stand-in for it, on the contracts that have no
+                # runway to report (#196). Forwarded whole rather than re-derived, so the
+                # card and the Flight Deck it links to cannot name a different line or
+                # disagree about whether margin may be shown at all.
+                "margin_hero": b["margin_hero"],
                 "status": overall,
                 # Both flags handed over as-is so _pill applies its own precedence.
                 # Deciding it here instead would let the card contradict the very
