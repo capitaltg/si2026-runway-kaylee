@@ -142,6 +142,48 @@ const MARGIN_PILL = {
   unpriced: { label: "Unpriced", color: "--bad", bg: "--badBg" },
 };
 
+// MARGIN_PILL deliberately is not consulted here. It relabels the same statuses
+// for fixed-price work but gives each one the same color, so a second lookup would
+// only create another vocabulary to keep in sync.
+const SEVERITY_BY_TOKEN = {
+  "--bad": "bad",
+  "--warn": "warn",
+  "--good": "good",
+  "--faint": "neutral",
+  "--dim": "neutral",
+};
+
+// No green fallback: an unrecognised status is visibly neutral, never reassuring.
+export function severityOf(status) {
+  const p = PILL[status];
+  return p ? SEVERITY_BY_TOKEN[p.color] || "neutral" : "neutral";
+}
+
+const SEVERITY_COLOR = {
+  bad: "var(--bad)",
+  warn: "var(--warn)",
+  good: "var(--good)",
+  neutral: "var(--dim)",
+};
+
+export const severityColor = (severity) =>
+  SEVERITY_COLOR[severity] || SEVERITY_COLOR.neutral;
+
+// The gradient's second stop needs literal deep colors. Neutral intentionally
+// falls back to its flat accent rather than inventing a deep unknown-state color.
+const SEVERITY_DEEP = { bad: "#c23636", warn: "#c26e12", good: "#0b8f65" };
+
+export const statusColorDeep = (status) => {
+  const severity = severityOf(status);
+  return SEVERITY_DEEP[severity] || severityColor(severity);
+};
+
+// The one frontend mirror of burn.py's OFF_PACE_STATES. This is wider than the
+// backend HOT_STATES on purpose: funding needs a mod and under needs more hours.
+export const OFF_PACE_STATES = ["over", "watch", "funding", "under", "fee_eroding"];
+const OFF_PACE = new Set(OFF_PACE_STATES);
+export const isOffPace = (status) => OFF_PACE.has(status);
+
 const pillStyle = (p) => ({
   fontSize: 10.5,
   fontWeight: 700,
@@ -202,15 +244,7 @@ export function pill(
 }
 
 // status → the accent color a runway/exhaustion figure should take.
-export const statusColor = (status) =>
-  status === "over" || status === "unpriced" || status === "unsupported"
-    ? "var(--bad)"
-    : status === "watch" ||
-        status === "under" ||
-        status === "funding" ||
-        status === "fee_eroding"
-      ? "var(--warn)"
-      : "var(--good)";
+export const statusColor = (status) => severityColor(severityOf(status));
 
 export const panelStyle = {
   background: "var(--panel)",

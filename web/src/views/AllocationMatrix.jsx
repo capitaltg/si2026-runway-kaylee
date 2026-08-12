@@ -45,7 +45,7 @@ import {
   uncheckedText,
   rollupText,
 } from "../compliance.js";
-import { money, panelStyle, hueFor, statusColor, pill, shortDate } from "../format.js";
+import { money, panelStyle, hueFor, statusColor, pill, shortDate, isOffPace } from "../format.js";
 import ImportRateSchedule from "../components/ImportRateSchedule.jsx";
 import { ConfirmDialog } from "../components/ConfirmDialog.jsx";
 import { TrashButton } from "../components/DeleteContract.jsx";
@@ -1116,14 +1116,12 @@ export default function AllocationMatrix({
     }
   }
 
-  // Any labor CLIN not already finishing on plan. A mid-flight tool should let
-  // you course-correct BEFORE a line blows its budget, so this covers hot lines
-  // (over / watch / funding-due) and slow ones (under) — not just breaches.
+  // Any labor CLIN not already finishing on plan. This covers hot lines that need
+  // fewer hours, slow ones that need more, and funding-due lines that need a mod.
   // `fee_eroding` (#81) refines what used to come back as `ok` or `watch`, so without
   // it here a CLIN eating its fee would *leave* this set the moment the state shipped —
   // and losing fee to an overrun is exactly a line worth course-correcting.
-  const OFF_PACE = new Set(["over", "watch", "funding", "under", "fee_eroding"]);
-  const offPaceClins = clins.filter((c) => OFF_PACE.has(sim[c.id]?.status));
+  const offPaceClins = clins.filter((c) => isOffPace(sim[c.id]?.status));
   const HOURS_CAP = 50; // don't suggest booking anyone past ~50 hrs/wk
 
   // Rebalance every off-pace CLIN so its funds land exactly at PoP end

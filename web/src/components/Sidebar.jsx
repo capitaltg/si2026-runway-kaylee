@@ -1,4 +1,5 @@
 import React from "react";
+import { severityOf } from "../format.js";
 
 // Global sidebar, built to match docs/design/Runway.dc.html (issue #3).
 // Two scopes: app-wide (Portfolio, People) and "Current contract" — the latter
@@ -117,17 +118,20 @@ const sectionLabel = {
   marginBottom: 9,
 };
 
-// over → at risk, watch → watch closely, otherwise on plan. Health comes from
-// the real burn `hero`; with no contract loaded the card shows a neutral prompt.
+// Health comes from the shared status severity (#145); the copy stays here because it
+// is this card's wording, not vocabulary. Severity is what puts `fee_eroding` (#81)
+// under "Watch closely" beside `watch`: on plan against its funding, losing fee to the
+// overrun. Reading it off the shared map is also what stops the next backend state
+// reading "On plan" green here, which is the blind spot the old chain had.
 function healthOf(hero) {
-  const s = hero?.status;
-  if (s === "over") return { label: "At risk", color: "var(--bad)", dot: "var(--bad)" };
-  // `fee_eroding` (#81) sits with `watch`: on plan against its funding, losing fee to
-  // the overrun. Without it the health card reads "On plan" green on a contract whose
-  // fee the overrun is eating, which is the blind spot the state exists to close.
-  if (s === "watch" || s === "fee_eroding")
+  const severity = severityOf(hero?.status);
+  if (severity === "bad")
+    return { label: "At risk", color: "var(--bad)", dot: "var(--bad)" };
+  if (severity === "warn")
     return { label: "Watch closely", color: "var(--warn)", dot: "var(--warn)" };
-  return { label: "On plan", color: "var(--good)", dot: "var(--good)" };
+  if (severity === "good")
+    return { label: "On plan", color: "var(--good)", dot: "var(--good)" };
+  return { label: "Not reported", color: "var(--dim)", dot: "var(--dim)" };
 }
 
 export default function Sidebar({ view, setView, contract, hero }) {

@@ -28,6 +28,23 @@ from . import lcat as lcat_match
 from . import periods as period_ids
 from . import pricing, rates
 
+# ── The off-pace vocabulary (#145) ────────────────────────────────────────────────
+# Which statuses mean "not finishing on plan", grouped by the remedy each implies,
+# so the gates that read them cannot fork. Public and deliberately not private: the
+# whole point is that `heat.py` and `suggest.py` import these rather than keeping
+# their own copies, which is how `fee_eroding` came to be hand-patched into three
+# separate tuples.
+#
+# The three groups are NOT interchangeable, and merging them would be a behaviour
+# change, not a tidy-up: hot lines need fewer hours, a funding-due line needs its
+# next mod (never a staffing correction), and an underburning line needs *more*
+# hours. `OFF_PACE_STATES` is their union — the widest "not on plan" reading, which
+# is what the matrix's rebalance offers to touch and what `format.js` mirrors.
+HOT_STATES = ("over", "watch", "fee_eroding")  # hotter than the budget affords
+SLOW_STATES = ("under",)  # needs more hours, not fewer
+FUNDING_STATES = ("funding",)  # needs a mod, not a course correction
+OFF_PACE_STATES = HOT_STATES + FUNDING_STATES + SLOW_STATES
+
 # Status thresholds, ported verbatim from the design's computeClinFor.
 _PAUSED_WEEKS_LEFT = 999
 _PACE_WEEKS = 4  # trailing distinct weeks used to estimate forward weekly burn
@@ -1269,12 +1286,7 @@ def _compute_clin(
     projection = None
     # `weekly > 0` is the same test that produces `paused` / `unpriced` below, said
     # here because the status has not been resolved yet at this point.
-    projects = (
-        weekly > 0
-        and not margin_managed
-        and not past_pop
-        and remaining > 0
-    )
+    projects = weekly > 0 and not margin_managed and not past_pop and remaining > 0
     if projects and pop_start and absence:
         projection = _absence_projection(
             spent=spent,

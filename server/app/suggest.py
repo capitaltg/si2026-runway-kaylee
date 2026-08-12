@@ -64,6 +64,7 @@ already agree on.
 import math
 from typing import List, Optional
 
+from . import burn
 from .heat import REDUCE_STAFFING, STOP_OVERTIME
 
 # Mirrors AllocationMatrix.jsx's HOURS_CAP. Nobody is ever booked past this, in
@@ -76,15 +77,14 @@ HOURS_CAP = 50
 # Dana to 39.6 hrs/wk" trains people to stop reading the list.
 MIN_MOVE_HOURS = 0.5
 
-# CLIN states this solves for. `over`/`watch` reduce; `under` raises. Kept aligned
-# with AllocationMatrix's OFF_PACE set so the strip and the toolbar agree on which
-# lines are even in play.
+# CLIN states this solves for. `over`/`watch` reduce; `under` raises. Funding is
+# intentionally absent: it needs a mod, not a staffing course correction.
 # `fee_eroding` (#81) is here because it *replaces* `ok`/`watch` on a CLIN whose cost
 # overrun is eating its fee — so leaving it out would quietly drop those lines out of
 # the strip the moment the state shipped. Fewer hours is also the actual remedy: the
 # overrun is against estimated cost, and cost is what the moves move.
-REDUCE_STATES = ("over", "watch", "fee_eroding")
-RAISE_STATES = ("under",)
+REDUCE_STATES = burn.HOT_STATES
+RAISE_STATES = burn.SLOW_STATES
 
 ROLL_OFF = "roll_off"
 TRIM = "trim"

@@ -94,7 +94,7 @@ MIN_OVER_HOURS_PER_WEEK = 1.0
 # CLIN eating its fee, so it has to be listed or those lines would fall out of the gate
 # the moment the state shipped — and overtime on a line already past estimated cost is
 # the sharpest version of the thing this gate looks for.
-HOT_CLIN_STATES = ("over", "watch", "fee_eroding")
+HOT_CLIN_STATES = burn.HOT_STATES
 
 # The two diagnoses, and the remedy each implies. #63's move solver branches on
 # these rather than re-deriving them.
