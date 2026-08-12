@@ -120,9 +120,49 @@ export function classifyContractType(text) {
   return { code: null, unknown: "unsupported" };
 }
 
-// Should the review screen offer the cost/fee fields on a CLIN of this type?
-export function offersCostFeeFields(text) {
-  const { code } = classifyContractType(text);
+// The policy one CLIN actually prices under: `CLIN.type` → header `contract_type`
+// → unknown. A mirror of `policy_for` in `server/app/pricing.py`, and for the same
+// reason the table above is one — the review screen decides which fields to offer
+// before there is a contract to ask the server about, and the answer it gives has
+// to be the answer the server will give once the draft is saved.
+//
+// The CLIN wins because mixed awards are normal, and a CLIN with no type of its own
+// on a CPFF award is CPFF — which is the whole bug: reading only `CLIN.type` hid the
+// cost and fee inputs on exactly the lines that inherit a fee-bearing policy (#183).
+// A CLIN whose own text is unreadable still falls through to the header, with the
+// rejected text carried out on `rejected` so the fallback doesn't erase it.
+//
+// `{ code, source, unknown, rejected }` — `code` and `unknown` are mutually
+// exclusive; `source` is "clin" or "header" when something resolved.
+export function effectiveContractType(clinType, headerType) {
+  const candidates = [
+    ["clin", clinType],
+    ["header", headerType],
+  ];
+
+  let rejected = null;
+  for (const [source, raw] of candidates) {
+    const { code, unknown } = classifyContractType(raw);
+    if (code) return { code, source, unknown: null, rejected };
+    // Text was present but unmappable. Keep the first — the most specific — and
+    // carry on looking for a field that does resolve.
+    if (unknown !== "absent" && rejected === null) rejected = String(raw ?? "").trim();
+  }
+
+  // Nothing resolved. Report the reason from the most specific field carrying any
+  // text: a CLIN saying "IDIQ" is a vehicle problem, not a missing-data one.
+  for (const [, raw] of candidates) {
+    const { unknown } = classifyContractType(raw);
+    if (unknown !== "absent") return { code: null, source: null, unknown, rejected };
+  }
+  return { code: null, source: null, unknown: "absent", rejected };
+}
+
+// Should the review screen offer the cost/fee fields on this CLIN? Answered from the
+// effective policy, so a blank CLIN type on a cost-type award offers them and an
+// explicit FFP CLIN on that same award does not.
+export function offersCostFeeFields(clinType, headerType) {
+  const { code } = effectiveContractType(clinType, headerType);
   if (code) return COST_OR_INCENTIVE.has(code);
   // A vehicle, absent text, or unsupported text prices nothing safely.
   return false;

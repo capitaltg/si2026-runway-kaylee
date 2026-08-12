@@ -921,6 +921,9 @@ function Review({ value, onChange, editing, setEditing, onReset, onConfirm, seed
                   setRate={setRate}
                   addRate={addRate}
                   removeRate={removeRate}
+                  // The award's own type, so a CLIN that states no type of its own
+                  // offers the fields of the policy it will inherit on save (#183).
+                  headerType={c.contract_type}
                 />
               ))}
               {editing && (
@@ -1062,17 +1065,19 @@ const COST_FEE_FIELDS = [
 ];
 
 // Whether to offer the cost/fee fields on a CLIN that has none filled in yet is
-// `offersCostFeeFields`, which reads the type text the way the server's classifier does.
-// A firm-fixed-price line has one price and no fee, so ten empty money inputs on it
-// would be noise on the common case; a line whose type says cost-plus or incentive is
-// one where the user has a real reason to type them — and that is true of "Fixed Price
-// Incentive" however it is spelled, which a prefix match on `fpi` got wrong (#163).
+// `offersCostFeeFields`, which resolves the effective policy the way the server's
+// `policy_for` does: the CLIN's own type, else the award header's. A firm-fixed-price
+// line has one price and no fee, so ten empty money inputs on it would be noise on the
+// common case; a line that prices cost-plus or incentive — whether it says so itself or
+// inherits it from the header (#183) — is one where the user has a real reason to type
+// them. That is true of "Fixed Price Incentive" however it is spelled, which a prefix
+// match on `fpi` got wrong (#163).
 
 // Cost, fee, and whether they foot to the ceiling. Hidden entirely on a CLIN with
 // nothing to say — an FFP line is not missing these, it does not have them.
-function CostFeeBlock({ cl, idx, editing, setClin }) {
+function CostFeeBlock({ cl, idx, editing, setClin, headerType }) {
   const filled = COST_FEE_FIELDS.filter(([k]) => cl[k] != null && cl[k] !== "");
-  const show = editing && (filled.length > 0 || offersCostFeeFields(cl.type))
+  const show = editing && (filled.length > 0 || offersCostFeeFields(cl.type, headerType))
     ? COST_FEE_FIELDS
     : filled;
   if (show.length === 0 && !cl.confidence_note) return null;
@@ -1123,7 +1128,7 @@ function CostFeeBlock({ cl, idx, editing, setClin }) {
 
 // One CLIN line, with an expandable fully-burdened labor-rate table (the rates
 // the burn engine will price hours against). Read-only or editable.
-function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate, addRate, removeRate }) {
+function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate, addRate, removeRate, headerType }) {
   const rates = cl.labor_rates || [];
   const cell = { padding: "9px 8px", fontSize: 13, verticalAlign: "middle" };
   const mono = { fontFamily: "'IBM Plex Mono',monospace" };
@@ -1236,7 +1241,7 @@ function ClinRow({ cl, idx, editing, open, toggle, setClin, removeClin, setRate,
         )}
       </div>
 
-      <CostFeeBlock cl={cl} idx={idx} editing={editing} setClin={setClin} />
+      <CostFeeBlock cl={cl} idx={idx} editing={editing} setClin={setClin} headerType={headerType} />
 
       {/* labor toggle + rate expander */}
       <div style={{ padding: "0 16px 8px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
