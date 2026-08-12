@@ -886,6 +886,108 @@ def validate_fee_period(entry) -> Optional[str]:
     return None
 
 
+def _dollars(value: float) -> str:
+    """A figure for an error message. Whole dollars where the number is whole, because
+    "$45,000.00" in a sentence reads like precision that isn't being claimed."""
+    return f"${value:,.2f}".replace(".00", "")
+
+
+# Half a cent. Shares and determinations arrive as floats, and a plan that sums to the
+# pool within rounding is the plan summing to the pool — refusing it would be arithmetic
+# pedantry aimed at a user who typed the right numbers.
+_FEE_PLAN_EPSILON = 0.005
+
+
+def validate_fee_plan(periods, pools) -> Optional[str]:
+    """A human-readable problem with an award-fee plan taken as a whole, or None.
+
+    `validate_fee_period` checks each period against itself. This checks the plan
+    against the pool it draws on, which is the only place the contradiction in #185
+    can be caught: a determination larger than its period's share of the pool used to
+    save happily and then be clamped by `_award_fee_position`, so the period table
+    showed one number and the fee total counted another.
+
+    `pools` maps CLIN id to that CLIN's award-fee pool. Routing repeats the rule in
+    `burn._fee_periods_by_clin` deliberately — a period must validate against the same
+    pool it will later earn against, so the two must not drift apart. An award with no
+    pool visible at all validates nothing: the determinations can be entered before the
+    document that prices them is imported, and refusing them would be Runway demanding
+    the paperwork arrive in its preferred order.
+    """
+    records = normalize_fee_periods(periods)
+    bearers = {str(k): float(v) for k, v in (pools or {}).items() if v is not None}
+    if not records or not bearers:
+        return None
+
+    named = ", ".join(sorted(bearers))
+    fallback = next(iter(bearers)) if len(bearers) == 1 else None
+    routed: dict = {}
+    for record in records:
+        target = record["clin"] or fallback
+        if target is None:
+            return (
+                f"{record['name']!r} doesn't say which CLIN's award-fee pool it draws "
+                f"on, and this award carries {len(bearers)} of them ({named}). Name the "
+                "CLIN on the period — a determination counted against the wrong pool is "
+                "fee that was never awarded."
+            )
+        if str(target) not in bearers:
+            return (
+                f"{record['name']!r} names CLIN {target}, which carries no award-fee "
+                f"pool. The pools on this award are on {named}."
+            )
+        routed.setdefault(str(target), []).append(record)
+
+    for clin_id, group in routed.items():
+        pool = bearers[clin_id]
+        silent = [r for r in group if r["pool_share"] is None]
+        explicit = [r for r in group if r["pool_share"] is not None]
+
+        # Mixed plans are refused rather than filled in. Splitting what's left of the
+        # pool across the silent periods would be Runway inferring a negotiated fee
+        # structure, the same thing it refuses to do with tranche cadence.
+        if explicit and silent:
+            missing = ", ".join(repr(r["name"]) for r in silent)
+            return (
+                f"This plan states a pool_share on some of CLIN {clin_id}'s periods and "
+                f"not on others ({missing}). Give every period an explicit share, or "
+                "none of them and let the pool split evenly — Runway will not infer how "
+                "the rest of the pool was meant to divide."
+            )
+
+        if explicit:
+            total = sum(r["pool_share"] for r in explicit)
+            if total > pool + _FEE_PLAN_EPSILON:
+                return (
+                    f"CLIN {clin_id}'s period shares total {_dollars(total)}, more than "
+                    f"its {_dollars(pool)} award-fee pool."
+                )
+            even = None
+        else:
+            even = pool / len(group)
+
+        for record in group:
+            if record["status"] != "determined":
+                continue
+            amount = record["determined_amount"] or 0.0
+            share = even if record["pool_share"] is None else record["pool_share"]
+            if amount <= share + _FEE_PLAN_EPSILON:
+                continue
+            if even is None:
+                return (
+                    f"{record['name']!r} was determined at {_dollars(amount)}, more than "
+                    f"the {_dollars(share)} share of the pool it is worth."
+                )
+            return (
+                f"{record['name']!r} was determined at {_dollars(amount)}, more than the "
+                f"{_dollars(share)} it can earn: with no pool_share stated, CLIN "
+                f"{clin_id}'s {_dollars(pool)} pool splits evenly across "
+                f"{len(group)} periods. State each period's pool_share if the award-fee "
+                "plan is not an even split."
+            )
+    return None
+
+
 def normalize_fee_periods(periods) -> Tuple[dict, ...]:
     """Award-fee periods in canonical form, ordered as given.
 

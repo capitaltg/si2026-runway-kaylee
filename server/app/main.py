@@ -1833,6 +1833,21 @@ class FeePeriodsIn(BaseModel):
     periods: list = []
 
 
+def _award_fee_pools(contract: dict) -> dict:
+    """Each CLIN's award-fee pool, keyed by CLIN id, for validating a fee plan (#185).
+
+    Read off the CLIN alone, exactly as `burn._fee_periods_by_clin` reads it when it
+    routes the same periods to the same pools. A pool the award only states at the
+    header (#159) is deliberately not rescued here: burn wouldn't route a period to
+    that CLIN either, so validating against it would refuse a plan on a pool the
+    engine never earns against.
+    """
+    return {
+        str(c.get("clin")): pricing.fee_terms(c).award_fee_pool
+        for c in contract.get("clins") or []
+    }
+
+
 @app.get("/api/contracts/{contract_id}/fee-periods")
 def get_contract_fee_periods(contract_id: int):
     """A contract's award-fee evaluation periods (#80)."""
@@ -1855,11 +1870,24 @@ def set_contract_fee_periods(contract_id: int, body: FeePeriodsIn):
     error that books fee nobody has awarded. Returns the stored periods rather than an
     ack: a determination moves earned fee on the Flight Deck, and the caller has to be
     able to show the number move.
+
+    Two passes, because a fee plan can be wrong in two different ways (#185). Each
+    period is checked against itself, then the plan is checked against the pool it
+    draws on — the second is what stops a determination larger than its share from
+    being saved and silently clamped later, which left the period table and the fee
+    total telling the reader two different numbers.
     """
     for entry in body.periods or []:
         problem = pricing.validate_fee_period(entry)
         if problem:
             raise HTTPException(status_code=400, detail=problem)
+
+    contract = db.get_contract(contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Contract not found.")
+    problem = pricing.validate_fee_plan(body.periods, _award_fee_pools(contract))
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
 
     updated = db.set_contract_fee_periods(contract_id, body.periods)
     if updated is None:
