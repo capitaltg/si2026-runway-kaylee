@@ -16,6 +16,7 @@ and rewritten by that script. See "Staleness" at the bottom.
 | `fixtura-runway-burn-demo.award.sf26.pdf` | The signed award on a real **SF-26**, plus the Section B fully-burdened labor-rate schedule. Drop into Runway's Ingest step. |
 | `fixtura-runway-burn-demo.mod.P00001.sf30.pdf` | **SF-30** modification P00001 — feed to `POST /api/contracts/{id}/mods`, one at a time. |
 | `fixtura-runway-burn-demo.mod.P00002.sf30.pdf` | **SF-30** modification P00002 — feed to `POST /api/contracts/{id}/mods`, one at a time. |
+| `fixtura-runway-burn-demo.mod.P00003.sf30.pdf` | **SF-30** modification P00003 — the FIX: raises the ceiling and obligates the next tranche, clearing the red board. Ingest LAST, after the tripwire has been shown. |
 | `fixtura-runway-burn-demo.contract.json` | The award as structured data — periods, CLINs, labor rates, ceiling vs. obligated, and the full `obligation_history`. |
 | `fixtura-runway-burn-demo.timesheets.csv` | Weekly hours booked to the labor CLINs — 364 rows, one per person per week across the elapsed PoP. `total_hours` is **billable** (regular + overtime); leave and holidays are carried separately and are not chargeable. |
 | `fixtura-runway-burn-demo.labor.csv` | Labor distribution sample (bill rate x hours), illustrative only — Runway burns from the timesheets. |
@@ -24,8 +25,8 @@ and rewritten by that script. See "Staleness" at the bottom.
 ## The award
 
 PIID **7026HEXDVC0001043** (Department of Homeland Security), T&M. Ceiling
-**$4,677,562.40**, obligated **$2,925,000.00** (62.5% funded). PoP
-**2026-01-21 -> 2027-01-20** — mid-flight at week
+**$4,585,135.20**, obligated **$2,825,000.00** (61.6% funded). PoP
+**2026-01-28 -> 2027-01-27** — mid-flight at week
 **28 of 52**, 24 weeks remaining.
 
 CLINs: 0001 (labor), 0002 (cost), 0003 (cost).
@@ -37,23 +38,48 @@ mods — ingest them one at a time to reconstruct the dated history:
 
 | Action | Effective | Amount | Cumulative obligated | Type |
 |---|---|---|---|---|
-| Award | 2026-01-21 | $800,000.00 | $800,000.00 | Initial award / base-period funding |
-| P00001 | 2026-03-27 | $950,000.00 | $1,750,000.00 | Incremental funding (FAR 52.232-22) |
-| P00002 | 2026-05-31 | $1,175,000.00 | $2,925,000.00 | Incremental funding (FAR 52.232-22) |
+| Award | 2026-01-28 | $775,000.00 | $775,000.00 | Initial award / base-period funding |
+| P00001 | 2026-04-03 | $925,000.00 | $1,700,000.00 | Incremental funding (FAR 52.232-22) |
+| P00002 | 2026-06-07 | $1,125,000.00 | $2,825,000.00 | Incremental funding (FAR 52.232-22) |
 
 Re-ingesting a mod is idempotent (dedup by mod number).
 
 ## Measured result
 
-Measured by `burn.compute` on the generated timesheets, 2026-08-05:
+Measured by `burn.compute` on the generated timesheets, 2026-08-12:
 
 | CLIN | Title | Ceiling | Funded | Funded % | Spent | Funds exhaust | Runway | Status |
 |---|---|---|---|---|---|---|---|---|
-| 0001 | Professional Services (Labor) | $4,314,562.40 | $2,800,000.00 | 64.9% | $2,881,270.58 | wk 27.16 | 0 d | `over` |
+| 0001 | Professional Services (Labor) | $4,229,135.20 | $2,700,000.00 | 63.8% | $2,853,249.16 | wk 26.46 | 0 d | `over` |
 
 Red tripwires firing: **1**. Contract `all_clear`: **False**.
 
 **Acceptance:** PASS — at least one labor CLIN reads red, with a tripwire firing.
+
+## The fix (P00003)
+
+The story does not end red. `7026HEXDVC0001043` — P00003, dated
+2026-08-12 — is the supplemental agreement that answers the tripwire, and it
+moves **two** things, because money alone would not clear this board: at the
+measured run rate the labor line projects past its old not-to-exceed value before
+the period ends, so funding without ceiling just moves the red date.
+
+| | |
+|---|---|
+| Obligates | **$1,750,000.00** to CLIN 0001 (funded $4,450,000.00) |
+| Raises the CLIN ceiling by | **$1,320,864.80** (to $5,550,000.00) |
+| New contract ceiling | $5,906,000.00 |
+| New cumulative obligated | $4,575,000.00 |
+
+Measured on the same timesheets, with the mod applied:
+
+| CLIN | Funded | Spent | Runway | Status |
+|---|---|---|---|---|
+| 0001 | $4,450,000.00 | $2,853,249.16 | 112 d | `ok` |
+
+Red tripwires firing: **0**. Contract `all_clear`: **True**.
+
+P00003 clears the Flight Deck.
 
 ## How it was generated
 
