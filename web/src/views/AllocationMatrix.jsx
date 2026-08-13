@@ -306,6 +306,11 @@ export default function AllocationMatrix({
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  // The way out of an edited grid, waiting on a confirm (#202): "discard" for throwing
+  // an edit away, "actuals" for going back to what is actually running. Both land on
+  // the same `reset()`; they are held apart because the two prompts say different
+  // things about the same keystroke. Null means nothing is being asked.
+  const [pendingExit, setPendingExit] = useState(null);
   // LCAT → rate-line mapping (#64). `rateLines` is every line in play on this
   // contract plus the mappings already saved; `mapping` is the open affordance
   // ({ lcat, clinId, cause, suggestion, priced_on }), which is what the ⚠ opens
@@ -988,12 +993,7 @@ export default function AllocationMatrix({
   // stays, behind a confirm, now that Save sits next to it.
   function discardChanges() {
     if (!dirty) return;
-    const warning =
-      loadedPlanName && unsaved
-        ? `Discard unsaved changes to “${loadedPlanName}”? The saved plan itself is kept.`
-        : "Discard this what-if and go back to the synced actuals?";
-    if (!window.confirm(warning)) return;
-    reset();
+    setPendingExit({ mode: "discard" });
   }
 
   // Back out of a plan to what is actually running. The same `reset()` Discard uses,
@@ -1004,13 +1004,11 @@ export default function AllocationMatrix({
   // switching back from a cleanly-saved plan costs nothing and shouldn't ask.
   function showActuals() {
     if (!loadedPlan && !dirty) return;
-    if (unsaved) {
-      const warning = loadedPlanName
-        ? `Go back to the synced actuals? Unsaved changes to “${loadedPlanName}” are lost — the saved plan itself is kept.`
-        : "Go back to the synced actuals? This unsaved what-if is lost.";
-      if (!window.confirm(warning)) return;
+    if (!unsaved) {
+      reset();
+      return;
     }
-    reset();
+    setPendingExit({ mode: "actuals" });
   }
 
   // Persist the current sim state (grid + adds + removals + absence) under a name.
@@ -3167,6 +3165,55 @@ export default function AllocationMatrix({
               what-if — you'd just have to name it again to save it.
             </div>
           )}
+        </ConfirmDialog>
+      )}
+      {pendingExit && (
+        // The two ways out of an edited grid (#202), on the app's own dialog rather
+        // than the browser's. Same `reset()` underneath, deliberately different copy:
+        // Discard is damage you're doing, Show actuals is a place you're going. Both
+        // say what survives — a saved plan is not what's at risk here.
+        <ConfirmDialog
+          title={
+            pendingExit.mode === "discard"
+              ? loadedPlanName
+                ? `Discard changes to “${loadedPlanName}”?`
+                : "Discard this what-if?"
+              : "Go back to the synced actuals?"
+          }
+          confirmLabel={pendingExit.mode === "discard" ? "Discard changes" : "Show actuals"}
+          onCancel={() => setPendingExit(null)}
+          onConfirm={() => {
+            setPendingExit(null);
+            reset();
+          }}
+        >
+          <div>
+            {unsaved ? (
+              <>
+                The hours, planned adds, roll-offs and absences typed into this grid
+                since it was last saved{" "}
+                <b style={{ color: "var(--text)" }}>will be lost.</b>
+              </>
+            ) : (
+              <>
+                The grid goes back to the hours that are actually synced. Nothing typed
+                here is unsaved, so nothing is lost.
+              </>
+            )}
+          </div>
+          {loadedPlanName ? (
+            <div style={{ marginTop: 8 }}>
+              The saved plan{" "}
+              <b style={{ color: "var(--text)" }}>“{loadedPlanName}”</b> is kept, as it
+              was when you last saved it — you can load it again from Plans.
+            </div>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              This what-if was never saved under a name, so there's nothing to load it
+              back from.
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}>No synced hours, rates or funding change.</div>
         </ConfirmDialog>
       )}
     </div>
