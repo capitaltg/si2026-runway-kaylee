@@ -56,6 +56,30 @@ const SYNONYMS = {
     "labor hours",
     "labour hour",
   ],
+  // Bare cost, no fee (FAR 16.302). Every spelling names *cost* and stops — none of
+  // them names a fee — which is why they read as the no-fee type and not as the
+  // cost-reimbursement family at large. "cost plus" is deliberately absent in any
+  // spelling: it names the family, not a type (fixed, incentive and award fee are all
+  // cost-plus), so it stays unsupported rather than resolving to a guess.
+  COST: [
+    "cost",
+    "cost contract",
+    "costcontract",
+    "cost reimbursement",
+    "costreimbursement",
+    "cost reimbursable",
+    "costreimbursable",
+    "cost type",
+    "costtype",
+    "cost no fee",
+    "costnofee",
+    "no fee cost",
+    "nofeecost",
+    "cost reimbursement no fee",
+    "costreimbursementnofee",
+    "cost reimbursable no fee",
+    "costreimbursablenofee",
+  ],
   CPFF: [
     "cpff",
     "cost plus fixed fee",
@@ -104,6 +128,12 @@ const VEHICLE_KEYS = new Set(VEHICLES.map(key));
 // incentive types. FPI is a fixed-price policy (FAR 16.403) that nonetheless prices
 // from a target cost and a share ratio, which is exactly why it belongs here and why
 // leaving it out was the bug.
+//
+// COST is deliberately not here even though it is cost-reimbursement: FAR 16.302 pays
+// no fee, so there is no fee to capture. This set mirrors the server's `_FEE_BEARING`
+// exactly, and that parity is the point — the review screen must offer the fields the
+// engine will actually read. Capturing an estimated cost alone on a no-fee line is a
+// separate ask, not a widening of this one.
 const COST_OR_INCENTIVE = new Set(["CPFF", "CPIF", "CPAF", "FPI"]);
 
 // `{ code, unknown }` — exactly one is set. `unknown` is "absent" for empty text,
