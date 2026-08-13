@@ -15,7 +15,9 @@ const HEADERS = {
   expenses: { main: "Expenses", sub: "Non-labor CLINs", meta: true },
   funding: { main: "Funding History", sub: "Award + SF-30 mods", meta: true },
   ingest: { main: "Contract Ingest", sub: "PDF → data", meta: false },
+  rates: { main: "Indirect Rates", sub: "Cost vs. billing", meta: true },
   profitability: { main: "Profitability", sub: "Cost · revenue · fee", meta: true },
+  drafts: { main: "Drafts", sub: "Memos · invoices · check-ins", meta: true },
   chat: { main: "Ask Runway", sub: "Live answers on your burn", meta: true },
 };
 

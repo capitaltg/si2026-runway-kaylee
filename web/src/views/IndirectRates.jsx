@@ -202,7 +202,8 @@ export default function IndirectRates({ contractId, setActiveId }) {
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "28px 32px" }}>
-      <h1 style={{ fontFamily: grotesk, fontSize: 24, margin: "0 0 4px" }}>Indirect rates</h1>
+      {/* No heading here — the top bar owns the view title (#201). This line stays
+          because "optional" is the thing a user needs to read before the salary asks. */}
       <p style={{ color: "var(--dim)", fontSize: 13.5, margin: "0 0 22px", lineHeight: 1.55 }}>
         What an hour <b>costs</b> you, next to what you <b>bill</b> for it. Everything on this page is
         optional — the app is fully functional without it.
