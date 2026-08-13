@@ -279,14 +279,11 @@ export default function Drafts({ contractId, setActiveId, aiEnabled, pendingDocT
 
   return (
     <div style={{ padding: "24px 26px 60px" }}>
-      <div className="no-print" style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontFamily: grotesk, fontSize: 22, fontWeight: 600, color: "var(--text)" }}>
-          Drafts
-        </h2>
-        <div style={{ fontSize: 13.5, color: "var(--dim)", marginTop: 5 }}>
-          Generate GovCon paperwork from live burn data. Numbers come straight from the
-          contract; {aiEnabled ? "AI tailors the wording." : "turn on AI for tailored wording."}
-        </div>
+      {/* No heading here — the top bar owns the view title (#201). The description
+          stays: whether AI is on changes what the button will produce. */}
+      <div className="no-print" style={{ marginBottom: 18, fontSize: 13.5, color: "var(--dim)" }}>
+        Generate GovCon paperwork from live burn data. Numbers come straight from the
+        contract; {aiEnabled ? "AI tailors the wording." : "turn on AI for tailored wording."}
       </div>
 
       {/* control bar — three distinct zones: contract · what to generate · operations */}
