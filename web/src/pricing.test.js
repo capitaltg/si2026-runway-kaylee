@@ -49,10 +49,36 @@ test("unknowns are told apart", () => {
   assert.deepEqual(classifyContractType("FFP/T&M"), { code: null, unknown: "unsupported" });
 });
 
-test("ambiguous cost reimbursement is refused instead of guessed as CPFF", () => {
-  for (const text of ["CR", "Cost Reimbursement", "Cost-Reimbursement, No-Fee", "COST"]) {
-    assert.deepEqual(classifyContractType(text), { code: null, unknown: "unsupported" });
+test("bare cost text reads as the no-fee cost type", () => {
+  // #200. Mirrors the server: these spellings name cost and stop, so they resolve to
+  // FAR 16.302 rather than being refused. Refusing them was what made a correct award
+  // print "Runway cannot read this pricing type" on a perfectly ordinary travel CLIN.
+  for (const text of [
+    "COST",
+    "cost",
+    "Cost Contract",
+    "Cost Reimbursement",
+    "Cost-Reimbursement, No-Fee",
+    "Cost Type",
+  ]) {
+    assert.deepEqual(classifyContractType(text), { code: "COST", unknown: null }, text);
   }
+});
+
+test("cost plus without a named fee is still refused", () => {
+  // The half of the old refusal that was right. "Cost plus" names the family, not a
+  // type, so collapsing it into COST would drop a fee the award really does pay.
+  for (const text of ["CR", "Cost Plus", "Cost-Plus", "Cost Plus per Section H"]) {
+    assert.deepEqual(classifyContractType(text), { code: null, unknown: "unsupported" }, text);
+  }
+});
+
+test("a no-fee cost line is not offered the cost/fee fields", () => {
+  // COST is cost-reimbursement that earns nothing (FAR 16.302), so there is no fee to
+  // capture. Parity with the server's `_FEE_BEARING`, which excludes it for the same
+  // reason — the review screen must offer only fields the engine will actually read.
+  assert.equal(offersCostFeeFields("COST"), false);
+  assert.equal(offersCostFeeFields("Cost Reimbursement"), false);
 });
 
 test("full-name FPI reveals the cost/fee fields, which is the bug", () => {

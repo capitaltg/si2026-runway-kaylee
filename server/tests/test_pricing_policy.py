@@ -5,7 +5,7 @@ thing: a label. `CLIN.type` was never read at all. So the engine priced FFP, T&M
 CPFF identically. This is the data model that ends that, and these tests pin down
 the three things it must get right:
 
-  * **the table is the interface** — six types plus `unknown`, each answering the
+  * **the table is the interface** — seven types plus `unknown`, each answering the
     same five questions, asserted against an explicit expected table so changing any
     policy takes two deliberate edits rather than one silent one;
   * **normalise, never guess** — every spelling of a type resolves identically, and
@@ -47,6 +47,17 @@ _TABLE = {
         ("52.232-7",),
         "at_ceiling",
     ),
+    # FAR 16.302 — cost reimbursed to the estimated cost, and no fee at any point. The
+    # revenue basis is spelled without "fee" or "profit" deliberately: the profitability
+    # surfaces decide whether an earnings concept applies by reading the *basis* rather
+    # than the type code, so this exact string is load-bearing (#200).
+    "COST": (
+        "estimated_cost",
+        "contractor_above_estimate",
+        "cost_only",
+        ("52.232-20", "52.232-22"),
+        "meaningful",
+    ),
     "CPFF": (
         "cost_plus_fixed_fee",
         "contractor_fee_first",
@@ -78,7 +89,7 @@ _TABLE = {
 }
 
 
-def test_all_six_types_answer_all_five_questions():
+def test_all_seven_types_answer_all_five_questions():
     assert set(pricing.POLICIES) == set(_TABLE)
     for code, expected in _TABLE.items():
         p = pricing.POLICIES[code]
@@ -165,7 +176,7 @@ def test_unreadable_text_is_never_rounded_to_the_nearest_type():
     # A mixed-award string is the trap a substring match would fall into: "FFP/T&M"
     # contains both "FFP" and "T&M", and is neither. Guessing one would silently
     # apply the wrong pricing rules to every CLIN on the award.
-    for text in ("FFP/T&M", "see section B", "Firm", "cost", "12345", "TBD"):
+    for text in ("FFP/T&M", "see section B", "Firm", "12345", "TBD"):
         assert pricing.normalize_type(text) is None, text
         assert pricing.classify(text)[1] == "unsupported", text
 
@@ -194,13 +205,50 @@ def test_absent_text_is_its_own_reason():
         assert pricing.classify(text) == (None, "unsupported"), text
 
 
-def test_ambiguous_cost_reimbursement_is_refused_instead_of_guessed_as_cpff():
+def test_bare_cost_text_reads_as_the_no_fee_cost_type():
+    # #200. These spellings name cost and stop. Every one of them was refused as
+    # "ambiguous" until FAR 16.302 got a policy of its own, and that refusal was the
+    # bug: a travel or ODC line printing "COST" on a T&M award is *correct*, and the
+    # app was answering it by announcing that its own vocabulary was incomplete.
+    #
+    # Reading them as the no-fee type is not the guess the refusal was guarding
+    # against. That guard was against inventing a *fee* mechanic — see the CPFF case
+    # in `test_cost_plus_without_a_named_fee_is_still_refused`. Nothing here invents
+    # one: COST carries no fee at all, so the conservative direction is preserved.
+    for text in (
+        "COST",
+        "cost",
+        "Cost Contract",
+        "Cost Reimbursement",
+        "cost-reimbursable",
+        "Cost Type",
+        "Cost-No-Fee",
+        "Cost-Reimbursement, No-Fee",
+    ):
+        assert pricing.normalize_type(text) == "COST", text
+        policy = pricing.policy_for({"type": text}, {})
+        assert policy.code == "COST", text
+        assert policy.known is True, text
+        assert policy.is_cost_reimbursement is True, text
+        # The point of the type: it is cost-reimbursement that earns nothing.
+        assert pricing.fee_bearing(policy) is False, text
+        assert (
+            pricing.earned_fee(policy, pricing.fee_terms({}, None), 100_000.0) is None
+        ), text
+
+
+def test_cost_plus_without_a_named_fee_is_still_refused():
+    # The half of the old refusal that was right, and must stay right. "Cost plus"
+    # names the *family* — fixed, incentive and award fee are all cost-plus — so
+    # resolving it to any one type answers a question the award did not. It must not
+    # collapse into COST just because COST now exists and shares a prefix: doing that
+    # would drop a fee the award really does pay. "CR" stays out for the same reason
+    # a two-letter abbreviation always has.
     for text in (
         "CR",
-        "Cost Reimbursement",
-        "Cost-Reimbursement, No-Fee",
-        "COST",
-        "Cost-No-Fee",
+        "Cost Plus",
+        "Cost-Plus",
+        "Cost Plus Fee",
         "Cost Plus per Section H",
     ):
         code, reason = pricing.classify(text)
@@ -424,6 +472,33 @@ def test_pricing_rejected_reports_the_clin_the_header_rescued():
     ]
 
 
+def test_a_cost_travel_line_on_a_tm_award_raises_no_notice():
+    # #200, the regression this ticket exists for. AURORA's Flight Deck carried #184's
+    # scope notice twice, above the fold, on an award that was *correct*: on a T&M
+    # contract the travel and ODC lines genuinely are cost-reimbursable, so printing
+    # "COST" on them is the right thing for the award to say. The notice was reporting
+    # a gap in Runway's own type table in the place reserved for problems with the
+    # reader's contract.
+    p = burn.compute(
+        _contract(header_type="T&M", clin_types=("T&M", "COST", "COST")), _rows()
+    )
+    assert p["contract"]["pricing_rejected"] == []
+    assert p["contract"]["pricing_unknown"] == 0
+    # Read from the CLIN's own text, not rescued by the header — which is the whole
+    # difference between this and the #184 case below.
+    for num in ("0002", "0003"):
+        policy = _clin(p, num)["pricing_policy"]
+        assert policy["code"] == "COST", num
+        assert policy["source"] == "clin", num
+        assert policy["rejected_type"] is None, num
+    # The labor line keeps its own T&M read; a mixed award is still read as mixed.
+    assert _clin(p, "0001")["pricing_policy"]["code"] == "TM"
+    # And the clause follows the type rather than the header: a cost-reimbursable
+    # travel line is governed by Limitation of Funds/Cost, not by T&M payments.
+    assert _clin(p, "0002")["funding_clause"] in ("52.232-20", "52.232-22")
+    assert _clin(p, "0001")["funding_clause"] == "52.232-7"
+
+
 def test_pricing_rejected_is_quiet_when_a_clin_simply_inherits():
     # A CLIN with no type of its own is the normal shape of a mixed award, not a
     # degraded read: inheriting the header must warn about nothing.
@@ -437,7 +512,13 @@ def test_pricing_rejected_is_quiet_when_a_clin_simply_inherits():
 
 
 def test_unsupported_policy_withholds_profitability_but_keeps_burn():
-    card = burn.compute(_contract(header_type="COST"), _rows())["clins"][0]
+    # "COST" was the sample here until it became a readable type (#200). The bar this
+    # test sets is about *unsupported* text, so it needs text that is still genuinely
+    # unsupported — "Cost Plus per Section H" names the cost-plus family without
+    # naming which fee, which is exactly the read Runway refuses to guess.
+    card = burn.compute(_contract(header_type="Cost Plus per Section H"), _rows())[
+        "clins"
+    ][0]
     assert card["status"] != "unsupported"
     assert card["status_label"] != "Unsupported"
     assert card["pricing_policy"]["status"] == "unsupported"

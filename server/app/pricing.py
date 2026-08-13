@@ -47,11 +47,12 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Dict, Optional, Sequence, Tuple
 
-# FAR references for the six pricing types, kept next to the policies they justify
+# FAR references for the seven pricing types, kept next to the policies they justify
 # so a future reader can check the table against the regulation rather than against
 # our memory of it.
 #   FFP   FAR 16.202      firm-fixed-price
 #   T&M   FAR 16.601      time-and-materials / labor-hour (16.601(c): ceiling price)
+#   COST  FAR 16.302      cost — allowable cost reimbursed, and no fee is paid
 #   CPFF  FAR 16.306      cost-plus-fixed-fee
 #   CPIF  FAR 16.304      cost-plus-incentive-fee
 #   CPAF  FAR 16.401(e)   cost-plus-award-fee
@@ -203,6 +204,34 @@ TM = PricingPolicy(
     funding_clauses=(_TM_PAYMENTS,),
 )
 
+COST = PricingPolicy(
+    code="COST",
+    label="Cost Reimbursement (No Fee)",
+    family="cost_reimbursement",
+    # FAR 16.302. The plainest member of the cost-reimbursement family: allowable cost
+    # is reimbursed up to the estimated cost, and no fee is paid at all. It is the type
+    # a travel or ODC line normally carries on a cost or T&M award, which is how a
+    # correct award ended up telling the reader Runway could not read it (#200).
+    #
+    # No-fee is a *policy* fact and not a missing figure, which is what keeps it out of
+    # `_FEE_BEARING` and `_HEADER_FEE_FIELD` below. `earned_fee` therefore returns None
+    # here for the same reason it does on FFP and T&M — there is no fee mechanic to
+    # report, as distinct from a fee mechanic whose figures the award left blank. That
+    # distinction is #159's whole subject and this type must not blur it.
+    ceiling_meaning="estimated_cost",
+    # FAR 52.232-20/-22: reimbursed to the estimated cost, then the contractor's, absent
+    # a mod. Same bearer as CPAF, and for the same reason — with no fee to consume
+    # first, an overrun goes straight past the government's obligation.
+    cost_overrun_bearer="contractor_above_estimate",
+    # Cost, and only cost. Deliberately spelled without "fee" or "profit": the
+    # profitability surfaces read the *basis* rather than the type code to decide
+    # whether an earnings concept applies at all, so a no-fee policy has to be
+    # recognisable as one from this field alone.
+    revenue_basis="cost_only",
+    funding_tripwire="meaningful",
+    funding_clauses=(_LOC, _LOF),
+)
+
 CPFF = PricingPolicy(
     code="CPFF",
     label="Cost Plus Fixed Fee",
@@ -281,7 +310,7 @@ UNKNOWN = PricingPolicy(
     status="unknown",
 )
 
-POLICIES = {p.code: p for p in (FFP, TM, CPFF, CPIF, CPAF, FPI)}
+POLICIES = {p.code: p for p in (FFP, TM, COST, CPFF, CPIF, CPAF, FPI)}
 
 
 def _key(text: str) -> str:
@@ -329,6 +358,33 @@ _SYNONYMS = {
         "laborhour",
         "labor hours",
         "labour hour",
+    ),
+    # Bare cost, no fee (FAR 16.302). Every spelling here names *cost* and stops —
+    # none of them names a fee — which is the whole basis for reading them as the
+    # no-fee type rather than as the cost-reimbursement family in general.
+    #
+    # "cost plus" is deliberately absent, in any spelling. That phrase names the
+    # family, not a type: fixed, incentive and award fee are all cost-plus, and
+    # resolving it to a no-fee policy would answer a question the award did not.
+    # It stays `unsupported` so the notice fires and a human reads the award.
+    "COST": (
+        "cost",
+        "cost contract",
+        "costcontract",
+        "cost reimbursement",
+        "costreimbursement",
+        "cost reimbursable",
+        "costreimbursable",
+        "cost type",
+        "costtype",
+        "cost no fee",
+        "costnofee",
+        "no fee cost",
+        "nofeecost",
+        "cost reimbursement no fee",
+        "costreimbursementnofee",
+        "cost reimbursable no fee",
+        "costreimbursablenofee",
     ),
     "CPFF": (
         "cpff",
