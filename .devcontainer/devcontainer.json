@@ -1,0 +1,59 @@
+{
+  "name": "Runway",
+  // A prebuilt devcontainer image plus the Node feature covers everything this
+  // repo needs (Python 3.12 for server/, Node 20 for web/), so there is no
+  // hand-written Dockerfile to keep in sync with requirements.txt.
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "esbenp.prettier-vscode",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter"
+        },
+        "black-formatter.args": ["--line-length", "88"],
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.extraPaths": [
+          "/workspaces/${localWorkspaceFolderBasename}/server"
+        ],
+        "files.exclude": {
+          "**/__pycache__": true
+        }
+      }
+    }
+  },
+  "forwardPorts": [5173, 8001],
+  "portsAttributes": {
+    "5173": { "label": "Runway web" },
+    "8001": { "label": "Runway API" }
+  },
+  "containerEnv": {
+    // Fixtura runs in its own dev container with port 8000 published to the
+    // host, so Runway reaches it back through the host gateway. server/app/
+    // sources.py already reads this variable, so nothing in the app changes.
+    "FIXTURA_URL": "http://host.docker.internal:8000"
+  },
+  // Docker Desktop defines host.docker.internal already; this makes the same
+  // name resolve when the container runs on plain Linux Docker.
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  // node_modules lives in a named volume so a Mac-built copy of the repo can be
+  // dropped in without its incompatible binaries shadowing the container's.
+  "mounts": [
+    "source=runway-node-modules,target=/workspaces/${localWorkspaceFolderBasename}/web/node_modules,type=volume"
+  ],
+  "remoteEnv": {
+    "WORKSPACE_FOLDER": "/workspaces/${localWorkspaceFolderBasename}"
+  },
+  "postCreateCommand": "bash ./.devcontainer/postCreate.sh",
+  "remoteUser": "vscode"
+}
